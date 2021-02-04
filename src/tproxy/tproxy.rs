@@ -2,6 +2,8 @@ use::std::io;
 use tokio::io::{AsyncWriteExt,AsyncReadExt};
 use super::tproxy_in::{TProxyInListener,TProxyInSteam};
 use super::tproxy_out::TProxyOutSteam;
+use super::super::parser::http::HttpPacket;
+use super::super::generator::http::*;
 
 pub async fn Tproxy() -> io::Result<()> {
     let listener = TProxyInListener::new(58080,255)?;
@@ -17,8 +19,8 @@ pub async fn Tproxy() -> io::Result<()> {
 
         tokio::spawn(async move {
             let mut buf_in = [0; 1024*2];
+            let mut headers = vec![httparse::EMPTY_HEADER;0];
             loop {
-
                 let n = match stream_in_read.read(&mut buf_in).await {
                     // socket closed
                     Ok(n) if n == 0 => return,
@@ -28,13 +30,40 @@ pub async fn Tproxy() -> io::Result<()> {
                         return;
                     }
                 };
-
-                //println!("{}",str::from_utf8(&buf_in).unwrap());
-
-                if let Err(e) = stream_out_write.write_all(&buf_in[0..n]).await {
-                    eprintln!("failed to write to socket; err = {:?}", e);
-                    return;
+                let mut packet = HttpPacket::new(headers.as_mut_slice(),&buf_in);
+                let result = packet.parse_first_line(&buf_in);
+                match result {
+                    Ok(r) => {
+                        match &packet {
+                            HttpPacket::Request(req) => {
+                                let buf = generate_http_request_first_line(req);
+                                if let Err(e) = stream_out_write.write_all(&buf).await {
+                                    eprintln!("failed to write to socket; err = {:?}", e);
+                                    return;
+                                }
+                            }
+                            HttpPacket::Response(rsp) => {
+                                let buf = generate_http_response_first_line(rsp);
+                                if let Err(e) = stream_out_write.write_all(&buf).await {
+                                    eprintln!("failed to write to socket; err = {:?}", e);
+                                    return;
+                                }
+                            }
+                        };
+                        if let Err(e) = stream_out_write.write_all(&buf_in[r.unwrap()..n]).await {
+                            eprintln!("failed to write to socket; err = {:?}", e);
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        println!("{} error",e);
+                        if let Err(e) = stream_out_write.write_all(&buf_in[..n]).await {
+                            eprintln!("failed to write to socket; err = {:?}", e);
+                            return;
+                        }
+                    }
                 }
+
 
             }
         });

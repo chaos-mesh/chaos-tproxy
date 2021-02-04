@@ -1,5 +1,6 @@
 pub mod tproxy;
 pub mod parser;
+pub mod generator;
 use tproxy::tproxy::Tproxy;
 
 #[tokio::main]
