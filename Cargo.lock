@@ -186,8 +186,7 @@ dependencies = [
 [[package]]
 name = "httparse"
 version = "1.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "615caabe2c3160b313d52ccc905335f4ed5f10881dd63dc5699d47e90be85691"
+source = "git+https://github.com/Andrewmatilde/httparse.git#afe5e63bd3e9511e3506939bb36ddf6b5fbf39b9"
 
 [[package]]
 name = "idna"

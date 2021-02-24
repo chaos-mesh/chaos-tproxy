@@ -8,36 +8,41 @@ use crate::parser::http::body::{BodyState, body_state, body};
 pub struct HttpMessage<'a> {
     pub start_line: StartLine<'a>,
     pub header_fields: Vec<HeaderField<'a>>,
-    pub state: HttpState,
+    pub body_state: BodyState,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum HttpState {
-    BodyIncomplete(BodyState),
-    Complete
+pub enum HttpState<'a> {
+    Incomplete(HttpMessage<'a>),
+    Complete(HttpMessage<'a>)
 }
 
-pub fn http_message(i: &[u8]) -> IResult<&[u8], HttpMessage> {
-    let (i, start_line) = alt((request_line, status_line))(i)?;
-    let (i, header_fields) = header_fields(i)?;
+// return body + state
+pub fn http_state(i: &[u8]) -> IResult<(&[u8],&[u8],&[u8]), HttpState> {
+    let (res, start_line) = alt((request_line, status_line))(i)?;
+    let (res, header_fields) = header_fields(i)?;
     let body_state = body_state(&header_fields);
-    match body(i,body_state) {
-        Ok((i,BodyState::Complete)) => {
-            Ok((i,
-                HttpMessage {
+    match body(res,body_state) {
+        Ok((other_packet_res,BodyState::Complete)) => {
+            Ok(((&i[..i.len() - res.len()],
+                 &res[..res.len() - other_packet_res.len()],
+                 other_packet_res),
+                HttpState::Complete(HttpMessage {
                     start_line,
                     header_fields,
-                    state: HttpState::Complete,
-                }
+                    body_state: BodyState::Complete
+                })
             ))
         }
-        Ok((i,state)) => {
-            Ok((i,
-                HttpMessage {
+        Ok((other_packet_res,state)) => {
+            Ok(((&i[..i.len() - res.len()],
+                 &res[..res.len() - other_packet_res.len()],
+                 other_packet_res),
+                HttpState::Incomplete(HttpMessage {
                     start_line,
                     header_fields,
-                    state: HttpState::BodyIncomplete(state),
-                }
+                    body_state: state,
+                })
             ))
         }
         Err(e) => {Err(e)}
@@ -46,10 +51,12 @@ pub fn http_message(i: &[u8]) -> IResult<&[u8], HttpMessage> {
 
 #[test]
 fn test_http_message() {
-    let rl = b"Get /parser HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n4\r\n1111\r\n0\r\n\r\n";
-    assert_eq!(http_message(&rl[..]),
+    let rl = b"Get /parser HTTP/1.1\r\nTransfer-Encoding:chunked\r\n\r\n4\r\n1111\r\n0\r\n\r\na";
+    assert_eq!(http_state(&rl[..]),
                Ok((
-                   &b""[..], HttpMessage {
+                   (&b"Get /parser HTTP/1.1\r\nTransfer-Encoding:chunked\r\n",
+                    &b"4\r\n1111\r\n0\r\n\r\n"[..],
+                    &b"a"), HttpState::Complete (HttpMessage {
                        start_line: StartLine::Request(RequestLine {
                            method: &rl[..3],
                            path: &rl[4..11],
@@ -58,8 +65,8 @@ fn test_http_message() {
                        header_fields: vec!(
                            HeaderField { field_name: b"Transfer-Encoding", field_value: b"chunked"}
                        ),
-                       state: HttpState::Complete
-                   }
+                       body_state: BodyState::Complete
+                   })
                ))
     );
 }

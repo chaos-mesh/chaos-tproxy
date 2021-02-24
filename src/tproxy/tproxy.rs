@@ -36,14 +36,14 @@ pub async fn Tproxy() -> io::Result<()> {
                     Ok(r) => {
                         match &packet {
                             HttpPacket::Request(req) => {
-                                let buf = generate_http_request_first_line(req);
+                                let buf = request_line(req);
                                 if let Err(e) = stream_out_write.write_all(&buf).await {
                                     eprintln!("failed to write to socket; err = {:?}", e);
                                     return;
                                 }
                             }
                             HttpPacket::Response(rsp) => {
-                                let buf = generate_http_response_first_line(rsp);
+                                let buf = status_line(rsp);
                                 if let Err(e) = stream_out_write.write_all(&buf).await {
                                     eprintln!("failed to write to socket; err = {:?}", e);
                                     return;
