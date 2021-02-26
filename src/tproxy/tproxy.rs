@@ -1,92 +1,44 @@
 use::std::io;
 use tokio::io::{AsyncWriteExt,AsyncReadExt};
 use super::tproxy_in::{TProxyInListener,TProxyInSteam};
+use tokio::sync::mpsc;
 use super::tproxy_out::TProxyOutSteam;
-use super::super::parser::http::HttpPacket;
-use super::super::generator::http::*;
+use crate::handler::http::{Config as HandlerConfig, Handler};
+use crossbeam::channel::unbounded;
+use serde_derive::Deserialize;
 
-pub async fn Tproxy() -> io::Result<()> {
-    let listener = TProxyInListener::new(58080,255)?;
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+pub struct Config {
+    pub port:u16,
+    pub mark:i32,
+    pub handler_config :HandlerConfig
+}
+
+pub async fn Tproxy (config : Config) -> io::Result<()> {
+    let c = &config;
+    let listener = TProxyInListener::new((&config).port.clone(),(&config).mark.clone())?;
     loop {
         let stream_in = listener.accept().await?;
         println!("{} -> {}",stream_in.unwrap_ref().peer_addr()?,stream_in.unwrap_ref().local_addr()?);
         
-        let stream_out = TProxyOutSteam::connect(&stream_in, 255).await?;
+        let stream_out = TProxyOutSteam::connect(&stream_in, c.mark.clone()).await?;
         println!("{} -> {}",stream_out.unwrap_ref().local_addr()?,stream_out.unwrap_ref().peer_addr()?);
 
         let (mut stream_in_read, mut stream_in_write) = stream_in.unwrap().into_split();
         let (mut stream_out_read, mut stream_out_write) = stream_out.unwrap().into_split();
-
+        let (in_sender,in_recever) = unbounded();
+        let (out_sender,out_recever) = unbounded();
+        
+        let c_in = c.clone();
         tokio::spawn(async move {
-            let mut buf_in = [0; 1024*2];
-            let mut headers = vec![httparse::EMPTY_HEADER;0];
-            loop {
-                let n = match stream_in_read.read(&mut buf_in).await {
-                    // socket closed
-                    Ok(n) if n == 0 => return,
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!("failed to read from socket; err = {:?}", e);
-                        return;
-                    }
-                };
-                let mut packet = HttpPacket::new(headers.as_mut_slice(),&buf_in);
-                let result = packet.parse_first_line(&buf_in);
-                match result {
-                    Ok(r) => {
-                        match &packet {
-                            HttpPacket::Request(req) => {
-                                let buf = request_line(req);
-                                if let Err(e) = stream_out_write.write_all(&buf).await {
-                                    eprintln!("failed to write to socket; err = {:?}", e);
-                                    return;
-                                }
-                            }
-                            HttpPacket::Response(rsp) => {
-                                let buf = status_line(rsp);
-                                if let Err(e) = stream_out_write.write_all(&buf).await {
-                                    eprintln!("failed to write to socket; err = {:?}", e);
-                                    return;
-                                }
-                            }
-                        };
-                        if let Err(e) = stream_out_write.write_all(&buf_in[r.unwrap()..n]).await {
-                            eprintln!("failed to write to socket; err = {:?}", e);
-                            return;
-                        }
-                    }
-                    Err(e) => {
-                        println!("{} error",e);
-                        if let Err(e) = stream_out_write.write_all(&buf_in[..n]).await {
-                            eprintln!("failed to write to socket; err = {:?}", e);
-                            return;
-                        }
-                    }
-                }
-
-
-            }
+            let handler = Handler::new(c_in.handler_config, in_sender, out_recever);
+            handler.handle_stream(stream_in_read, stream_out_write).await;
         });
 
+        let c_out = c.clone();
         tokio::spawn(async move {
-            let mut buf_out = [0; 1024*2];
-            loop {
-
-                let n = match stream_out_read.read(&mut buf_out).await {
-                    // socket closed
-                    Ok(n) if n == 0 => return,
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!("failed to read from socket; err = {:?}", e);
-                        return;
-                    }
-                };
-                //println!("{}",str::from_utf8(&buf_out).unwrap());
-                if let Err(e) = stream_in_write.write_all(&buf_out[0..n]).await {
-                    eprintln!("failed to write to socket; err = {:?}", e);
-                    return;
-                }
-            }
+            let handler = Handler::new(c_out.handler_config, out_sender, in_recever);
+            handler.handle_stream(stream_out_read, stream_in_write).await;
         });
     }
 }

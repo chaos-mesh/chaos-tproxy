@@ -184,9 +184,11 @@ pub fn body_state(header_fields: &Vec<HeaderField>) -> BodyState {
 pub fn body(i: &[u8], body_state: BodyState) -> IResult<&[u8],BodyState> {
     match body_state {
         BodyState::NoLengthInfo => {
-            Err(Incomplete(Needed::Unknown))
+            println!("No Length Info");
+            Ok((i, BodyState::Complete))
         }
         BodyState::ChunkedBody(chunk_body_state) => {
+            println!("Chunked Body");
             return match chunked_body(i, chunk_body_state) {
                 Ok((o, ChunkedBodyState::Complete)) => {
                     Ok((o, BodyState::Complete))
@@ -198,6 +200,7 @@ pub fn body(i: &[u8], body_state: BodyState) -> IResult<&[u8],BodyState> {
             }
         }
         BodyState::TakeContentLength(take_ignore_state) => {
+            println!("Take Content Length");
             return match take_ignore_stream(i,take_ignore_state) {
                 Ok((o, TakeIgnore::Complete)) => {
                     Ok((o, BodyState::Complete))
@@ -209,9 +212,11 @@ pub fn body(i: &[u8], body_state: BodyState) -> IResult<&[u8],BodyState> {
             }
         }
         BodyState::FaultLengthInfo => {
+            println!("Fault Length Info");
             Ok((i, BodyState::Complete))
         }
         BodyState::Complete => {
+            println!("Body Complete");
             Ok((i, BodyState::Complete))
         }
     }
