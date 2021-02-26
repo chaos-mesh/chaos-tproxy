@@ -58,3 +58,14 @@ Config Example:
 `HandlerConfig`  is the http handler config :
 
 `PacketTarget` maening the action target , select a request with [Method( like `Get` )|path( like `/proxy`)] on HTTP Request And than take action([Abort|Delay|Replace]) on its Response is valid.
+
+#How to run:
+```
+make set-env & make build & make run  
+```
+ clear iptables config :
+
+```
+make clear-env
+```
+rust env is now needed
