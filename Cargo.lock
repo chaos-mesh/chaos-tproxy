@@ -425,6 +425,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13bd41f508810a131401606d54ac32a467c97172d74ba7662562ebba5ad07fa0"
 
 [[package]]
+name = "parser"
+version = "0.1.0"
+dependencies = [
+ "httparse",
+ "mio",
+ "nom",
+ "serde_derive",
+ "url",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -464,6 +475,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "proxy"
+version = "0.1.0"
+dependencies = [
+ "crossbeam",
+ "futures",
+ "httparse",
+ "libc",
+ "mio",
+ "nix",
+ "nom",
+ "parser",
+ "serde",
+ "serde_derive",
+ "tokio",
+ "toml",
+ "url",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -499,20 +529,6 @@ checksum = "b5eb417147ba9860a96cfe72a0b93bf88fee1744b5636ec99ab20c1aa9376581"
 [[package]]
 name = "rs-tproxy"
 version = "0.1.0"
-dependencies = [
- "crossbeam",
- "futures",
- "httparse",
- "libc",
- "mio",
- "nix",
- "nom",
- "serde",
- "serde_derive",
- "tokio",
- "toml",
- "url",
-]
 
 [[package]]
 name = "rustversion"

@@ -1,21 +1,19 @@
-use nom::bytes::streaming::{tag, take_until, take_while, take_while1, take, take_till};
-use nom::character::{is_alphanumeric, is_digit};
-use nom::{IResult, Compare, CompareResult, Needed, Parser};
-use httparse::{is_token, is_uri_token, is_header_name_token, is_header_value_token};
-use nom::combinator::{map, opt, recognize};
-use nom::sequence::{tuple, pair};
-use nom::character::complete::{newline, space1, digit0, multispace0};
-use nom::character::streaming::{line_ending, space0, digit1, hex_digit1};
+
+use httparse::{is_header_name_token, is_header_value_token, is_token, is_uri_token};
+
 use nom::bytes::complete::take_while_m_n;
-use nom::multi::{many_till, count, many_m_n, many0, many1};
-use nom::branch::alt;
-use nom::error::Error;
-use futures::AsyncReadExt;
-use nom::lib::std::str::from_utf8;
-use std::num::ParseIntError;
-use nom::Err::Incomplete;
-use std::fmt::{Debug, Display};
-use crate::parser::http::body::*;
+use nom::bytes::streaming::{tag, take_while, take_while1};
+use nom::character::complete::{digit0};
+use nom::character::is_digit;
+use nom::character::streaming::{space0};
+use nom::combinator::{map, opt};
+
+
+use nom::multi::{many_till};
+use nom::sequence::{pair, tuple};
+
+use nom::IResult;
+use std::fmt::{Debug};
 
 
 pub fn is_cr_or_lf(chr: u8) -> bool {
@@ -27,10 +25,10 @@ pub fn skip_cr_or_lf(i: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 pub fn in_space<F, I, O>(f: F) -> impl FnMut(I) -> IResult<I, O>
-    where
-        I: nom::InputTakeAtPosition + Clone,
-        <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-        F: Fn(I) -> IResult<I, O>,
+where
+    I: nom::InputTakeAtPosition + Clone,
+    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
+    F: Fn(I) -> IResult<I, O>,
 {
     map(tuple((space0, f, space0)), |(_, x, _)| x)
 }
@@ -44,7 +42,13 @@ pub struct Version {
 pub fn version(i: &[u8]) -> IResult<&[u8], Version> {
     let (i, _) = tag(b"HTTP/")(i)?;
     let (i, (major, _, minor)) = tuple((digit0, tag(b"."), digit0))(i)?;
-    Ok((i, Version { major: major.to_vec(), minor: minor.to_vec() }))
+    Ok((
+        i,
+        Version {
+            major: major.to_vec(),
+            minor: minor.to_vec(),
+        },
+    ))
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -66,18 +70,16 @@ pub fn path(i: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 pub fn request_line(i: &[u8]) -> IResult<&[u8], StartLine> {
-    map(tuple((method,
-               tag(b" "),
-               path,
-               tag(b" "),
-               version,
-               tag(b"\r\n"))), |(method, _, path, _, version, _)| {
-        StartLine::Request(RequestLine {
-            method,
-            path,
-            version,
-        })
-    })(i)
+    map(
+        tuple((method, tag(b" "), path, tag(b" "), version, tag(b"\r\n"))),
+        |(method, _, path, _, version, _)| {
+            StartLine::Request(RequestLine {
+                method,
+                path,
+                version,
+            })
+        },
+    )(i)
 }
 
 pub fn status_code(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -108,11 +110,7 @@ pub fn status_line(i: &[u8]) -> IResult<&[u8], StartLine> {
     let (i, code) = status_code(i)?;
     let (i, reason_phrase) = map(
         pair(
-            opt(
-                map(
-                    pair(tag(b" "), reason_phrase),
-                    |it| it.1)
-            ),
+            opt(map(pair(tag(b" "), reason_phrase), |it| it.1)),
             tag(b"\r\n"),
         ),
         |it| it.0,
@@ -123,11 +121,9 @@ pub fn status_line(i: &[u8]) -> IResult<&[u8], StartLine> {
             version,
             code,
             reason_phrase,
-        })
+        }),
     ))
 }
-
-
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct HeaderField<'a> {
@@ -141,9 +137,11 @@ pub fn header_field(i: &[u8]) -> IResult<&[u8], HeaderField> {
             take_while(is_header_name_token),
             tag(b":"),
             in_space(take_while(is_header_value_token)),
-            tag(b"\r\n"))),
-        |(name, _, value, _)| {
-            HeaderField { field_name: name, field_value: value }
+            tag(b"\r\n"),
+        )),
+        |(name, _, value, _)| HeaderField {
+            field_name: name,
+            field_value: value,
         },
     )(i)
 }
@@ -161,15 +159,18 @@ pub enum StartLine<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::http::header::*;
-    use nom::IResult;
-    use httparse::Request;
-    use std::error::Error;
+    use crate::http::header::*;
+    
+    
+    
 
     #[test]
     fn test_skip_cr_or_lf() {
         assert_eq!(skip_cr_or_lf(b"GET "), Ok((&b"GET "[..], &b""[..])));
-        assert_eq!(skip_cr_or_lf(b"\r\n\r\n\n\rGET "), Ok((&b"GET "[..], &b"\r\n\r\n\n\r"[..])));
+        assert_eq!(
+            skip_cr_or_lf(b"\r\n\r\n\n\rGET "),
+            Ok((&b"GET "[..], &b"\r\n\r\n\n\r"[..]))
+        );
     }
 
     #[test]
@@ -184,41 +185,70 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(version(b"HTTP/1.1 "),
-                   Ok((&b" "[..], Version { major: b"1".to_vec(), minor: b"1".to_vec() })));
+        assert_eq!(
+            version(b"HTTP/1.1 "),
+            Ok((
+                &b" "[..],
+                Version {
+                    major: b"1".to_vec(),
+                    minor: b"1".to_vec()
+                }
+            ))
+        );
     }
 
     #[test]
     fn test_header_field() {
-        assert_eq!(header_field(b"a:b\r\n"),
-                   Ok((&b""[..], HeaderField { field_name: &b"a"[..], field_value: &b"b"[..] })))
+        assert_eq!(
+            header_field(b"a:b\r\n"),
+            Ok((
+                &b""[..],
+                HeaderField {
+                    field_name: &b"a"[..],
+                    field_value: &b"b"[..]
+                }
+            ))
+        )
     }
 
     #[test]
     fn test_header_fields() {
-        assert_eq!(header_fields(b"a:b\r\nac:bc\r\n\r\n"),
-                   Ok((
-                       &b""[..], vec!(
-                           HeaderField { field_name: &b"a"[..], field_value: &b"b"[..] },
-                           HeaderField { field_name: &b"ac"[..], field_value: &b"bc"[..] }
-                       )
-                   ))
+        assert_eq!(
+            header_fields(b"a:b\r\nac:bc\r\n\r\n"),
+            Ok((
+                &b""[..],
+                vec!(
+                    HeaderField {
+                        field_name: &b"a"[..],
+                        field_value: &b"b"[..]
+                    },
+                    HeaderField {
+                        field_name: &b"ac"[..],
+                        field_value: &b"bc"[..]
+                    }
+                )
+            ))
         );
-        assert_eq!(header_fields(b"\r\n"),
-                   Ok((
-                       &b""[..], vec!()
-                   ))
-        );
+        assert_eq!(header_fields(b"\r\n"), Ok((&b""[..], vec!())));
     }
 
     #[test]
     fn test_request_line() {
         let rl = b"Get /parser HTTP/1.1\r\n";
-        assert_eq!(request_line(&rl[..]), Ok((&b""[..], StartLine::Request(RequestLine {
-            method: &rl[..3],
-            path: &rl[4..11],
-            version: Version { major: b"1".to_vec(), minor: b"1".to_vec() },
-        }))));
+        assert_eq!(
+            request_line(&rl[..]),
+            Ok((
+                &b""[..],
+                StartLine::Request(RequestLine {
+                    method: &rl[..3],
+                    path: &rl[4..11],
+                    version: Version {
+                        major: b"1".to_vec(),
+                        minor: b"1".to_vec()
+                    },
+                })
+            ))
+        );
     }
 
     #[test]
@@ -227,13 +257,16 @@ mod tests {
         assert_eq!(
             status_line(&rl[..]),
             Ok((
-                &b""[..], StartLine::Status(StatusLine {
-                    version: Version { major: b"1".to_vec(), minor: b"1".to_vec() },
+                &b""[..],
+                StartLine::Status(StatusLine {
+                    version: Version {
+                        major: b"1".to_vec(),
+                        minor: b"1".to_vec()
+                    },
                     code: &rl[9..12],
                     reason_phrase: Some(&rl[13..16]),
                 })
             ))
         )
     }
-
 }

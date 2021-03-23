@@ -1,20 +1,19 @@
 use crate::generator::http::gen_http_header;
-use crate::parser::http::body::{body, BodyState};
-use crate::parser::http::header::{header_fields, HeaderField, RequestLine, StartLine, StatusLine};
-use crate::parser::http::message::{http_state, HttpMessage, HttpState};
-use tokio::io::{AsyncWriteExt,AsyncReadExt};
-use crossbeam::channel::{Sender,Receiver};
+use crossbeam::channel::{Receiver, Sender};
+use parser::http::body::{body, BodyState};
+use parser::http::header::{header_fields, HeaderField, RequestLine, StartLine, StatusLine};
+use parser::http::message::{http_state, HttpMessage, HttpState};
 use serde_derive::Deserialize;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use nom::{
     error::{Error, ErrorKind},
     Err::{self, Incomplete},
     IResult, Needed,
 };
+use std::future::{Future, Pending, Ready};
 use std::io;
 use tokio::time::{sleep, Duration};
-use std::future::{Future, Pending, Ready};
-
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize)]
 pub enum PacketTarget {
@@ -111,13 +110,17 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(config:Config, sender: Sender<RequestInfo>, receiver: Receiver<RequestInfo>) -> Handler {
+    pub fn new(
+        config: Config,
+        sender: Sender<RequestInfo>,
+        receiver: Receiver<RequestInfo>,
+    ) -> Handler {
         Handler {
             packet: config.packet,
             selector: config.selector,
             action: config.action,
             sender: sender,
-            receiver: receiver
+            receiver: receiver,
         }
     }
 
@@ -140,50 +143,43 @@ impl Handler {
                 }
             },
             StartLine::Status(status_line) => match self.packet {
-                PacketTarget::Request => {
-                    None
-                },
-                PacketTarget::Response => {
-                    match self.receiver.try_recv() {
-                        Ok(request_info) => {
-                            if select_response(
-                                request_info.path.as_slice(),
-                                request_info.method.as_slice(),
-                                status_line.code,
-                                &message.header_fields,
-                                &self.selector,
-                            ) {
-                                Some(self.action.clone())
-                            } else {
-                                None
-                            }
+                PacketTarget::Request => None,
+                PacketTarget::Response => match self.receiver.try_recv() {
+                    Ok(request_info) => {
+                        if select_response(
+                            request_info.path.as_slice(),
+                            request_info.method.as_slice(),
+                            status_line.code,
+                            &message.header_fields,
+                            &self.selector,
+                        ) {
+                            Some(self.action.clone())
+                        } else {
+                            None
                         }
-                        Err(e) => None,
                     }
-                }
+                    Err(e) => None,
+                },
             },
-        }
+        };
     }
-    
 
     pub fn handle_http<'a>(
         &self,
-        i: &'a[u8],
+        i: &'a [u8],
         body_state: BodyState,
-    ) -> Result<(
-        &'a[u8],
-        &'a[u8],
-        &'a[u8],
-        BodyState,
-        Option<Action>,
-    ),io::Error> {
+    ) -> Result<(&'a [u8], &'a [u8], &'a [u8], BodyState, Option<Action>), io::Error> {
         match body_state {
             BodyState::Complete => match http_state(i) {
                 Ok(((header, body, rest), HttpState::Complete(http_message))) => {
                     print!("parse Complete ");
                     match http_message.start_line {
-                        StartLine::Request(_) => {println!("Request")}
-                        StartLine::Status(_) => {println!("Response")}
+                        StartLine::Request(_) => {
+                            println!("Request")
+                        }
+                        StartLine::Status(_) => {
+                            println!("Response")
+                        }
                     };
                     return Ok((
                         header,
@@ -191,13 +187,17 @@ impl Handler {
                         rest,
                         BodyState::Complete,
                         self.handle_http_message(&http_message),
-                    ))
+                    ));
                 }
                 Ok(((header, body, rest), HttpState::Incomplete(http_message))) => {
-                    print!("parse Incomplete {:?}",http_message.start_line);
+                    print!("parse Incomplete {:?}", http_message.start_line);
                     match http_message.start_line {
-                        StartLine::Request(_) => {println!("Request")}
-                        StartLine::Status(_) => {println!("Response")}
+                        StartLine::Request(_) => {
+                            println!("Request")
+                        }
+                        StartLine::Status(_) => {
+                            println!("Response")
+                        }
                     };
                     return Ok((
                         header,
@@ -205,32 +205,38 @@ impl Handler {
                         rest,
                         BodyState::Complete,
                         self.handle_http_message(&http_message),
-                    ))
+                    ));
                 }
-                Err(e) => return match e {
-                    Incomplete(_) => {
-                        println!("parseErr ");
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data: Incomplete "))
-                    },
-                    _ => {
-                        println!("parseErr ");
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data"))
-                    },
-                },
+                Err(e) => {
+                    return match e {
+                        Incomplete(_) => {
+                            println!("parseErr ");
+                            Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                " invalid data: Incomplete ",
+                            ))
+                        }
+                        _ => {
+                            println!("parseErr ");
+                            Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data"))
+                        }
+                    }
+                }
             },
             _ => match body(i, body_state) {
                 Ok((o, BodyState::Complete)) => {
                     return Ok((&i[..0], i, o, BodyState::Complete, None))
                 }
                 Ok((o, state)) => return Ok((&i[..0], i, o, state, None)),
-                Err(e) => return match e {
-                    Incomplete(_) => {
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data: Incomplete "))
-                    },
-                    _ => {
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data"))
-                    },
-                },
+                Err(e) => {
+                    return match e {
+                        Incomplete(_) => Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            " invalid data: Incomplete ",
+                        )),
+                        _ => Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data")),
+                    }
+                }
             },
         };
     }
@@ -256,7 +262,7 @@ impl Handler {
             loop {
                 match self.handle_http(buf_slice, body_state) {
                     Ok((header, body, rest, state, action)) => {
-                        println!("take action {:?}",action);
+                        println!("take action {:?}", action);
                         match action {
                             Some(action) => match action {
                                 Action::Abort => {
@@ -274,7 +280,8 @@ impl Handler {
                                     }
                                 }
                                 Action::Replace(http_message) => {
-                                    if let Err(e) = writer.write_all(http_message.as_slice()).await {
+                                    if let Err(e) = writer.write_all(http_message.as_slice()).await
+                                    {
                                         eprintln!("failed to write to socket; err = {:?}", e);
                                         return Ok(());
                                     }
@@ -320,8 +327,6 @@ pub struct Config {
     pub selector: Selector,
     pub action: Action,
 }
-
-
 
 #[test]
 fn testtt() {

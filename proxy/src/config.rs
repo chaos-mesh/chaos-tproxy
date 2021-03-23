@@ -4,6 +4,5 @@ use serde_derive::Deserialize;
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
 pub struct Config {
-    pub tproxy_config: TproxyConfig
+    pub tproxy_config: TproxyConfig,
 }
-
