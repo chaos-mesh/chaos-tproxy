@@ -1,36 +1,55 @@
-use crate::generator::http::gen_http_header;
 use crossbeam::channel::{Receiver, Sender};
 use parser::http::body::{body, BodyState};
-use parser::http::header::{header_fields, HeaderField, RequestLine, StartLine, StatusLine};
+use parser::http::header::{HeaderField, RequestLine, StartLine};
 use parser::http::message::{http_state, HttpMessage, HttpState};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use nom::{
-    error::{Error, ErrorKind},
-    Err::{self, Incomplete},
-    IResult, Needed,
+use crate::util::{
+    deserialize_string_to_opt_vec_u8, deserialize_string_to_vec_u8,
+    serialize_string_from_opt_vec_u8, serialize_string_from_vec_u8,
 };
-use std::future::{Future, Pending, Ready};
+
+use nom::Err::Incomplete;
 use std::io;
 use tokio::time::{sleep, Duration};
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
 pub enum PacketTarget {
     Request,
     Response,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct HeaderFieldVec {
+    #[serde(
+        deserialize_with = "deserialize_string_to_vec_u8",
+        serialize_with = "serialize_string_from_vec_u8"
+    )]
     pub field_name: Vec<u8>,
+    #[serde(
+        deserialize_with = "deserialize_string_to_vec_u8",
+        serialize_with = "serialize_string_from_vec_u8"
+    )]
     pub field_value: Vec<u8>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Selector {
+    #[serde(
+        deserialize_with = "deserialize_string_to_opt_vec_u8",
+        serialize_with = "serialize_string_from_opt_vec_u8"
+    )]
     pub path: Option<Vec<u8>>,
+    #[serde(
+        deserialize_with = "deserialize_string_to_opt_vec_u8",
+        serialize_with = "serialize_string_from_opt_vec_u8"
+    )]
     pub method: Option<Vec<u8>>,
+    #[serde(
+        deserialize_with = "deserialize_string_to_opt_vec_u8",
+        serialize_with = "serialize_string_from_opt_vec_u8"
+    )]
     pub code: Option<Vec<u8>>,
     pub header_fields: Option<Vec<HeaderFieldVec>>,
 }
@@ -88,7 +107,7 @@ pub fn select_response(
     false
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub enum Action {
     Replace(Vec<u8>),
     Delay(Duration),
@@ -135,7 +154,7 @@ impl Handler {
                     }
                 }
                 PacketTarget::Response => {
-                    self.sender.send(RequestInfo {
+                    let _ = self.sender.send(RequestInfo {
                         path: request_line.path.to_vec(),
                         method: request_line.method.to_vec(),
                     });
@@ -158,7 +177,7 @@ impl Handler {
                             None
                         }
                     }
-                    Err(e) => None,
+                    Err(_) => None,
                 },
             },
         };
@@ -307,7 +326,7 @@ impl Handler {
                             break;
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         if let Err(e) = writer.write_all(&buf_slice).await {
                             eprintln!("failed to write to socket; err = {:?}", e);
                             return Ok(());
@@ -321,21 +340,24 @@ impl Handler {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Config {
+    pub action: Action,
     pub packet: PacketTarget,
     pub selector: Selector,
-    pub action: Action,
 }
 
-#[test]
-fn testtt() {
-    let header_fields = vec![1, 2, 3];
-    let header_fields0 = vec![2, 4, 5];
-    assert_eq!(
-        header_fields
-            .iter()
-            .any(|x| header_fields0.iter().any(|y| y == x)),
-        true
-    );
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test() {
+        let header_fields = vec![1, 2, 3];
+        let header_fields0 = vec![2, 4, 5];
+        assert_eq!(
+            header_fields
+                .iter()
+                .any(|x| header_fields0.iter().any(|y| y == x)),
+            true
+        );
+    }
 }

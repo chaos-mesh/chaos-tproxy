@@ -1,7 +1,6 @@
 use crate::http::header::HeaderField;
 use crate::http::streaming::*;
 
-
 use nom::error::ParseError;
 use nom::lib::std::str::from_utf8;
 
@@ -9,7 +8,7 @@ use nom::{
     error::{Error, ErrorKind},
     Compare, CompareResult,
     Err::{self},
-    IResult, Needed,
+    IResult,
 };
 
 #[derive(Debug, Eq, PartialEq)]

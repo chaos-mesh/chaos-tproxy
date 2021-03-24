@@ -44,7 +44,7 @@ async fn test() -> io::Result<()> {
     let addr = "172.16.5.219:44000".parse().unwrap();
     socket.bind(addr)?;
     let laddr = "172.16.4.158:30001".parse().unwrap();
-    let stream = socket.connect(laddr).await?;
+    let _stream = socket.connect(laddr).await?;
     println!("ok");
     Ok(())
 }

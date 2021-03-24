@@ -20,7 +20,7 @@ impl TProxyInListener {
                 if e.kind() == io::ErrorKind::Other {
                     println!("{}", e);
                 } else {
-                    panic!(e);
+                    panic!("{}", e);
                 }
             }
             _ => {

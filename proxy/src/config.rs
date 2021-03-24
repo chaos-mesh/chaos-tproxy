@@ -1,8 +1,7 @@
-use crate::handler::http::Config as HandlerConfig;
 use crate::tproxy::tproxy::Config as TproxyConfig;
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub tproxy_config: TproxyConfig,
 }

@@ -1,9 +1,7 @@
 use crate::http::body::{body, body_state, BodyState};
-use crate::http::header::{
-    header_fields, request_line, status_line, HeaderField, RequestLine, StartLine, Version,
-};
+use crate::http::header::{header_fields, request_line, status_line, HeaderField, StartLine};
 use nom::branch::alt;
-use nom::{error::Error,IResult};
+use nom::{error::Error, IResult};
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct HttpMessage<'a> {

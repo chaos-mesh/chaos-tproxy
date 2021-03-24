@@ -1,9 +1,5 @@
-use nom::AsBytes;
-
-use parser::http::body::BodyState;
-use parser::http::header::{HeaderField, RequestLine, StartLine, StatusLine, Version};
-use parser::http::message::{HttpMessage, HttpState};
-use std::str::from_utf8;
+use parser::http::header::{HeaderField, RequestLine, StartLine, StatusLine};
+use parser::http::message::HttpMessage;
 
 pub fn gen_http_header(message: &HttpMessage) -> Vec<u8> {
     let mut buf: Vec<u8> = match &message.start_line {
@@ -66,25 +62,33 @@ pub fn gen_header_fields(header_fields: &Vec<HeaderField>, mut buf: Vec<u8>) -> 
     buf
 }
 
-#[test]
-fn test() {
-    let message = HttpMessage {
-        start_line: StartLine::Request(RequestLine {
-            method: &b"GET"[..],
-            path: &b"/psrse"[..],
-            version: Version {
-                major: b"1".to_vec(),
-                minor: b"1".to_vec(),
-            },
-        }),
-        header_fields: vec![HeaderField {
-            field_name: &b"a"[..],
-            field_value: &b"c"[..],
-        }],
-        body_state: BodyState::Complete,
-    };
-    assert_eq!(
-        gen_http_header(&message).as_slice(),
-        b"GET /psrse HTTP/1.1\r\na: c\r\n\r\n"
-    );
+#[cfg(test)]
+mod test {
+    use crate::generator::http::gen_http_header;
+    use parser::http::body::BodyState;
+    use parser::http::header::{HeaderField, RequestLine, StartLine, Version};
+    use parser::http::message::HttpMessage;
+
+    #[test]
+    fn test() {
+        let message = HttpMessage {
+            start_line: StartLine::Request(RequestLine {
+                method: &b"GET"[..],
+                path: &b"/psrse"[..],
+                version: Version {
+                    major: b"1".to_vec(),
+                    minor: b"1".to_vec(),
+                },
+            }),
+            header_fields: vec![HeaderField {
+                field_name: &b"a"[..],
+                field_value: &b"c"[..],
+            }],
+            body_state: BodyState::Complete,
+        };
+        assert_eq!(
+            gen_http_header(&message).as_slice(),
+            b"GET /psrse HTTP/1.1\r\na: c\r\n\r\n"
+        );
+    }
 }
