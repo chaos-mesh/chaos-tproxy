@@ -1,37 +1,60 @@
-use crate::generator::http::gen_http_header;
-use crate::parser::http::body::{body, BodyState};
-use crate::parser::http::header::{header_fields, HeaderField, RequestLine, StartLine, StatusLine};
-use crate::parser::http::message::{http_state, HttpMessage, HttpState};
-use tokio::io::{AsyncWriteExt,AsyncReadExt};
-use crossbeam::channel::{Sender,Receiver};
-use serde_derive::Deserialize;
+use crossbeam::channel::{Receiver, Sender};
+use parser::http::body::{body, BodyState};
+use parser::http::header::{HeaderField, RequestLine, StartLine};
+use parser::http::message::{http_state, HttpMessage, HttpState};
+use serde_derive::{Deserialize, Serialize};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use nom::{
-    error::{Error, ErrorKind},
-    Err::{self, Incomplete},
-    IResult, Needed,
+use crate::util::{
+    deserialize_string_to_opt_vec_u8, deserialize_string_to_vec_u8,
+    serialize_string_from_opt_vec_u8, serialize_string_from_vec_u8,
 };
+
+use nom::Err::Incomplete;
 use std::io;
 use tokio::time::{sleep, Duration};
-use std::future::{Future, Pending, Ready};
 
-
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
 pub enum PacketTarget {
     Request,
     Response,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct HeaderFieldVec {
+    #[serde(
+        deserialize_with = "deserialize_string_to_vec_u8",
+        serialize_with = "serialize_string_from_vec_u8"
+    )]
     pub field_name: Vec<u8>,
+    #[serde(
+        deserialize_with = "deserialize_string_to_vec_u8",
+        serialize_with = "serialize_string_from_vec_u8"
+    )]
     pub field_value: Vec<u8>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Selector {
+    #[serde(default)]
+    #[serde(
+        deserialize_with = "deserialize_string_to_opt_vec_u8",
+        serialize_with = "serialize_string_from_opt_vec_u8"
+    )]
     pub path: Option<Vec<u8>>,
+
+    #[serde(default)]
+    #[serde(
+        deserialize_with = "deserialize_string_to_opt_vec_u8",
+        serialize_with = "serialize_string_from_opt_vec_u8"
+    )]
     pub method: Option<Vec<u8>>,
+
+    #[serde(default)]
+    #[serde(
+        deserialize_with = "deserialize_string_to_opt_vec_u8",
+        serialize_with = "serialize_string_from_opt_vec_u8"
+    )]
     pub code: Option<Vec<u8>>,
     pub header_fields: Option<Vec<HeaderFieldVec>>,
 }
@@ -89,7 +112,7 @@ pub fn select_response(
     false
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub enum Action {
     Replace(Vec<u8>),
     Delay(Duration),
@@ -111,13 +134,17 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(config:Config, sender: Sender<RequestInfo>, receiver: Receiver<RequestInfo>) -> Handler {
+    pub fn new(
+        config: Config,
+        sender: Sender<RequestInfo>,
+        receiver: Receiver<RequestInfo>,
+    ) -> Handler {
         Handler {
             packet: config.packet,
             selector: config.selector,
             action: config.action,
             sender: sender,
-            receiver: receiver
+            receiver: receiver,
         }
     }
 
@@ -132,7 +159,7 @@ impl Handler {
                     }
                 }
                 PacketTarget::Response => {
-                    self.sender.send(RequestInfo {
+                    let _ = self.sender.send(RequestInfo {
                         path: request_line.path.to_vec(),
                         method: request_line.method.to_vec(),
                     });
@@ -140,50 +167,43 @@ impl Handler {
                 }
             },
             StartLine::Status(status_line) => match self.packet {
-                PacketTarget::Request => {
-                    None
-                },
-                PacketTarget::Response => {
-                    match self.receiver.try_recv() {
-                        Ok(request_info) => {
-                            if select_response(
-                                request_info.path.as_slice(),
-                                request_info.method.as_slice(),
-                                status_line.code,
-                                &message.header_fields,
-                                &self.selector,
-                            ) {
-                                Some(self.action.clone())
-                            } else {
-                                None
-                            }
+                PacketTarget::Request => None,
+                PacketTarget::Response => match self.receiver.try_recv() {
+                    Ok(request_info) => {
+                        if select_response(
+                            request_info.path.as_slice(),
+                            request_info.method.as_slice(),
+                            status_line.code,
+                            &message.header_fields,
+                            &self.selector,
+                        ) {
+                            Some(self.action.clone())
+                        } else {
+                            None
                         }
-                        Err(e) => None,
                     }
-                }
+                    Err(_) => None,
+                },
             },
-        }
+        };
     }
-    
 
     pub fn handle_http<'a>(
         &self,
-        i: &'a[u8],
+        i: &'a [u8],
         body_state: BodyState,
-    ) -> Result<(
-        &'a[u8],
-        &'a[u8],
-        &'a[u8],
-        BodyState,
-        Option<Action>,
-    ),io::Error> {
+    ) -> Result<(&'a [u8], &'a [u8], &'a [u8], BodyState, Option<Action>), io::Error> {
         match body_state {
             BodyState::Complete => match http_state(i) {
                 Ok(((header, body, rest), HttpState::Complete(http_message))) => {
                     print!("parse Complete ");
                     match http_message.start_line {
-                        StartLine::Request(_) => {println!("Request")}
-                        StartLine::Status(_) => {println!("Response")}
+                        StartLine::Request(_) => {
+                            println!("Request")
+                        }
+                        StartLine::Status(_) => {
+                            println!("Response")
+                        }
                     };
                     return Ok((
                         header,
@@ -191,13 +211,17 @@ impl Handler {
                         rest,
                         BodyState::Complete,
                         self.handle_http_message(&http_message),
-                    ))
+                    ));
                 }
                 Ok(((header, body, rest), HttpState::Incomplete(http_message))) => {
-                    print!("parse Incomplete {:?}",http_message.start_line);
+                    print!("parse Incomplete {:?}", http_message.start_line);
                     match http_message.start_line {
-                        StartLine::Request(_) => {println!("Request")}
-                        StartLine::Status(_) => {println!("Response")}
+                        StartLine::Request(_) => {
+                            println!("Request")
+                        }
+                        StartLine::Status(_) => {
+                            println!("Response")
+                        }
                     };
                     return Ok((
                         header,
@@ -205,32 +229,38 @@ impl Handler {
                         rest,
                         BodyState::Complete,
                         self.handle_http_message(&http_message),
-                    ))
+                    ));
                 }
-                Err(e) => return match e {
-                    Incomplete(_) => {
-                        println!("parseErr ");
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data: Incomplete "))
-                    },
-                    _ => {
-                        println!("parseErr ");
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data"))
-                    },
-                },
+                Err(e) => {
+                    return match e {
+                        Incomplete(_) => {
+                            println!("parseErr ");
+                            Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                " invalid data: Incomplete ",
+                            ))
+                        }
+                        _ => {
+                            println!("parseErr ");
+                            Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data"))
+                        }
+                    }
+                }
             },
             _ => match body(i, body_state) {
                 Ok((o, BodyState::Complete)) => {
                     return Ok((&i[..0], i, o, BodyState::Complete, None))
                 }
                 Ok((o, state)) => return Ok((&i[..0], i, o, state, None)),
-                Err(e) => return match e {
-                    Incomplete(_) => {
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data: Incomplete "))
-                    },
-                    _ => {
-                        Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data"))
-                    },
-                },
+                Err(e) => {
+                    return match e {
+                        Incomplete(_) => Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            " invalid data: Incomplete ",
+                        )),
+                        _ => Err(io::Error::new(io::ErrorKind::InvalidData, " invalid data")),
+                    }
+                }
             },
         };
     }
@@ -256,7 +286,7 @@ impl Handler {
             loop {
                 match self.handle_http(buf_slice, body_state) {
                     Ok((header, body, rest, state, action)) => {
-                        println!("take action {:?}",action);
+                        println!("take action {:?}", action);
                         match action {
                             Some(action) => match action {
                                 Action::Abort => {
@@ -274,7 +304,8 @@ impl Handler {
                                     }
                                 }
                                 Action::Replace(http_message) => {
-                                    if let Err(e) = writer.write_all(http_message.as_slice()).await {
+                                    if let Err(e) = writer.write_all(http_message.as_slice()).await
+                                    {
                                         eprintln!("failed to write to socket; err = {:?}", e);
                                         return Ok(());
                                     }
@@ -300,7 +331,7 @@ impl Handler {
                             break;
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         if let Err(e) = writer.write_all(&buf_slice).await {
                             eprintln!("failed to write to socket; err = {:?}", e);
                             return Ok(());
@@ -314,23 +345,24 @@ impl Handler {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Config {
+    pub action: Action,
     pub packet: PacketTarget,
     pub selector: Selector,
-    pub action: Action,
 }
 
-
-
-#[test]
-fn testtt() {
-    let header_fields = vec![1, 2, 3];
-    let header_fields0 = vec![2, 4, 5];
-    assert_eq!(
-        header_fields
-            .iter()
-            .any(|x| header_fields0.iter().any(|y| y == x)),
-        true
-    );
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test() {
+        let header_fields = vec![1, 2, 3];
+        let header_fields0 = vec![2, 4, 5];
+        assert_eq!(
+            header_fields
+                .iter()
+                .any(|x| header_fields0.iter().any(|y| y == x)),
+            true
+        );
+    }
 }

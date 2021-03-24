@@ -1,0 +1,27 @@
+[package]
+name = "proxy"
+version = "0.1.0"
+authors = ["Andrewmatilde <davis6813585853062@outlook.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.2.0", features = ["sync", "time", "io-util", "net", "rt", "macros", "rt-multi-thread"] }
+libc = { version = "0.2.81", features = ["std"]}
+nix = "0.19.0"
+mio = "0.7.7"
+futures = "0.3.10"
+nom = { version = "6.1.0", features = ["regexp","std"] }
+url = {version = "2.2.0"}
+httparse = {git = "https://github.com/Andrewmatilde/httparse.git"}
+serde_derive = "1.0.123"
+toml = "0.5.8"
+serde_yaml = "0.8"
+serde_json = "1.0"
+crossbeam = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+parser = {path = "../parser"}
+structopt = { version = "0.3", features = [ "paw" ] }
+paw = "1.0"
+clap = "2.33.3"

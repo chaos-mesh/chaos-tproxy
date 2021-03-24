@@ -1,8 +1,8 @@
-use tokio::net::TcpSocket;
 use libc;
 use std::{io, mem, os::unix::io::AsRawFd};
+use tokio::net::TcpSocket;
 
-pub fn set_ip_transparent(socket:&TcpSocket) -> io::Result<()> {
+pub fn set_ip_transparent(socket: &TcpSocket) -> io::Result<()> {
     unsafe {
         let socket_fd = socket.as_raw_fd();
         let enable: libc::c_int = 1;
@@ -21,7 +21,7 @@ pub fn set_ip_transparent(socket:&TcpSocket) -> io::Result<()> {
     Ok(())
 }
 
-pub fn set_mark(socket:&TcpSocket,mark:i32) -> io::Result<()> {
+pub fn set_mark(socket: &TcpSocket, mark: i32) -> io::Result<()> {
     unsafe {
         let socket_fd = socket.as_raw_fd();
         let value: libc::c_int = mark;

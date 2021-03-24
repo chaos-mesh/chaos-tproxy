@@ -1,17 +1,17 @@
-use std::io;
-use tokio::net::{TcpSocket, TcpStream};
 use super::tproxy_in::TProxyInSteam;
 use super::unix::socketopt;
-pub struct TProxyOutSteam{
-    pub inner:TcpStream,
+use std::io;
+use tokio::net::{TcpSocket, TcpStream};
+pub struct TProxyOutSteam {
+    pub inner: TcpStream,
 }
 
 impl TProxyOutSteam {
-    pub async fn connect(stream_in:&TProxyInSteam, mark:i32) -> io::Result<TProxyOutSteam> {
+    pub async fn connect(stream_in: &TProxyInSteam, mark: i32) -> io::Result<TProxyOutSteam> {
         let socket = TcpSocket::new_v4()?;
         socketopt::set_ip_transparent(&socket)?;
         socketopt::set_mark(&socket, mark)?;
-        // match socket.bind(stream_in.unwrap_ref().peer_addr()?) { 
+        // match socket.bind(stream_in.unwrap_ref().peer_addr()?) {
         //     Err(e) => {
         //         if e.kind() == io::ErrorKind::AddrInUse{
         //             println!("connect by local address");
@@ -25,11 +25,7 @@ impl TProxyOutSteam {
         // };
         socket.set_reuseaddr(true)?;
         let stream = socket.connect(stream_in.unwrap_ref().local_addr()?).await?;
-        Ok(
-            TProxyOutSteam{
-                inner : stream
-            }
-        )
+        Ok(TProxyOutSteam { inner: stream })
     }
 
     pub fn unwrap(self) -> TcpStream {
@@ -48,7 +44,7 @@ async fn test() -> io::Result<()> {
     let addr = "172.16.5.219:44000".parse().unwrap();
     socket.bind(addr)?;
     let laddr = "172.16.4.158:30001".parse().unwrap();
-    let stream = socket.connect(laddr).await?;
+    let _stream = socket.connect(laddr).await?;
     println!("ok");
     Ok(())
 }
