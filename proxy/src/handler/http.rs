@@ -36,16 +36,21 @@ pub struct HeaderFieldVec {
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Selector {
+    #[serde(default)]
     #[serde(
         deserialize_with = "deserialize_string_to_opt_vec_u8",
         serialize_with = "serialize_string_from_opt_vec_u8"
     )]
     pub path: Option<Vec<u8>>,
+
+    #[serde(default)]
     #[serde(
         deserialize_with = "deserialize_string_to_opt_vec_u8",
         serialize_with = "serialize_string_from_opt_vec_u8"
     )]
     pub method: Option<Vec<u8>>,
+
+    #[serde(default)]
     #[serde(
         deserialize_with = "deserialize_string_to_opt_vec_u8",
         serialize_with = "serialize_string_from_opt_vec_u8"
