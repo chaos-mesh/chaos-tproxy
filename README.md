@@ -28,7 +28,12 @@ Support json and yaml config. Example of config could be found in `./example/con
 
 #How to build:
 ```
-make set-env & make build
+make build
+```
+ You must set iptables config after run :
+
+```
+make set-env 
 ```
  clear iptables config :
 
