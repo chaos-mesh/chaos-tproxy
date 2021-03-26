@@ -1,20 +1,15 @@
+use std::fmt::Debug;
 
 use httparse::{is_header_name_token, is_header_value_token, is_token, is_uri_token};
-
 use nom::bytes::complete::take_while_m_n;
 use nom::bytes::streaming::{tag, take_while, take_while1};
-use nom::character::complete::{digit0};
+use nom::character::complete::digit0;
 use nom::character::is_digit;
-use nom::character::streaming::{space0};
+use nom::character::streaming::space0;
 use nom::combinator::{map, opt};
-
-
-use nom::multi::{many_till};
+use nom::multi::many_till;
 use nom::sequence::{pair, tuple};
-
 use nom::IResult;
-use std::fmt::{Debug};
-
 
 pub fn is_cr_or_lf(chr: u8) -> bool {
     chr == b'\r' || chr == b'\n'
@@ -160,9 +155,6 @@ pub enum StartLine<'a> {
 #[cfg(test)]
 mod tests {
     use crate::http::header::*;
-    
-    
-    
 
     #[test]
     fn test_skip_cr_or_lf() {

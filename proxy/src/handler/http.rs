@@ -1,18 +1,18 @@
+use std::io;
+
 use crossbeam::channel::{Receiver, Sender};
+use nom::Err::Incomplete;
 use parser::http::body::{body, BodyState};
 use parser::http::header::{HeaderField, RequestLine, StartLine};
 use parser::http::message::{http_state, HttpMessage, HttpState};
 use serde_derive::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::{sleep, Duration};
 
 use crate::util::{
     deserialize_string_to_opt_vec_u8, deserialize_string_to_vec_u8,
     serialize_string_from_opt_vec_u8, serialize_string_from_vec_u8,
 };
-
-use nom::Err::Incomplete;
-use std::io;
-use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
 pub enum PacketTarget {
@@ -198,12 +198,8 @@ impl Handler {
                 Ok(((header, body, rest), HttpState::Complete(http_message))) => {
                     print!("parse Complete ");
                     match http_message.start_line {
-                        StartLine::Request(_) => {
-                            println!("Request")
-                        }
-                        StartLine::Status(_) => {
-                            println!("Response")
-                        }
+                        StartLine::Request(_) => println!("Request"),
+                        StartLine::Status(_) => println!("Response"),
                     };
                     return Ok((
                         header,
@@ -216,12 +212,8 @@ impl Handler {
                 Ok(((header, body, rest), HttpState::Incomplete(http_message))) => {
                     print!("parse Incomplete {:?}", http_message.start_line);
                     match http_message.start_line {
-                        StartLine::Request(_) => {
-                            println!("Request")
-                        }
-                        StartLine::Status(_) => {
-                            println!("Response")
-                        }
+                        StartLine::Request(_) => println!("Request"),
+                        StartLine::Status(_) => println!("Response"),
                     };
                     return Ok((
                         header,

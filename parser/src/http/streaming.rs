@@ -1,6 +1,7 @@
 use nom::bytes::streaming::{tag, take};
 use nom::character::streaming::digit0;
-use nom::{Err::Incomplete, IResult};
+use nom::Err::Incomplete;
+use nom::IResult;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CRLFState {

@@ -7,10 +7,10 @@ pub mod handler;
 pub mod tproxy;
 pub mod util;
 
+use tokio;
 use tproxy::tproxy::tproxy;
 
 use crate::cmd::proxy::get_config;
-use tokio;
 
 fn main() {
     let c = get_config();

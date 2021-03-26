@@ -1,6 +1,6 @@
-use serde::Serializer;
-use serde::{de};
 use std::fmt;
+
+use serde::{de, Serializer};
 
 struct JsonStringVisitor;
 

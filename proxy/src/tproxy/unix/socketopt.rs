@@ -1,5 +1,7 @@
+use std::os::unix::io::AsRawFd;
+use std::{io, mem};
+
 use libc;
-use std::{io, mem, os::unix::io::AsRawFd};
 use tokio::net::TcpSocket;
 
 pub fn set_ip_transparent(socket: &TcpSocket) -> io::Result<()> {

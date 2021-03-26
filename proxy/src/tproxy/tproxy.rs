@@ -1,9 +1,10 @@
-use super::tproxy_in::TProxyInListener;
-use super::tproxy_out::TProxyOutSteam;
-use crate::handler::http::{Config as HandlerConfig, Handler};
 use ::std::io;
 use crossbeam::channel::unbounded;
 use serde_derive::{Deserialize, Serialize};
+
+use super::tproxy_in::TProxyInListener;
+use super::tproxy_out::TProxyOutSteam;
+use crate::handler::http::{Config as HandlerConfig, Handler};
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Config {

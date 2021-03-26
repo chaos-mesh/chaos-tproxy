@@ -1,9 +1,9 @@
-use super::unix::socketopt;
-use std::{
-    io,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-};
+use std::io;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
+
+use super::unix::socketopt;
 
 pub struct TProxyInListener {
     inner: TcpListener,

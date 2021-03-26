@@ -1,9 +1,10 @@
-use super::super::config::Config;
-
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+
 use structopt::StructOpt;
+
+use super::super::config::Config;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
@@ -30,19 +31,19 @@ pub fn get_config_from_opt(path_buf: PathBuf) -> Config {
         "yaml" => {
             return serde_yaml::from_str(content).unwrap();
         }
-        _ => {
-            panic!("invalid file extension")
-        }
+        _ => panic!("invalid file extension"),
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::config::Config;
-    use crate::handler::http::Config as HandlerConfig;
-    use crate::handler::http::{Action, HeaderFieldVec, PacketTarget, Selector};
-    use crate::tproxy::tproxy::Config as TproxyConfig;
     use std::time::Duration;
+
+    use crate::config::Config;
+    use crate::handler::http::{
+        Action, Config as HandlerConfig, HeaderFieldVec, PacketTarget, Selector,
+    };
+    use crate::tproxy::tproxy::Config as TproxyConfig;
     #[test]
     fn test_serde_util() {
         let conf = Config {

@@ -1,7 +1,9 @@
+use std::io;
+
+use tokio::net::{TcpSocket, TcpStream};
+
 use super::tproxy_in::TProxyInSteam;
 use super::unix::socketopt;
-use std::io;
-use tokio::net::{TcpSocket, TcpStream};
 pub struct TProxyOutSteam {
     pub inner: TcpStream,
 }

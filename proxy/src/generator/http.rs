@@ -64,10 +64,11 @@ pub fn gen_header_fields(header_fields: &Vec<HeaderField>, mut buf: Vec<u8>) -> 
 
 #[cfg(test)]
 mod test {
-    use crate::generator::http::gen_http_header;
     use parser::http::body::BodyState;
     use parser::http::header::{HeaderField, RequestLine, StartLine, Version};
     use parser::http::message::HttpMessage;
+
+    use crate::generator::http::gen_http_header;
 
     #[test]
     fn test() {
