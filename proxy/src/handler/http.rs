@@ -67,10 +67,10 @@ pub fn select_request(
     if match &selector.path {
         Some(p) => request_line.path.starts_with(p.as_slice()),
         None => false,
-    } || match &selector.method {
+    } && match &selector.method {
         Some(m) => request_line.method.eq(m.as_slice()),
         None => false,
-    } || match &selector.header_fields {
+    } && match &selector.header_fields {
         Some(fields) => header_fields.iter().any(|x| {
             fields
                 .iter()
@@ -93,13 +93,13 @@ pub fn select_response(
     if match &selector.path {
         Some(p) => path.starts_with(p.as_slice()),
         None => false,
-    } || match &selector.method {
+    } && match &selector.method {
         Some(m) => method.eq(m.as_slice()),
         None => false,
-    } || match &selector.code {
+    } && match &selector.code {
         Some(c) => code.eq(c.as_slice()),
         None => false,
-    } || match &selector.header_fields {
+    } && match &selector.header_fields {
         Some(fields) => header_fields.iter().any(|x| {
             fields
                 .iter()
