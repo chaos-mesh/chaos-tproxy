@@ -1,14 +1,25 @@
 [package]
-name = "rs-tproxy"
-version = "0.1.0"
-authors = ["Andrewmatilde <davis6813585853062@outlook.com>"]
+authors = ["Andrewmatilde <davis6813585853062@outlook.com>", "Hexilee <i@hexilee.me>"]
 edition = "2018"
+name = "tproxy"
+version = "0.1.0"
 
-[[bin]]
-name = "rs-tproxy"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[workspace]
-members = [
-    "parser",
-    "proxy",
-]
+[dependencies]
+anyhow = "1.0"
+clap = "2.33.3"
+futures = "0.3.10"
+http = "0.2.3"
+hyper = {version = "0.14.4", features = ["runtime", "client", "server", "http1", "http2"]}
+libc = {version = "0.2.81", features = ["std"]}
+paw = "1.0"
+serde = {version = "1.0", features = ["derive"]}
+serde_derive = "1.0.123"
+serde_json = "1.0"
+serde_yaml = "0.8"
+socket2 = "0.3"
+structopt = {version = "0.3", features = ["paw"]}
+tokio = {version = "1.2.0", features = ["sync", "time", "io-util", "net", "rt", "macros", "rt-multi-thread"]}
+tracing = "0.1.25"
+url = {version = "2.2.0"}

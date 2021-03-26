@@ -13,13 +13,10 @@
       "selector": {
         "path": "/rs-tproxy",
         "method": "GET",
-        "code": "400",
-        "header_fields": [
-          {
-            "field_name": "aname",
-            "field_value": "avalue"
-          }
-        ]
+        "code": 400,
+        "header_fields": {
+          "aname": "avalue"
+        }
       }
     }
   }

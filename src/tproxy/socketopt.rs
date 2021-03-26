@@ -1,7 +1,6 @@
 use std::os::unix::io::AsRawFd;
 use std::{io, mem};
 
-use libc;
 use tokio::net::TcpSocket;
 
 pub fn set_ip_transparent(socket: &TcpSocket) -> io::Result<()> {

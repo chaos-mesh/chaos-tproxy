@@ -1,7 +1,7 @@
 build: 
-	cargo build --package proxy --bin proxy
+	cargo build
 run: 
-	./target/debug/proxy $(config)
+	./target/debug/tproxy $(config)
 test:
 	cargo test --all
 set-env: 

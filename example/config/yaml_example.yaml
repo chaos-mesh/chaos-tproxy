@@ -10,7 +10,6 @@ tproxy_config:
     selector:
       path: /rs-tproxy
       method: GET
-      code: "400"
+      code: 400
       header_fields:
-        - field_name: aname
-          field_value: avalue
+        aname: avalue

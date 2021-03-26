@@ -40,10 +40,8 @@ mod test {
     use std::time::Duration;
 
     use crate::config::Config;
-    use crate::handler::http::{
-        Action, Config as HandlerConfig, HeaderFieldVec, PacketTarget, Selector,
-    };
-    use crate::tproxy::tproxy::Config as TproxyConfig;
+    use crate::handler::http::{Action, Config as HandlerConfig, PacketTarget, Selector};
+    use crate::tproxy::config::Config as TproxyConfig;
     #[test]
     fn test_serde_util() {
         let conf = Config {
@@ -53,13 +51,15 @@ mod test {
                 handler_config: HandlerConfig {
                     packet: PacketTarget::Response,
                     selector: Selector {
-                        path: Some(b"/rs-tproxy".to_vec()),
-                        method: Some(b"GET".to_vec()),
-                        code: Some(b"400".to_vec()),
-                        header_fields: Some(vec![HeaderFieldVec {
-                            field_name: b"aname".to_vec(),
-                            field_value: b"avalue".to_vec(),
-                        }]),
+                        path: Some("/rs-tproxy".to_owned()),
+                        method: Some("GET".to_owned()),
+                        code: Some(400),
+                        header_fields: Some(
+                            [("aname".to_owned(), "aname".to_owned())]
+                                .iter()
+                                .cloned()
+                                .collect(),
+                        ),
                     },
                     action: Action::Delay(Duration::MILLISECOND * 1000),
                 },
