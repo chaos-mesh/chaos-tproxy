@@ -1,7 +1,7 @@
 build: 
 	cargo build --package proxy --bin proxy
 run: 
-	sudo ./target/debug/proxy
+	./target/debug/proxy $(config)
 set-env: 
 	sh ./iptables.sh
 clear-env: 

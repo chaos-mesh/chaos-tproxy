@@ -2,8 +2,6 @@
 
 Transparent proxy in only linux 2.0+ platform for injecting [Abort|Delay|Replace] HTTP packet.
 
-
-
 Based on linux iptables-tproxy method, the proxy do not need any L3|L4 config ( An valid local port is needed ). 
 
 On the reason of safety ,  the proxy will only work for 30000+ port local process.
@@ -26,18 +24,24 @@ ARGS:
 ```
 Support json and yaml config. Example of config could be found in `./example/config`
 
-#How to build:
+## Build:
 ```
 make build
 ```
- You must set iptables config after run :
 
+## Usage
+
+```bash
+make run config=<path>
 ```
+
+You must set iptables config after run:
+
+```bash
 make set-env 
 ```
- clear iptables config :
+Clear iptables config before stop:
 
-```
+```bash
 make clear-env
 ```
-rust env is now needed

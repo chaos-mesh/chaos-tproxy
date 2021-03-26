@@ -1,2 +1,2 @@
-sudo iptables -t mangle -F
-sudo iptables -t mangle -X
+iptables -t mangle -F
+iptables -t mangle -X
