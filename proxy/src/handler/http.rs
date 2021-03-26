@@ -64,23 +64,23 @@ pub fn select_request(
     header_fields: &Vec<HeaderField>,
     selector: &Selector,
 ) -> bool {
-    if match &selector.path {
-        Some(p) => request_line.path.starts_with(p.as_slice()),
-        None => false,
-    } || match &selector.method {
-        Some(m) => request_line.method.eq(m.as_slice()),
-        None => false,
-    } || match &selector.header_fields {
-        Some(fields) => header_fields.iter().any(|x| {
-            fields
-                .iter()
-                .any(|y| y.field_name == x.field_name && y.field_value == x.field_value)
-        }),
-        None => false,
-    } {
-        return true;
-    }
-    false
+    selector
+        .path
+        .as_ref()
+        .into_iter()
+        .all(|p| request_line.path.starts_with(p))
+        && selector
+            .method
+            .as_ref()
+            .into_iter()
+            .all(|m| request_line.method == m)
+        && selector.header_fields.as_ref().into_iter().all(|fields| {
+            fields.iter().all(|field| {
+                header_fields
+                    .iter()
+                    .any(|f| field.field_name == f.field_name && field.field_value == f.field_value)
+            })
+        })
 }
 
 pub fn select_response(
@@ -90,26 +90,20 @@ pub fn select_response(
     header_fields: &Vec<HeaderField>,
     selector: &Selector,
 ) -> bool {
-    if match &selector.path {
-        Some(p) => path.starts_with(p.as_slice()),
-        None => false,
-    } || match &selector.method {
-        Some(m) => method.eq(m.as_slice()),
-        None => false,
-    } || match &selector.code {
-        Some(c) => code.eq(c.as_slice()),
-        None => false,
-    } || match &selector.header_fields {
-        Some(fields) => header_fields.iter().any(|x| {
-            fields
-                .iter()
-                .any(|y| y.field_name == x.field_name && y.field_value == x.field_value)
-        }),
-        None => false,
-    } {
-        return true;
-    }
-    false
+    selector
+        .path
+        .as_ref()
+        .into_iter()
+        .all(|p| path.starts_with(p))
+        && selector.method.as_ref().into_iter().all(|m| method == m)
+        && selector.code.as_ref().into_iter().all(|c| code == c)
+        && selector.header_fields.as_ref().into_iter().all(|fields| {
+            fields.iter().all(|field| {
+                header_fields
+                    .iter()
+                    .any(|f| field.field_name == f.field_name && field.field_value == f.field_value)
+            })
+        })
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
