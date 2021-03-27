@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::handler::http::Config as HandlerConfig;
+use crate::handler::Config as HandlerConfig;
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Config {

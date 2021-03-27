@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use super::super::config::Config;
+use super::config::Config;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
@@ -40,7 +40,7 @@ mod test {
     use std::time::Duration;
 
     use crate::config::Config;
-    use crate::handler::http::{Action, Config as HandlerConfig, PacketTarget, Selector};
+    use crate::handler::{Action, Config as HandlerConfig, PacketTarget, Selector};
     use crate::tproxy::config::Config as TproxyConfig;
     #[test]
     fn test_serde_util() {
