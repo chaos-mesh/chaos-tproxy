@@ -8,6 +8,7 @@ use http::{Method, Request, Response, Uri};
 use hyper::Body;
 use serde_derive::{Deserialize, Serialize};
 use tokio::time::sleep;
+use tracing::{debug, instrument};
 use url::Url;
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
@@ -104,6 +105,7 @@ pub struct Config {
 }
 
 // TODO: preprocess config to avoid unnecessary error in parsing
+#[instrument]
 pub async fn apply_request_action(
     mut request: Request<Body>,
     action: &Action,
@@ -175,10 +177,13 @@ pub async fn apply_request_action(
             }
         }
     }
+
+    debug!("action applied: {:?}", request);
     Ok(request)
 }
 
 // TODO: preprocess config to avoid unnecessary error in parsing
+#[instrument]
 pub async fn apply_response_action(
     mut response: Response<Body>,
     action: &Action,
@@ -223,5 +228,7 @@ pub async fn apply_response_action(
             }
         }
     }
+
+    debug!("action applied: {:?}", response);
     Ok(response)
 }

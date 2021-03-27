@@ -11,6 +11,7 @@ use connector::HttpConnector;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
 use tokio::net::TcpStream;
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::handler::{
@@ -86,6 +87,7 @@ impl Service<Request<Body>> for HttpService {
     // TODO: support action chain
     // TODO: support selection by port
     // TODO: deal with thrown errors
+    #[instrument]
     #[inline]
     fn call(&mut self, mut request: Request<Body>) -> Self::Future {
         let service = self.clone();
@@ -93,6 +95,7 @@ impl Service<Request<Body>> for HttpService {
             if matches!(service.config.handler_config.packet, PacketTarget::Request)
                 && select_request(&request, &service.config.handler_config.selector)
             {
+                debug!("request matched");
                 request =
                     apply_request_action(request, &service.config.handler_config.action).await?;
             }
@@ -104,13 +107,16 @@ impl Service<Request<Body>> for HttpService {
                 .expect("fail to transfer url between crate http and crate rust-url");
             url.set_ip_host(service.target.ip()).unwrap();
             url.set_port(Some(service.target.port())).unwrap();
+
+            debug!("forward stream to {}", url);
+
+            let uri_bak = request.uri().clone();
+            let method_bak = request.method().clone();
+
             *request.uri_mut() = url
                 .to_string()
                 .parse()
                 .expect("fail to transfer url between crate http and crate rust-url");
-
-            let uri_bak = request.uri().clone();
-            let method_bak = request.method().clone();
 
             let mut respone = service.client.request(request).await.unwrap();
             if matches!(service.config.handler_config.packet, PacketTarget::Response)
@@ -121,6 +127,7 @@ impl Service<Request<Body>> for HttpService {
                     &service.config.handler_config.selector,
                 )
             {
+                debug!("respone matched: {:?}", respone);
                 respone =
                     apply_response_action(respone, &service.config.handler_config.action).await?;
             }

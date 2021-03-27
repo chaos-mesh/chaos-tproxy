@@ -12,6 +12,7 @@ use anyhow::anyhow;
 use cmd::get_config;
 use hyper::Server;
 use tproxy::{HttpServer, TcpIncoming};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -25,5 +26,6 @@ async fn main() -> anyhow::Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.tproxy_config.port));
     let incoming = TcpIncoming::bind(addr, cfg.tproxy_config.mark)?;
     let server = Server::builder(incoming).serve(HttpServer::new(cfg.tproxy_config));
+    info!("tproxy is running on {}", addr);
     server.await.map_err(Into::into)
 }
