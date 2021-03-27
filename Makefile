@@ -1,5 +1,7 @@
 build: 
 	cargo build
+image:
+	docker build -t tproxy .
 run: 
 	./target/debug/tproxy $(config)
 test:

@@ -1,5 +1,5 @@
 #![feature(duration_constants)]
-#![feature(min_type_alias_impl_trait)]
+#![feature(type_alias_impl_trait)]
 
 pub mod cmd;
 pub mod config;
