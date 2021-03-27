@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{self, Poll};
 use std::time::Duration;
-use std::{fmt, io};
+use std::{fmt, io, matches};
 
 use futures::FutureExt as _;
 use hyper::server::accept::Accept;
@@ -18,7 +18,6 @@ use super::socketopt;
 pub struct TcpIncoming {
     addr: SocketAddr,
     listener: TcpListener,
-    tcp_keepalive_timeout: Option<Duration>,
     sleep_on_errors: bool,
     tcp_nodelay: bool,
     timeout: Option<Pin<Box<Sleep>>>,
@@ -38,9 +37,8 @@ impl TcpIncoming {
     pub fn new(listener: TcpListener) -> io::Result<Self> {
         let addr = listener.local_addr()?;
         Ok(TcpIncoming {
-            listener: listener,
+            listener,
             addr,
-            tcp_keepalive_timeout: None,
             sleep_on_errors: true,
             tcp_nodelay: false,
             timeout: None,
@@ -50,16 +48,6 @@ impl TcpIncoming {
     /// Get the local address bound to this listener.
     pub fn local_addr(&self) -> SocketAddr {
         self.addr
-    }
-
-    /// Set whether TCP keepalive messages are enabled on accepted connections.
-    ///
-    /// If `None` is specified, keepalive is disabled, otherwise the duration
-    /// specified will be the time to remain idle before sending TCP keepalive
-    /// probes.
-    pub fn set_keepalive(&mut self, keepalive: Option<Duration>) -> &mut Self {
-        self.tcp_keepalive_timeout = keepalive;
-        self
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections.
@@ -107,14 +95,6 @@ impl TcpIncoming {
         loop {
             match accept.poll_unpin(cx) {
                 Poll::Ready(Ok((stream, addr))) => {
-                    if let Some(dur) = self.tcp_keepalive_timeout {
-                        use std::os::unix::io::{AsRawFd, FromRawFd};
-                        let socket = unsafe { socket2::Socket::from_raw_fd(stream.as_raw_fd()) };
-                        if let Err(e) = socket.set_keepalive(Some(dur)) {
-                            trace!("error trying to set TCP keepalive: {}", e);
-                        }
-                        drop(std::os::unix::io::IntoRawFd::into_raw_fd(socket));
-                    }
                     if let Err(e) = stream.set_nodelay(self.tcp_nodelay) {
                         trace!("error trying to set TCP nodelay: {}", e);
                     }
@@ -176,19 +156,18 @@ impl Accept for TcpIncoming {
 /// The timeout is useful to handle resource exhaustion errors like ENFILE
 /// and EMFILE. Otherwise, could enter into tight loop.
 fn is_connection_error(e: &io::Error) -> bool {
-    match e.kind() {
+    matches!(
+        e.kind(),
         io::ErrorKind::ConnectionRefused
-        | io::ErrorKind::ConnectionAborted
-        | io::ErrorKind::ConnectionReset => true,
-        _ => false,
-    }
+            | io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::ConnectionReset
+    )
 }
 
 impl fmt::Debug for TcpIncoming {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TcpIncoming")
             .field("addr", &self.addr)
-            .field("tcp_keepalive_timeout", &self.tcp_keepalive_timeout)
             .field("sleep_on_errors", &self.sleep_on_errors)
             .field("tcp_nodelay", &self.tcp_nodelay)
             .finish()

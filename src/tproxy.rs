@@ -55,11 +55,12 @@ impl HttpService {
     }
 }
 
+type BoxedFuture<T, E> = Pin<Box<dyn 'static + Send + Future<Output = Result<T, E>>>>;
+
 impl Service<&TcpStream> for HttpServer {
     type Response = HttpService;
     type Error = std::io::Error;
-    type Future =
-        Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Future = BoxedFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

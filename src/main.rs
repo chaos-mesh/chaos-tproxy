@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .try_init()
         .map_err(|err| anyhow!("{}", err))?;
 
-    let cfg = get_config();
+    let cfg = get_config().await?;
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.tproxy_config.port));
     let incoming = TcpIncoming::bind(addr, cfg.tproxy_config.mark)?;
     let server = Server::builder(incoming).serve(HttpServer::new(cfg.tproxy_config));

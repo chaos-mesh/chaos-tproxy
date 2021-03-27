@@ -1,8 +1,8 @@
-use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 
+use anyhow::{anyhow, Result};
 use structopt::StructOpt;
+use tokio::fs::read_to_string;
 
 use super::config::Config;
 
@@ -14,24 +14,17 @@ struct Opt {
     input: PathBuf,
 }
 
-pub fn get_config() -> Config {
+pub async fn get_config() -> Result<Config> {
     let opt: Opt = Opt::from_args();
-    get_config_from_opt(opt.input)
+    get_config_from_opt(opt.input).await
 }
 
-pub fn get_config_from_opt(path_buf: PathBuf) -> Config {
-    let mut file = File::open(path_buf.to_str().unwrap()).unwrap();
-    let mut buffer = String::new();
-    let _s = file.read_to_string(&mut buffer).unwrap();
-    let content = &buffer[..];
-    match path_buf.extension().unwrap().to_str().unwrap() {
-        "json" => {
-            return serde_json::from_str(content).unwrap();
-        }
-        "yaml" => {
-            return serde_yaml::from_str(content).unwrap();
-        }
-        _ => panic!("invalid file extension"),
+pub async fn get_config_from_opt(path_buf: PathBuf) -> Result<Config> {
+    let buffer = read_to_string(&path_buf).await?;
+    match path_buf.extension().and_then(|ext| ext.to_str()) {
+        Some("json") => Ok(serde_json::from_str(&buffer)?),
+        Some("yaml") => Ok(serde_yaml::from_str(&buffer)?),
+        _ => Err(anyhow!("invalid file extension")),
     }
 }
 

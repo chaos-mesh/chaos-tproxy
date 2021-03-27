@@ -1,6 +1,4 @@
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -12,7 +10,7 @@ use hyper::service::Service;
 use tokio::net::{TcpSocket, TcpStream};
 
 use super::config::Config;
-use super::socketopt;
+use super::{socketopt, BoxedFuture};
 
 #[derive(Debug, Clone)]
 pub struct HttpConnector {
@@ -32,8 +30,7 @@ impl HttpConnector {
 impl Service<Uri> for HttpConnector {
     type Response = TcpStream;
     type Error = Error;
-    type Future =
-        Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Future = BoxedFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
