@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
@@ -8,11 +9,11 @@ use std::task::{Context, Poll};
 use anyhow::Error;
 use config::Config;
 use connector::HttpConnector;
+use http::uri::Authority;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
 use tokio::net::TcpStream;
 use tracing::{debug, instrument};
-use url::Url;
 
 use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response, PacketTarget,
@@ -100,29 +101,20 @@ impl Service<Request<Body>> for HttpService {
                     apply_request_action(request, &service.config.handler_config.action).await?;
             }
 
-            let mut url: Url = request
-                .uri()
-                .to_string()
-                .parse()
-                .expect("fail to transfer url between crate http and crate rust-url");
-            url.set_ip_host(service.target.ip()).unwrap();
-            url.set_port(Some(service.target.port())).unwrap();
+            let uri = request.uri().clone();
+            let method = request.method().clone();
 
-            debug!("forward stream to {}", url);
-
-            let uri_bak = request.uri().clone();
-            let method_bak = request.method().clone();
-
-            *request.uri_mut() = url
-                .to_string()
-                .parse()
-                .expect("fail to transfer url between crate http and crate rust-url");
+            let mut target = format!("http://{}", service.target.to_string());
+            if let Some(path_and_query) = uri.path_and_query() {
+                target = format!("{}{}", target, path_and_query.to_string())
+            }
+            *request.uri_mut() = target.parse().expect("fail to parse target");
 
             let mut respone = service.client.request(request).await.unwrap();
             if matches!(service.config.handler_config.packet, PacketTarget::Response)
                 && select_response(
-                    uri_bak,
-                    method_bak,
+                    uri,
+                    method,
                     &respone,
                     &service.config.handler_config.selector,
                 )

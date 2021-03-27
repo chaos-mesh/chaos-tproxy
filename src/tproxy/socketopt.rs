@@ -2,6 +2,7 @@ use std::os::unix::io::AsRawFd;
 use std::{io, mem};
 
 use tokio::net::TcpSocket;
+use tracing::trace;
 
 pub fn set_ip_transparent(socket: &TcpSocket) -> io::Result<()> {
     unsafe {
@@ -37,6 +38,7 @@ pub fn set_mark(socket: &TcpSocket, mark: i32) -> io::Result<()> {
         if ret != 0 {
             return Err(io::Error::last_os_error());
         }
-    };
+    }
+    trace!("set mark({})", mark);
     Ok(())
 }

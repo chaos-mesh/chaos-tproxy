@@ -5,11 +5,10 @@ use std::task::{self, Poll};
 use std::time::Duration;
 use std::{fmt, io, matches};
 
-use futures::FutureExt as _;
 use hyper::server::accept::Accept;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::time::{sleep, Sleep};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, instrument, trace};
 
 use super::socketopt;
 /// A stream of connections from binding to an address.
@@ -25,6 +24,7 @@ pub struct TcpIncoming {
 
 impl TcpIncoming {
     /// Creates a new `TcpIncoming` binding to provided socket address.
+    #[instrument]
     pub fn bind(addr: SocketAddr, mark: i32) -> io::Result<Self> {
         let socket = TcpSocket::new_v4()?;
         socketopt::set_ip_transparent(&socket)?;
@@ -76,32 +76,22 @@ impl TcpIncoming {
     }
 
     /// Poll TcpStream.
-    fn poll_stream(
-        &mut self,
-        cx: &mut task::Context<'_>,
-    ) -> Poll<io::Result<(TcpStream, SocketAddr)>> {
+    fn poll_next(&mut self, cx: &mut task::Context<'_>) -> Poll<io::Result<TcpStream>> {
         // Check if a previous timeout is active that was set by IO errors.
         if let Some(ref mut to) = self.timeout {
-            match Pin::new(to).poll(cx) {
-                Poll::Ready(()) => {}
-                Poll::Pending => return Poll::Pending,
-            }
+            futures::ready!(Pin::new(to).poll(cx));
         }
         self.timeout = None;
 
-        let accept = self.listener.accept();
-        futures::pin_mut!(accept);
-
         loop {
-            match accept.poll_unpin(cx) {
-                Poll::Ready(Ok((stream, addr))) => {
-                    if let Err(e) = stream.set_nodelay(self.tcp_nodelay) {
+            match futures::ready!(self.listener.poll_accept(cx)) {
+                Ok((socket, _)) => {
+                    if let Err(e) = socket.set_nodelay(self.tcp_nodelay) {
                         trace!("error trying to set TCP nodelay: {}", e);
                     }
-                    return Poll::Ready(Ok((stream, addr)));
+                    return Poll::Ready(Ok(socket));
                 }
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Err(e)) => {
+                Err(e) => {
                     // Connection errors can be ignored directly, continue by
                     // accepting the next request.
                     if is_connection_error(&e) {
@@ -143,7 +133,8 @@ impl Accept for TcpIncoming {
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
     ) -> Poll<Option<Result<Self::Conn, Self::Error>>> {
-        let (stream, _) = futures::ready!(self.poll_stream(cx))?;
+        let stream = futures::ready!(self.poll_next(cx))?;
+        trace!("accept tcp stream to {}", stream.local_addr().unwrap());
         Poll::Ready(Some(Ok(stream)))
     }
 }

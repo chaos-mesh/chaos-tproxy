@@ -20,7 +20,9 @@ WORKDIR /src
 COPY src ./src
 COPY Cargo.* ./
 COPY rust-toolchain ./
-RUN --mount=type=cache,id=tproxy_cargo_pkg,target=/root/.cargo cargo build --release
+RUN --mount=type=cache,id=tproxy_cargo_pkg,target=/root/.cargo/registry \ 
+    --mount=type=cache,id=tproxy_cargo_pkg,target=/src/target \ 
+    cargo build --release
 
 COPY iptables* ./
 COPY example ./example
