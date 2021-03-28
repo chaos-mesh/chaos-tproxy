@@ -121,7 +121,6 @@ pub fn select_response(
         })
 }
 
-// TODO: preprocess config to avoid unnecessary error in parsing
 #[instrument]
 pub async fn apply_request_action(
     mut request: Request<Body>,
@@ -214,7 +213,6 @@ pub async fn apply_request_action(
     Ok(request)
 }
 
-// TODO: preprocess config to avoid unnecessary error in parsing
 #[instrument]
 pub async fn apply_response_action(
     mut response: Response<Body>,
