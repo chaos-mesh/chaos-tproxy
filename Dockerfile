@@ -17,11 +17,13 @@ RUN curl https://sh.rustup.rs -sSf | \
 ENV PATH=/root/.cargo/bin:$PATH
 
 WORKDIR /src
-COPY src ./src
+COPY src/main.rs ./src/main.rs
 COPY Cargo.* ./
 COPY rust-toolchain ./
-RUN --mount=type=cache,id=tproxy_cargo_pkg,target=/root/.cargo/registry \ 
-    --mount=type=cache,id=tproxy_cargo_pkg,target=/src/target \ 
+RUN cargo fetch
+
+COPY src ./src
+RUN --mount=type=cache,id=tproxy_cargo_pkg,target=/src/target \ 
     cargo build --release
 
 COPY iptables* ./

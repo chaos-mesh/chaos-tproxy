@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
@@ -9,7 +8,6 @@ use std::task::{Context, Poll};
 use anyhow::Error;
 use config::Config;
 use connector::HttpConnector;
-use http::uri::Authority;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
 use tokio::net::TcpStream;
