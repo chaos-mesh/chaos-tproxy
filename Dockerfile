@@ -11,9 +11,10 @@ RUN apt-get update && \
     pkgconf cmake && \
     rm -rf /var/lib/apt/lists/*
 
+ENV RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
 # install toolchain
 RUN curl https://sh.rustup.rs -sSf | \
-    sh -s -- --default-toolchain nightly-2021-03-16 -y
+    sh -s -- -y
 ENV PATH=/root/.cargo/bin:$PATH
 
 WORKDIR /src

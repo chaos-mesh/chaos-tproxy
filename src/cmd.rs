@@ -49,6 +49,7 @@ mod test {
             proxy_ports: vec![80],
             proxy_mark: Some(255),
             ignore_mark: Some(255),
+            route_table: Some(100),
             rules: RawRules {
                 request: Some(vec![RawRequestRule {
                     selector: RawRequestSelector {
