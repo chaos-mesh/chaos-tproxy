@@ -8,10 +8,11 @@ use anyhow::{Error, Result};
 use config::Config;
 use connector::HttpConnector;
 use http::uri::{Scheme, Uri};
+use http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
 use tokio::net::TcpStream;
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 
 use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response,
@@ -55,7 +56,6 @@ impl HttpService {
     }
 
     // TODO: support selection by port
-    // TODO: deal with thrown errors
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         if let Some(rule) = self
             .config
@@ -79,7 +79,16 @@ impl HttpService {
         parts.authority = Some(self.target.to_string().parse()?);
         *request.uri_mut() = Uri::from_parts(parts)?;
 
-        let mut response = self.client.request(request).await.unwrap();
+        let mut response = match self.client.request(request).await {
+            Ok(resp) => resp,
+            Err(err) => {
+                error!("fail to forward request: {}", err);
+                Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Body::empty())?
+            }
+        };
+
         if let Some(rule) = self
             .config
             .rules
