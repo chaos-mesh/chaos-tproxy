@@ -36,12 +36,14 @@ async fn main() -> anyhow::Result<()> {
         rx.await.ok();
     });
 
-    // Await the `server` receiving the signal...
-    if let Err(e) = graceful.await {
-        info!("server error: {}", e);
-    }
+    tokio::spawn(async move {
+        // Await the `server` receiving the signal...
+        if let Err(e) = graceful.await {
+            info!("server error: {}", e);
+        }
+    });
 
-    // And later, trigger the signal by calling `tx.send(())`.
+    tokio::signal::ctrl_c().await?;
     let _ = tx.send(());
     drop(route_guard);
     Ok(())

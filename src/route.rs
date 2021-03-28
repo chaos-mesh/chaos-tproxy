@@ -118,14 +118,8 @@ impl Drop for Guard {
 
         let iptables = new(false).expect("fail to init iptables");
 
-        if let Err(err) = iptables.flush_chain(MANGLE, DIVERT) {
-            trace!("fail to flush chain({}): {}", DIVERT, err);
-        }
-        if let Err(err) = iptables.flush_chain(MANGLE, CHAOS_PROXY_PREROUTING) {
-            trace!("fail to flush chain({}): {}", CHAOS_PROXY_PREROUTING, err);
-        }
-        if let Err(err) = iptables.flush_chain(MANGLE, CHAOS_PROXY_OUTPUT) {
-            trace!("fail to flush chain({}): {}", CHAOS_PROXY_OUTPUT, err);
+        if let Err(err) = iptables.flush_table(MANGLE) {
+            trace!("fail to flush table(mangle): {}", err);
         }
         if let Err(err) = iptables.delete_chain(MANGLE, DIVERT) {
             trace!("fail to delete chain({}): {}", DIVERT, err);

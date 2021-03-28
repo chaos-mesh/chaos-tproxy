@@ -1,4 +1,4 @@
-proxy_ports: [80, 443, 8080] # cannot be empty
+proxy_ports: [30086] # cannot be empty
 rules:
   request:
   - selector:
