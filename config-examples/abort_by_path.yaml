@@ -1,10 +1,9 @@
-tproxy_config:
-  port: 58080
-  mark: 255
-  handler_config:
-    action:
-      Abort
-    packet: Request
-    selector:
-      path: /example # match all path starts with "/example"
-      method: GET
+port: 58080
+mark: 255
+handler_config:
+  action:
+    Abort
+  packet: Request
+  selector:
+    path: /example # match all path starts with "/example"
+    method: GET

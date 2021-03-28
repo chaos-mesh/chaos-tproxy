@@ -1,15 +1,14 @@
-tproxy_config:
-  port: 58080
-  mark: 255
-  handler_config:
-    action:
-      Delay:
-        secs: 1
-        nanos: 0
-    packet: Response
-    selector:
-      path: /rs-tproxy
-      method: GET
-      code: 400
-      header_fields:
-        aname: avalue
+port: 58080
+mark: 255
+handler_config:
+  action:
+    Delay:
+      secs: 1
+      nanos: 0
+  packet: Response
+  selector:
+    path: /rs-tproxy
+    method: GET
+    code: 400
+    header_fields:
+      aname: avalue

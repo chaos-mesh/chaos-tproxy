@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use structopt::StructOpt;
 use tokio::fs::read_to_string;
 
-use super::config::Config;
+use crate::tproxy::config::Config;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
@@ -32,30 +32,27 @@ pub async fn get_config_from_opt(path_buf: PathBuf) -> Result<Config> {
 mod test {
     use std::time::Duration;
 
-    use crate::config::Config;
     use crate::handler::{Action, Config as HandlerConfig, PacketTarget, Selector};
-    use crate::tproxy::config::Config as TproxyConfig;
+    use crate::tproxy::config::Config;
     #[test]
     fn test_serde_util() {
         let conf = Config {
-            tproxy_config: TproxyConfig {
-                port: 58080,
-                mark: 255,
-                handler_config: HandlerConfig {
-                    packet: PacketTarget::Response,
-                    selector: Selector {
-                        path: Some("/rs-tproxy".to_owned()),
-                        method: Some("GET".to_owned()),
-                        code: Some(400),
-                        header_fields: Some(
-                            [("aname".to_owned(), "aname".to_owned())]
-                                .iter()
-                                .cloned()
-                                .collect(),
-                        ),
-                    },
-                    action: Action::Delay(Duration::MILLISECOND * 1000),
+            port: 58080,
+            mark: 255,
+            handler_config: HandlerConfig {
+                packet: PacketTarget::Response,
+                selector: Selector {
+                    path: Some("/rs-tproxy".to_owned()),
+                    method: Some("GET".to_owned()),
+                    code: Some(400),
+                    header_fields: Some(
+                        [("aname".to_owned(), "aname".to_owned())]
+                            .iter()
+                            .cloned()
+                            .collect(),
+                    ),
                 },
+                action: Action::Delay(Duration::MILLISECOND * 1000),
             },
         };
         let json = serde_json::to_string(&conf).unwrap();
