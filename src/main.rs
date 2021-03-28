@@ -25,10 +25,12 @@ async fn main() -> anyhow::Result<()> {
     let incoming = TcpIncoming::bind(addr, cfg.ignore_mark)?;
     cfg.listen_port = incoming.local_addr().port();
 
-    let _ = set_all_routes(cfg.clone())
+    let route_guard = set_all_routes(cfg.clone())
         .map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))?;
 
     let server = Server::builder(incoming).serve(HttpServer::new(cfg));
     info!("tproxy is running on {}", addr);
-    server.await.map_err(Into::into)
+    server.await?;
+    drop(route_guard);
+    Ok(())
 }

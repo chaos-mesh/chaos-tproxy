@@ -19,65 +19,81 @@ pub struct Guard {
 }
 
 pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error>> {
-    let iptables = new(false)?;
+    let iptables = new(false).unwrap();
 
-    iptables.new_chain(MANGLE, DIVERT)?;
-    iptables.append(
-        MANGLE,
-        PREROUTING,
-        &format!("-p tcp -m socket -j {}", DIVERT),
-    )?;
-    iptables.append(
-        MANGLE,
-        DIVERT,
-        &format!("-j MARK --set-mark {}", config.proxy_mark),
-    )?;
-    iptables.append(MANGLE, DIVERT, "-j ACCEPT")?;
+    iptables.new_chain(MANGLE, DIVERT).unwrap();
+    iptables
+        .append(
+            MANGLE,
+            PREROUTING,
+            &format!("-p tcp -m socket -j {}", DIVERT),
+        )
+        .unwrap();
+    iptables
+        .append(
+            MANGLE,
+            DIVERT,
+            &format!("-j MARK --set-mark {}", config.proxy_mark),
+        )
+        .unwrap();
+    iptables.append(MANGLE, DIVERT, "-j ACCEPT").unwrap();
 
-    iptables.new_chain(MANGLE, CHAOS_PROXY_PREROUTING)?;
-    iptables.append(
-        MANGLE,
-        CHAOS_PROXY_PREROUTING,
-        &format!("-j RETURN -m mark --mark {:#x}", config.ignore_mark),
-    )?;
-    iptables.append(
-        MANGLE,
-        CHAOS_PROXY_PREROUTING,
-        &format!(
-            "-p tcp -j TPROXY --on-port {} --tproxy-mark {}",
-            config.listen_port, config.proxy_mark
-        ),
-    )?;
-    iptables.append(
-        MANGLE,
-        PREROUTING,
-        &format!(
-            "-p tcp --dport {} -j {}",
-            config.proxy_ports, CHAOS_PROXY_PREROUTING
-        ),
-    )?;
+    iptables.new_chain(MANGLE, CHAOS_PROXY_PREROUTING).unwrap();
+    iptables
+        .append(
+            MANGLE,
+            CHAOS_PROXY_PREROUTING,
+            &format!("-j RETURN -m mark --mark {:#x}", config.ignore_mark),
+        )
+        .unwrap();
+    iptables
+        .append(
+            MANGLE,
+            CHAOS_PROXY_PREROUTING,
+            &format!(
+                "-p tcp -j TPROXY --on-port {} --tproxy-mark {}",
+                config.listen_port, config.proxy_mark
+            ),
+        )
+        .unwrap();
+    iptables
+        .append(
+            MANGLE,
+            PREROUTING,
+            &format!(
+                "-p tcp --dport {} -j {}",
+                config.proxy_ports, CHAOS_PROXY_PREROUTING
+            ),
+        )
+        .unwrap();
 
-    iptables.new_chain(MANGLE, CHAOS_PROXY_OUTPUT)?;
-    iptables.append(
-        MANGLE,
-        CHAOS_PROXY_OUTPUT,
-        &format!("-j RETURN -m mark --mark {:#x}", config.ignore_mark),
-    )?;
-    iptables.append(
-        MANGLE,
-        CHAOS_PROXY_OUTPUT,
-        &format!("-p tcp -j MARK --set-mark {}", config.proxy_mark),
-    )?;
-    iptables.append(
-        MANGLE,
-        OUTPUT,
-        &format!(
-            "-p tcp --sport {} -j {}",
-            config.proxy_ports, CHAOS_PROXY_PREROUTING
-        ),
-    )?;
+    iptables.new_chain(MANGLE, CHAOS_PROXY_OUTPUT).unwrap();
+    iptables
+        .append(
+            MANGLE,
+            CHAOS_PROXY_OUTPUT,
+            &format!("-j RETURN -m mark --mark {:#x}", config.ignore_mark),
+        )
+        .unwrap();
+    iptables
+        .append(
+            MANGLE,
+            CHAOS_PROXY_OUTPUT,
+            &format!("-p tcp -j MARK --set-mark {}", config.proxy_mark),
+        )
+        .unwrap();
+    iptables
+        .append(
+            MANGLE,
+            OUTPUT,
+            &format!(
+                "-p tcp --sport {} -j {}",
+                config.proxy_ports, CHAOS_PROXY_OUTPUT
+            ),
+        )
+        .unwrap();
 
-    let err = set_ip_rule(config.route_table, config.proxy_mark)?;
+    let err = set_ip_rule(config.route_table, config.proxy_mark).unwrap();
     if !err.is_empty() {
         debug!(
             "stderr in setting ip rule: {}",
@@ -85,7 +101,7 @@ pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error
         );
     }
 
-    let err = set_ip_route(config.route_table)?;
+    let err = set_ip_route(config.route_table).unwrap();
     if !err.is_empty() {
         debug!(
             "stderr in setting ip route: {}",
@@ -151,7 +167,8 @@ fn set_ip_route(table: u8) -> io::Result<Vec<u8>> {
             "table",
             &format!("{}", table),
         ])
-        .output()?
+        .output()
+        .unwrap()
         .stderr;
     Ok(stderr)
 }
@@ -168,7 +185,8 @@ fn clear_ip_route(table: u8) -> io::Result<Vec<u8>> {
             "table",
             &format!("{}", table),
         ])
-        .output()?
+        .output()
+        .unwrap()
         .stderr;
     Ok(stderr)
 }
@@ -183,7 +201,8 @@ fn set_ip_rule(table: u8, proxy_mark: i32) -> io::Result<Vec<u8>> {
             "table",
             &format!("{}", table),
         ])
-        .output()?
+        .output()
+        .unwrap()
         .stderr;
     Ok(stderr)
 }
@@ -198,7 +217,8 @@ fn clear_ip_rule(table: u8, proxy_mark: i32) -> io::Result<Vec<u8>> {
             "table",
             &format!("{}", table),
         ])
-        .output()?
+        .output()
+        .unwrap()
         .stderr;
     Ok(stderr)
 }
