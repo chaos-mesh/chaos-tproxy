@@ -6,4 +6,5 @@ tproxy_config:
       Abort
     packet: Request
     selector:
+      path: /example # match all path starts with "/example"
       method: GET
