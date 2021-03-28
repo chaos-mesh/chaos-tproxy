@@ -27,7 +27,7 @@ RUN --mount=type=cache,id=tproxy_cargo_pkg,target=/src/target \
     cargo build --release
 
 COPY iptables* ./
-COPY example ./example
+COPY config-examples ./config-examples
 
 FROM ubuntu:20.04
 RUN apt-get update && apt-get --no-install-recommends -y install iptables iproute2 nodejs npm vim 
@@ -35,5 +35,5 @@ RUN npm install http-server
 WORKDIR /root
 COPY --from=builder /src/target/release/tproxy tproxy
 COPY --from=builder /src/iptables.sh iptables.sh
-COPY --from=builder /src/example example
+COPY --from=builder /src/config-examples config-examples
 ENTRYPOINT ["npx", "http-server"]
