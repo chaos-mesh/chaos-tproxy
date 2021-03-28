@@ -52,7 +52,7 @@ pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error
         MANGLE,
         PREROUTING,
         &format!(
-            "-p tcp --dport {} -j {}",
+            "-p tcp --match multiport --dport {} -j {}",
             config.proxy_ports, CHAOS_PROXY_PREROUTING
         ),
     )?;
@@ -72,7 +72,7 @@ pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error
         MANGLE,
         OUTPUT,
         &format!(
-            "-p tcp --sport {} -j {}",
+            "-p tcp --match multiport --sport {} -j {}",
             config.proxy_ports, CHAOS_PROXY_OUTPUT
         ),
     )?;

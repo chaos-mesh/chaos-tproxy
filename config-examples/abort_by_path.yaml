@@ -1,7 +1,7 @@
-proxy_ports: [30086] # cannot be empty
+proxy_ports: [80, 8080, 30086] # cannot be empty
 rules:
   request:
   - selector:
-      path: /example # match all path starts with "/example"
+      path: /src # match all path starts with "/example"
       method: GET
     action: abort
