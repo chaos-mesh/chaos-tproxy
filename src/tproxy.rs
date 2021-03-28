@@ -55,14 +55,13 @@ impl HttpService {
         }
     }
 
-    // TODO: support selection by port
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         if let Some(rule) = self
             .config
             .rules
             .request
             .iter()
-            .find(|rule| select_request(&request, &rule.selector))
+            .find(|rule| select_request(self.target.port(), &request, &rule.selector))
         {
             debug!("request matched");
             request = apply_request_action(request, &rule.action).await?;
@@ -89,13 +88,16 @@ impl HttpService {
             }
         };
 
-        if let Some(rule) = self
-            .config
-            .rules
-            .response
-            .iter()
-            .find(|rule| select_response(&uri, &method, &headers, &response, &rule.selector))
-        {
+        if let Some(rule) = self.config.rules.response.iter().find(|rule| {
+            select_response(
+                self.target.port(),
+                &uri,
+                &method,
+                &headers,
+                &response,
+                &rule.selector,
+            )
+        }) {
             debug!("response matched");
             response = apply_response_action(response, &rule.action).await?;
         }

@@ -5,12 +5,14 @@ ignore_mark: 255 # optional
 rules:
   request:
   - selector:
+      port: 8080
       path: /example # match all path starts with "/example"
       method: GET
     action:
       delay: 10s 
   response:
   - selector:
+      port: 80
       path: /example
       method: GET
       code: 404

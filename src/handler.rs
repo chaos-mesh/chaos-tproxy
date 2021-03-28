@@ -29,6 +29,7 @@ pub struct ResponseRule {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct RequestSelector {
+    pub port: Option<u16>,
     pub path: Option<PathAndQuery>,
     pub method: Option<Method>,
     pub headers: Option<HeaderMap>,
@@ -36,6 +37,7 @@ pub struct RequestSelector {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ResponseSelector {
+    pub port: Option<u16>,
     pub path: Option<PathAndQuery>,
     pub method: Option<Method>,
     pub code: Option<StatusCode>,
@@ -74,11 +76,12 @@ pub enum ResponseAction {
     },
 }
 
-pub fn select_request(request: &Request<Body>, selector: &RequestSelector) -> bool {
-    selector
-        .path
-        .iter()
-        .all(|p| request.uri().path().starts_with(p.path()))
+pub fn select_request(port: u16, request: &Request<Body>, selector: &RequestSelector) -> bool {
+    selector.port.iter().all(|p| port == *p)
+        && selector
+            .path
+            .iter()
+            .all(|p| request.uri().path().starts_with(p.path()))
         && selector.method.iter().all(|m| request.method() == m)
         && selector.headers.iter().all(|fields| {
             fields
@@ -88,16 +91,18 @@ pub fn select_request(request: &Request<Body>, selector: &RequestSelector) -> bo
 }
 
 pub fn select_response(
+    port: u16,
     uri: &Uri,
     method: &Method,
     request_headers: &HeaderMap,
     response: &Response<Body>,
     selector: &ResponseSelector,
 ) -> bool {
-    selector
-        .path
-        .iter()
-        .all(|p| uri.path().starts_with(p.path()))
+    selector.port.iter().all(|p| port == *p)
+        && selector
+            .path
+            .iter()
+            .all(|p| uri.path().starts_with(p.path()))
         && selector.method.iter().all(|m| method == m)
         && selector.code.iter().all(|code| response.status() == *code)
         && selector.request_headers.iter().all(|fields| {

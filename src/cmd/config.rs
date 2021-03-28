@@ -44,6 +44,7 @@ pub struct RawResponseRule {
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RawRequestSelector {
+    pub port: Option<u16>,
     pub path: Option<String>,
     pub method: Option<String>,
     pub headers: Option<HashMap<String, String>>,
@@ -51,6 +52,7 @@ pub struct RawRequestSelector {
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RawResponseSelector {
+    pub port: Option<u16>,
     pub path: Option<String>,
     pub method: Option<String>,
     pub code: Option<u16>,
@@ -179,6 +181,7 @@ impl TryFrom<RawRequestSelector> for RequestSelector {
 
     fn try_from(raw: RawRequestSelector) -> Result<Self, Self::Error> {
         Ok(Self {
+            port: raw.port.clone(),
             path: raw.path.as_ref().map(|path| path.parse()).transpose()?,
             method: raw
                 .method
@@ -249,6 +252,7 @@ impl TryFrom<RawResponseSelector> for ResponseSelector {
 
     fn try_from(raw: RawResponseSelector) -> Result<Self, Self::Error> {
         Ok(Self {
+            port: raw.port.clone(),
             path: raw.path.as_ref().map(|path| path.parse()).transpose()?,
             method: raw
                 .method

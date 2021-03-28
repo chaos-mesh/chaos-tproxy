@@ -53,6 +53,7 @@ mod test {
             rules: RawRules {
                 request: Some(vec![RawRequestRule {
                     selector: RawRequestSelector {
+                        port: None,
                         path: Some("/rs-tproxy".to_string()),
                         method: Some("GET".to_string()),
                         headers: Some(
@@ -66,6 +67,7 @@ mod test {
                 }]),
                 response: Some(vec![RawResponseRule {
                     selector: RawResponseSelector {
+                        port: None,
                         path: Some("/rs-tproxy".to_string()),
                         method: Some("GET".to_string()),
                         code: Some(80),
