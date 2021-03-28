@@ -1,19 +1,19 @@
 # rs-tproxy
 
-Transparent proxy in only linux 2.0+ platform for injecting [Abort|Delay|Replace] HTTP packet.
+Transparent proxy in only linux 2.0+ platform for injecting [Abort|Delay|Append|Replace] HTTP packet.
 
 Based on linux iptables-tproxy method, the proxy do not need any L3|L4 config ( An valid local port is needed ). 
 
-On the reason of safety ,  the proxy will only work for 30000+ port local process.
+You can run it as the proxy for any ports on the same network namespace by set the `proxy_ports` field in config file.
 
 Usage Example:
 
 ```
 proxy 0.1.0
-The option of rs-proxy.
+The option of tproxy.
 
 USAGE:
-    proxy <input>
+    tproxy <input>
 
 FLAGS:
     -h, --help       Prints help information
@@ -33,15 +33,4 @@ make build
 
 ```bash
 make run config=<path>
-```
-
-You must set iptables config after run:
-
-```bash
-make set-env 
-```
-Clear iptables config before stop:
-
-```bash
-make clear-env
 ```
