@@ -1,0 +1,33 @@
+{
+  "listen_port": 58080,
+  "proxy_ports": [80, 443, 8080],
+  "proxy_mark": 1,
+  "ignore_mark": 255,
+  "rules": {
+    "request": [
+      {
+        "selector": {
+          "path": "/example",
+          "method": "GET"
+        },
+        "action": {
+          "delay": "10s"
+        }
+      }
+    ],
+    "response": [
+      {
+        "selector": {
+          "path": "/example",
+          "method": "GET",
+          "code": 404,
+          "response_headers": {
+            "Server": "nginx"
+          }
+        },
+        "action": "delay"
+      }
+    ]
+  }
+}
+

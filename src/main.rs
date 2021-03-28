@@ -1,4 +1,3 @@
-#![feature(duration_constants)]
 #![feature(type_alias_impl_trait)]
 
 pub mod cmd;
@@ -22,8 +21,8 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|err| anyhow!("{}", err))?;
 
     let cfg = get_config().await?;
-    let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
-    let incoming = TcpIncoming::bind(addr, cfg.mark)?;
+    let addr = SocketAddr::from(([0, 0, 0, 0], cfg.listen_port));
+    let incoming = TcpIncoming::bind(addr, cfg.ignore_mark)?;
     let server = Server::builder(incoming).serve(HttpServer::new(cfg));
     info!("tproxy is running on {}", addr);
     server.await.map_err(Into::into)

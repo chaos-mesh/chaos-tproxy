@@ -30,7 +30,7 @@ impl HttpConnector {
     async fn connect(mut self, dst: Uri) -> Result<TcpStream> {
         let socket = TcpSocket::new_v4()?;
         socketopt::set_ip_transparent(&socket)?;
-        socketopt::set_mark(&socket, self.config.mark)?;
+        socketopt::set_mark(&socket, self.config.ignore_mark)?;
         socket.set_reuseaddr(true)?;
         let addr = self.resolve(&dst).await?;
         trace!("resolved addr({})", addr);

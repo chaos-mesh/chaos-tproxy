@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
+use crate::handler::Rules;
 
-use crate::handler::Config as HandlerConfig;
-
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Config {
-    pub port: u16,
-    pub mark: i32,
-    pub handler_config: HandlerConfig,
+    pub listen_port: u16, // select random port if zero
+    pub proxy_ports: Vec<u16>,
+    pub proxy_mark: i32,
+    pub ignore_mark: i32,
+    pub rules: Rules,
 }
