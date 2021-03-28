@@ -30,7 +30,19 @@ async fn main() -> anyhow::Result<()> {
 
     let server = Server::builder(incoming).serve(HttpServer::new(cfg));
     info!("tproxy is running on {}", addr);
-    server.await?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let graceful = server.with_graceful_shutdown(async {
+        rx.await.ok();
+    });
+
+    // Await the `server` receiving the signal...
+    if let Err(e) = graceful.await {
+        info!("server error: {}", e);
+    }
+
+    // And later, trigger the signal by calling `tx.send(())`.
+    let _ = tx.send(());
     drop(route_guard);
     Ok(())
 }
