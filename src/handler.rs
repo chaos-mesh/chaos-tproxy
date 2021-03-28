@@ -130,23 +130,7 @@ pub async fn apply_request_action(
         RequestAction::Abort => return Err(anyhow!("Abort applied")),
         RequestAction::Delay(dur) => sleep(*dur).await,
         RequestAction::Append { queries, headers } => {
-            if let Some(qs) = &queries {
-                // TODO: need test
-                let mut parts = request.uri().clone().into_parts();
-                let new = if let Some(old) = &parts.path_and_query {
-                    if old.query().is_some() {
-                        format!("{}&{}", old, qs)
-                    } else {
-                        format!("{}?{}", old, qs)
-                    }
-                } else {
-                    format!("/?{}", qs)
-                };
-
-                parts.path_and_query = Some(new.parse()?);
-                *request.uri_mut() = Uri::from_parts(parts)?;
-            }
-
+            append_queries(request.uri_mut(), queries.as_ref())?;
             if let Some(hdrs) = &headers {
                 for (key, value) in hdrs {
                     request.headers_mut().append(key, value.clone());
@@ -160,18 +144,7 @@ pub async fn apply_request_action(
             queries,
             headers,
         } => {
-            if let Some(p) = &path {
-                // TODO: need test
-                let mut parts = request.uri().clone().into_parts();
-                if let Some(paq) = parts.path_and_query.as_mut() {
-                    *paq = if let Some(q) = paq.query() {
-                        format!("{}?{}", p, q).parse()?
-                    } else {
-                        p.parse()?
-                    }
-                }
-                *request.uri_mut() = Uri::from_parts(parts)?;
-            }
+            replace_path(request.uri_mut(), path.as_ref())?;
 
             if let Some(md) = method {
                 *request.method_mut() = md.clone();
@@ -181,25 +154,7 @@ pub async fn apply_request_action(
                 *request.body_mut() = data.clone().into()
             }
 
-            if let Some(qs) = &queries {
-                // TODO: need test
-                let mut parts = request.uri().clone().into_parts();
-                let old_query = parts
-                    .path_and_query
-                    .as_ref()
-                    .and_then(|paq| paq.query())
-                    .unwrap_or("");
-                let mut query_map: HashMap<String, String> = serde_urlencoded::from_str(old_query)?;
-                query_map.extend(qs.clone());
-                let path = parts
-                    .path_and_query
-                    .as_ref()
-                    .map(|paq| paq.path())
-                    .unwrap_or("/");
-                let paq = format!("{}?{}", path, serde_urlencoded::to_string(&query_map)?);
-                parts.path_and_query = Some(paq.parse()?);
-                *request.uri_mut() = Uri::from_parts(parts)?;
-            }
+            replace_queries(request.uri_mut(), queries.as_ref())?;
 
             if let Some(hdrs) = &headers {
                 for (key, value) in hdrs {
@@ -211,6 +166,65 @@ pub async fn apply_request_action(
 
     debug!("action applied: {:?}", request);
     Ok(request)
+}
+
+// TODO: need test
+fn append_queries<S: AsRef<str>>(uri: &mut Uri, queries: Option<S>) -> anyhow::Result<()> {
+    if let Some(qs) = &queries {
+        let mut parts = uri.clone().into_parts();
+        let new = if let Some(old) = &parts.path_and_query {
+            if old.query().is_some() {
+                format!("{}&{}", old, qs.as_ref())
+            } else {
+                format!("{}?{}", old, qs.as_ref())
+            }
+        } else {
+            format!("/?{}", qs.as_ref())
+        };
+
+        parts.path_and_query = Some(new.parse()?);
+        *uri = Uri::from_parts(parts)?;
+    }
+    Ok(())
+}
+
+// TODO: need test
+fn replace_path<S: AsRef<str>>(uri: &mut Uri, path: Option<S>) -> anyhow::Result<()> {
+    if let Some(p) = path {
+        let mut parts = uri.clone().into_parts();
+        if let Some(paq) = parts.path_and_query.as_mut() {
+            *paq = if let Some(q) = paq.query() {
+                format!("{}?{}", p.as_ref(), q).parse()?
+            } else {
+                p.as_ref().parse()?
+            }
+        }
+        *uri = Uri::from_parts(parts)?;
+    }
+    Ok(())
+}
+
+// TODO: need test
+fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> anyhow::Result<()> {
+    if let Some(qs) = queries {
+        let mut parts = uri.clone().into_parts();
+        let old_query = parts
+            .path_and_query
+            .as_ref()
+            .and_then(|paq| paq.query())
+            .unwrap_or("");
+        let mut query_map: HashMap<String, String> = serde_urlencoded::from_str(old_query)?;
+        query_map.extend(qs.clone());
+        let path = parts
+            .path_and_query
+            .as_ref()
+            .map(|paq| paq.path())
+            .unwrap_or("/");
+        let paq = format!("{}?{}", path, serde_urlencoded::to_string(&query_map)?);
+        parts.path_and_query = Some(paq.parse()?);
+        *uri = Uri::from_parts(parts)?;
+    }
+    Ok(())
 }
 
 #[instrument]
