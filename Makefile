@@ -3,10 +3,6 @@ build:
 fmt:
 	cargo +nightly fmt
 run: 
-	./target/debug/tproxy $(config)
+	RUST_LOG=trace ./target/debug/tproxy $(config)
 test:
-	cargo test --all
-set-env: 
-	sh ./iptables.sh
-clear-env: 
-	sh ./iptables_clear.sh
+	cargo test
