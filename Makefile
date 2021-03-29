@@ -1,7 +1,5 @@
 build: 
 	cargo build
-image:
-	docker build -t tproxy .
 fmt:
 	cargo +nightly fmt
 run: 
