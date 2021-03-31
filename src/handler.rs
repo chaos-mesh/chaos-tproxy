@@ -169,17 +169,18 @@ pub async fn apply_request_action(
 }
 
 // TODO: need test
-fn append_queries<S: AsRef<str>>(uri: &mut Uri, queries: Option<S>) -> anyhow::Result<()> {
-    if let Some(qs) = &queries {
+fn append_queries<S: AsRef<str>>(uri: &mut Uri, raw_queries: Option<S>) -> anyhow::Result<()> {
+    let queries = raw_queries.as_ref().map(AsRef::as_ref).unwrap_or("");
+    if !queries.is_empty() {
         let mut parts = uri.clone().into_parts();
         let new = if let Some(old) = &parts.path_and_query {
             if old.query().is_some() {
-                format!("{}&{}", old, qs.as_ref())
+                format!("{}&{}", old, queries)
             } else {
-                format!("{}?{}", old, qs.as_ref())
+                format!("{}?{}", old, queries)
             }
         } else {
-            format!("/?{}", qs.as_ref())
+            format!("/?{}", queries)
         };
 
         parts.path_and_query = Some(new.parse()?);
@@ -189,14 +190,19 @@ fn append_queries<S: AsRef<str>>(uri: &mut Uri, queries: Option<S>) -> anyhow::R
 }
 
 // TODO: need test
-fn replace_path<S: AsRef<str>>(uri: &mut Uri, path: Option<S>) -> anyhow::Result<()> {
-    if let Some(p) = path {
+fn replace_path<S: AsRef<str>>(uri: &mut Uri, raw_path: Option<S>) -> anyhow::Result<()> {
+    if let Some(p) = raw_path {
+        let path = match p.as_ref() {
+            "" => "/",
+            s => s,
+        };
+
         let mut parts = uri.clone().into_parts();
         if let Some(paq) = parts.path_and_query.as_mut() {
             *paq = if let Some(q) = paq.query() {
-                format!("{}?{}", p.as_ref(), q).parse()?
+                format!("{}?{}", path, q).parse()?
             } else {
-                p.as_ref().parse()?
+                path.parse()?
             }
         }
         *uri = Uri::from_parts(parts)?;
@@ -220,8 +226,12 @@ fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> 
             .as_ref()
             .map(|paq| paq.path())
             .unwrap_or("/");
-        let paq = format!("{}?{}", path, serde_urlencoded::to_string(&query_map)?);
-        parts.path_and_query = Some(paq.parse()?);
+        let paq = match serde_urlencoded::to_string(&query_map)?.as_str() {
+            "" => path.parse()?,
+            q => format!("{}?{}", path, q).parse()?,
+        };
+
+        parts.path_and_query = Some(paq);
         *uri = Uri::from_parts(parts)?;
     }
     Ok(())
@@ -265,4 +275,89 @@ pub async fn apply_response_action(
 
     debug!("action applied: {:?}", response);
     Ok(response)
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use serde_urlencoded::from_str;
+    use test_case::test_case;
+
+    use super::{append_queries, replace_path, replace_queries};
+
+    #[test_case("/", None => "/")]
+    #[test_case("/", Some("") => "/")]
+    #[test_case("/", Some("foo=bar") => "/?foo=bar")]
+    #[test_case("/lgtm", Some("foo=bar") => "/lgtm?foo=bar")]
+    #[test_case("/?os=linux", None => "/?os=linux")]
+    #[test_case("/?os=linux", Some("") => "/?os=linux")]
+    #[test_case("/?os=linux", Some("foo=bar") => "/?os=linux&foo=bar")]
+    #[test_case("/lgtm?os=linux", Some("foo=bar") => "/lgtm?os=linux&foo=bar")]
+    #[test_case("/lgtm?os=linux&foo=foo", Some("foo=bar") => "/lgtm?os=linux&foo=foo&foo=bar")]
+    #[test_case("/lgtm?os=linux&foo=foo", Some("foo=bar&os=windows") => "/lgtm?os=linux&foo=foo&foo=bar&os=windows")]
+    fn test_append_queries(raw_uri: &str, queries: Option<&str>) -> String {
+        let uri_parse = raw_uri.parse();
+        assert!(uri_parse.is_ok());
+        let mut uri = uri_parse.unwrap();
+        assert!(append_queries(&mut uri, queries).is_ok());
+        uri.to_string()
+    }
+
+    #[test_case("/", None => "/")]
+    #[test_case("/", Some("") => "/")]
+    #[test_case("/", Some("foo=bar") => "/?foo=bar")]
+    #[test_case("/lgtm", Some("foo=bar") => "/lgtm?foo=bar")]
+    #[test_case("/?os=linux", None => "/?os=linux")]
+    #[test_case("/?os=linux", Some("") => "/?os=linux")]
+    #[test_case("/?foo=foo", Some("foo=bar") => "/?foo=bar")]
+    #[test_case("/?foo=foo&foo=foo2", Some("foo=bar") => "/?foo=bar")]
+    fn test_replace_queries(raw_uri: &str, queries: Option<&str>) -> String {
+        let uri_parse = raw_uri.parse();
+        assert!(uri_parse.is_ok());
+        let mut uri = uri_parse.unwrap();
+        let queries_parse = queries.map(from_str).transpose();
+        assert!(queries_parse.is_ok());
+        assert!(replace_queries(&mut uri, queries_parse.unwrap().as_ref()).is_ok());
+        uri.to_string()
+    }
+
+    #[test_case("/?os=linux", Some("foo=bar"), "os=linux&foo=bar")]
+    #[test_case("/?os=linux&foo=foo", Some("foo=bar"), "os=linux&foo=bar")]
+    #[test_case("/?os=linux&foo=foo", Some("foo=bar&os=windows"), "foo=bar&os=windows")]
+    fn test_replace_queries_pro(raw_uri: &str, queries: Option<&str>, expected_queries: &str) {
+        let uri_parse = raw_uri.parse();
+        assert!(uri_parse.is_ok());
+        let mut uri = uri_parse.unwrap();
+        let queries_parse = queries.map(from_str).transpose();
+        assert!(queries_parse.is_ok());
+        assert!(replace_queries(&mut uri, queries_parse.unwrap().as_ref()).is_ok());
+
+        let query_map: HashMap<String, String> =
+            serde_urlencoded::from_str(uri.query().unwrap_or("")).unwrap();
+
+        let expected_query_map_parse: Result<HashMap<String, String>, _> =
+            serde_urlencoded::from_str(expected_queries);
+        assert!(expected_query_map_parse.is_ok());
+        let expected_query_map = expected_query_map_parse.unwrap();
+
+        assert_eq!(query_map.len(), expected_query_map.len());
+        assert!(query_map.iter().all(|(k, v)| {
+            let expected_value = expected_query_map.get(k);
+            expected_value.is_some() && expected_value.unwrap() == v
+        }));
+    }
+
+    #[test_case("/", None => "/")]
+    #[test_case("/", Some("") => "/")]
+    #[test_case("/lgtm?foo=bar", Some("") => "/?foo=bar")]
+    #[test_case("/?os=linux", None => "/?os=linux")]
+    #[test_case("/pull/1/lgtm?foo=bar", Some("/pull/2/lgtm") => "/pull/2/lgtm?foo=bar")]
+    fn test_replace_path(raw_uri: &str, path: Option<&str>) -> String {
+        let uri_parse = raw_uri.parse();
+        assert!(uri_parse.is_ok());
+        let mut uri = uri_parse.unwrap();
+        assert!(replace_path(&mut uri, path).is_ok());
+        uri.to_string()
+    }
 }
