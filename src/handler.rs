@@ -168,7 +168,6 @@ pub async fn apply_request_action(
     Ok(request)
 }
 
-// TODO: need test
 fn append_queries<S: AsRef<str>>(uri: &mut Uri, raw_queries: Option<S>) -> anyhow::Result<()> {
     let queries = raw_queries.as_ref().map(AsRef::as_ref).unwrap_or("");
     if !queries.is_empty() {
@@ -189,7 +188,6 @@ fn append_queries<S: AsRef<str>>(uri: &mut Uri, raw_queries: Option<S>) -> anyho
     Ok(())
 }
 
-// TODO: need test
 fn replace_path<S: AsRef<str>>(uri: &mut Uri, raw_path: Option<S>) -> anyhow::Result<()> {
     if let Some(p) = raw_path {
         let path = match p.as_ref() {
@@ -210,7 +208,6 @@ fn replace_path<S: AsRef<str>>(uri: &mut Uri, raw_path: Option<S>) -> anyhow::Re
     Ok(())
 }
 
-// TODO: need test
 fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> anyhow::Result<()> {
     if let Some(qs) = queries {
         let mut parts = uri.clone().into_parts();
