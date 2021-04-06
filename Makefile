@@ -1,8 +1,8 @@
 build: 
-	cargo build --package proxy --bin proxy
+	cargo build
+fmt:
+	cargo +nightly fmt
 run: 
-	sudo ./target/debug/proxy
-set-env: 
-	sh ./iptables.sh
-clear-env: 
-	sh ./iptables_clear.sh
+	RUST_LOG=trace ./target/debug/tproxy $(config)
+test:
+	cargo test

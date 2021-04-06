@@ -1,9 +1,0 @@
-tproxy_config:
-  port: 58080
-  mark: 255
-  handler_config:
-    action:
-      Abort
-    packet: Request
-    selector:
-      method: GET
