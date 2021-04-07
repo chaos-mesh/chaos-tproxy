@@ -13,9 +13,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Build
-        run: |
-          cargo build --release
-          tar -czvf ./tproxy.tar.gz ./target/release/tproxy
+        run: cargo build --release
+      - name: Pack
+        run: mv ./target/release/tproxy . && tar -czvf ./tproxy.tar.gz tproxy
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
