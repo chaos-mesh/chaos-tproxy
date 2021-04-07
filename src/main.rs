@@ -7,8 +7,12 @@ use std::net::SocketAddr;
 
 use anyhow::anyhow;
 use cmd::get_config;
+use futures::future::FutureExt;
+use futures::{pin_mut, select};
 use hyper::Server;
 use route::set_all_routes;
+use tokio::signal::ctrl_c;
+use tokio::signal::unix::{signal, SignalKind};
 use tproxy::{HttpServer, TcpIncoming};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -43,7 +47,18 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    tokio::signal::ctrl_c().await?;
+    let recv_sigint = ctrl_c().fuse();
+    let mut sigterm = signal(SignalKind::terminate())?;
+    let recv_sigterm = sigterm.recv().fuse();
+
+    pin_mut!(recv_sigint);
+    pin_mut!(recv_sigterm);
+
+    select! {
+        sigint = recv_sigint => sigint?,
+        _ = recv_sigterm => (),
+    };
+
     let _ = tx.send(());
     drop(route_guard);
     Ok(())
