@@ -1,8 +1,9 @@
 use std::io;
 use std::process::Command;
 
+use anyhow::anyhow;
 use iptables::new;
-use tracing::{debug, instrument, trace};
+use tracing::debug;
 
 use crate::tproxy::config::Config;
 
@@ -13,13 +14,13 @@ const OUTPUT: &str = "OUTPUT";
 const CHAOS_PROXY_OUTPUT: &str = "CHAOS_PROXY_OUTPUT";
 const MANGLE: &str = "mangle";
 
-#[derive(Debug)]
-pub struct Guard {
-    config: Config,
-}
-
-pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error>> {
+// panic if config.proxy_ports is None
+pub fn set_all_routes(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let iptables = new(false)?;
+    let proxy_ports = config
+        .proxy_ports
+        .as_ref()
+        .ok_or_else(|| anyhow!("proxy ports should not be empty"))?;
 
     iptables.new_chain(MANGLE, DIVERT)?;
     iptables.append(
@@ -53,7 +54,7 @@ pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error
         PREROUTING,
         &format!(
             "-p tcp --match multiport --dport {} -j {}",
-            config.proxy_ports, CHAOS_PROXY_PREROUTING
+            proxy_ports, CHAOS_PROXY_PREROUTING
         ),
     )?;
 
@@ -73,7 +74,7 @@ pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error
         OUTPUT,
         &format!(
             "-p tcp --match multiport --sport {} -j {}",
-            config.proxy_ports, CHAOS_PROXY_OUTPUT
+            proxy_ports, CHAOS_PROXY_OUTPUT
         ),
     )?;
 
@@ -92,45 +93,20 @@ pub fn set_all_routes(config: Config) -> Result<Guard, Box<dyn std::error::Error
             String::from_utf8_lossy(&err)
         );
     }
-    Ok(Guard { config })
+
+    Ok(())
 }
 
-impl Drop for Guard {
-    #[instrument]
-    fn drop(&mut self) {
-        match clear_ip_rule(self.config.route_table, self.config.proxy_mark) {
-            Err(err) => trace!("fail to clear ip rule: {}", err),
-            Ok(err) if !err.is_empty() => debug!(
-                "stderr in clearing ip rule: {}",
-                String::from_utf8_lossy(&err)
-            ),
-            _ => (),
-        }
+pub fn clear_routes(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    clear_ip_rule(config.route_table, config.proxy_mark)?;
+    clear_ip_route(config.route_table)?;
 
-        match clear_ip_route(self.config.route_table) {
-            Err(err) => trace!("fail to clear ip route: {}", err),
-            Ok(err) if !err.is_empty() => debug!(
-                "stderr in clearing ip route: {}",
-                String::from_utf8_lossy(&err)
-            ),
-            _ => (),
-        }
-
-        let iptables = new(false).expect("fail to init iptables");
-
-        if let Err(err) = iptables.flush_table(MANGLE) {
-            trace!("fail to flush table(mangle): {}", err);
-        }
-        if let Err(err) = iptables.delete_chain(MANGLE, DIVERT) {
-            trace!("fail to delete chain({}): {}", DIVERT, err);
-        }
-        if let Err(err) = iptables.delete_chain(MANGLE, CHAOS_PROXY_PREROUTING) {
-            trace!("fail to delete chain({}): {}", CHAOS_PROXY_PREROUTING, err);
-        }
-        if let Err(err) = iptables.delete_chain(MANGLE, CHAOS_PROXY_OUTPUT) {
-            trace!("fail to delete chain({}): {}", CHAOS_PROXY_OUTPUT, err);
-        }
-    }
+    let iptables = new(false).expect("fail to init iptables");
+    iptables.flush_table(MANGLE)?;
+    iptables.delete_chain(MANGLE, DIVERT)?;
+    iptables.delete_chain(MANGLE, CHAOS_PROXY_PREROUTING)?;
+    iptables.delete_chain(MANGLE, CHAOS_PROXY_OUTPUT)?;
+    Ok(())
 }
 
 fn set_ip_route(table: u8) -> io::Result<Vec<u8>> {

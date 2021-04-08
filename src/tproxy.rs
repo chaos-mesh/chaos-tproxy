@@ -4,19 +4,22 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use anyhow::{Error, Result};
+use anyhow::{anyhow, Error, Result};
 use config::Config;
 use connector::HttpConnector;
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Response};
+use hyper::{Body, Client, Request, Response, Server};
 use tokio::net::TcpStream;
-use tracing::{debug, error, instrument};
+use tokio::sync::oneshot::{channel, Sender};
+use tokio::task::{spawn, spawn_blocking, JoinHandle};
+use tracing::{debug, error, info, instrument};
 
 use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response,
 };
+use crate::route::{clear_routes, set_all_routes};
 
 pub mod config;
 pub mod connector;
@@ -25,7 +28,15 @@ pub mod socketopt;
 
 pub use listener::TcpIncoming;
 pub struct HttpServer {
-    config: Arc<Config>,
+    config: Config,
+    handler: Option<ServeHandler>,
+}
+
+struct ServerImpl(Arc<Config>);
+
+struct ServeHandler {
+    sender: Sender<()>,
+    handler: JoinHandle<()>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,11 +46,84 @@ pub struct HttpService {
     client: Arc<Client<HttpConnector>>,
 }
 
+impl ServeHandler {
+    fn serve(server: Server<TcpIncoming, ServerImpl>) -> Self {
+        let (sender, rx) = channel();
+        let handler = spawn(async move {
+            // Await the `server` receiving the signal...
+            if let Err(e) = server
+                .with_graceful_shutdown(async move {
+                    rx.await.ok();
+                })
+                .await
+            {
+                info!("server error: {}", e);
+            }
+        });
+        Self { sender, handler }
+    }
+
+    async fn join(self) -> Result<()> {
+        let ServeHandler { sender, handler } = self;
+        let _ = sender.send(());
+        let _ = handler.await?;
+        Ok(())
+    }
+}
+
 impl HttpServer {
     pub fn new(config: Config) -> Self {
         Self {
-            config: Arc::new(config),
+            config,
+            handler: None,
         }
+    }
+
+    pub async fn start(&mut self) -> Result<()> {
+        if self.handler.is_some() {
+            return Err(anyhow!("there is already a server running"));
+        }
+
+        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
+        let incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
+        self.config.listen_port = incoming.local_addr().port();
+
+        if self.config.proxy_ports.is_some() {
+            let cfg = self.config.clone();
+            spawn_blocking(move || {
+                set_all_routes(&cfg)
+                    .map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
+            })
+            .await??;
+            debug!("set routes");
+        }
+
+        let server = Server::builder(incoming).serve(ServerImpl(Arc::new(self.config.clone())));
+        self.handler = Some(ServeHandler::serve(server));
+        Ok(())
+    }
+
+    pub async fn stop(&mut self) -> Result<()> {
+        match self.handler.take() {
+            None => return Err(anyhow!("there is no server running")),
+            Some(handler) => handler.join().await?,
+        }
+        if self.config.proxy_ports.is_some() {
+            let cfg = self.config.clone();
+            spawn_blocking(move || {
+                clear_routes(&cfg)
+                    .map_err(|err| anyhow!("fail to clear routes: {}", err.to_string()))
+            })
+            .await??;
+            debug!("clear routes");
+        }
+        Ok(())
+    }
+
+    pub async fn reload(&mut self, config: Config) -> Result<()> {
+        self.stop().await?;
+        self.config = config;
+        self.start().await
     }
 }
 
@@ -107,7 +191,7 @@ impl HttpService {
 
 type BoxedFuture<T, E> = Pin<Box<dyn 'static + Send + Future<Output = Result<T, E>>>>;
 
-impl Service<&TcpStream> for HttpServer {
+impl Service<&TcpStream> for ServerImpl {
     type Response = HttpService;
     type Error = std::io::Error;
     type Future = BoxedFuture<Self::Response, Self::Error>;
@@ -119,7 +203,7 @@ impl Service<&TcpStream> for HttpServer {
     #[inline]
     fn call(&mut self, stream: &TcpStream) -> Self::Future {
         let addr_result = stream.local_addr();
-        let config = self.config.clone();
+        let config = self.0.clone();
         Box::pin(async move { Ok(HttpService::new(addr_result?, config)) })
     }
 }

@@ -25,7 +25,7 @@
             "Server": "nginx"
           }
         },
-        "action": "delay"
+        "action": "abort"
       }
     ]
   }

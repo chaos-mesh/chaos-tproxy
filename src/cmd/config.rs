@@ -14,17 +14,17 @@ use crate::handler::{
 };
 use crate::tproxy::config::Config;
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawConfig {
     pub listen_port: Option<u16>,
     pub proxy_ports: Vec<u16>,
     pub proxy_mark: Option<i32>,
     pub ignore_mark: Option<i32>,
     pub route_table: Option<u8>,
-    pub rules: RawRules,
+    pub rules: Option<RawRules>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawRules {
     pub request: Option<Vec<RawRequestRule>>,
     pub response: Option<Vec<RawResponseRule>>,
@@ -97,10 +97,6 @@ impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
-        if raw.proxy_ports.is_empty() {
-            return Err(anyhow!("proxy ports cannot be empty"));
-        }
-
         let proxy_mark = raw.proxy_mark.unwrap_or(1);
         let ignore_mark = raw.ignore_mark.unwrap_or(255);
         let route_table = raw.route_table.unwrap_or(100);
@@ -119,16 +115,21 @@ impl TryFrom<RawConfig> for Config {
 
         Ok(Self {
             listen_port: raw.listen_port.unwrap_or(0),
-            proxy_ports: raw
-                .proxy_ports
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(","),
+            proxy_ports: if raw.proxy_ports.is_empty() {
+                None
+            } else {
+                Some(
+                    raw.proxy_ports
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(","),
+                )
+            },
             proxy_mark,
             ignore_mark,
             route_table,
-            rules: raw.rules.try_into()?,
+            rules: raw.rules.unwrap_or_default().try_into()?,
         })
     }
 }
