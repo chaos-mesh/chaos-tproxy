@@ -20,7 +20,5 @@ rules:
       path: /example
       method: GET
       code: 404
-      response_headers:
-        Server: nginx
     actions:
       abort: true

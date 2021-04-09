@@ -25,10 +25,7 @@
       "selector": {
         "path": "/example",
         "method": "GET",
-        "code": 404,
-        "response_headers": {
-          "Server": "nginx"
-        }
+        "code": 404
       },
       "actions": {
         "abort": true
