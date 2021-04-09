@@ -1,4 +1,4 @@
-use crate::handler::Rules;
+use crate::handler::Rule;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -7,5 +7,5 @@ pub struct Config {
     pub proxy_mark: i32,
     pub ignore_mark: i32,
     pub route_table: u8,
-    pub rules: Rules,
+    pub rules: Vec<Rule>,
 }

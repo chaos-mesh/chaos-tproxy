@@ -10,73 +10,53 @@ use tokio::time::sleep;
 use tracing::{debug, instrument};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Rules {
-    pub request: Vec<RequestRule>,
-    pub response: Vec<ResponseRule>,
+pub enum Target {
+    Request,
+    Response,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct RequestRule {
-    pub selector: RequestSelector,
-    pub action: RequestAction,
+pub struct Rule {
+    pub target: Target,
+    pub selector: Selector,
+    pub actions: Actions,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct ResponseRule {
-    pub selector: ResponseSelector,
-    pub action: ResponseAction,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct RequestSelector {
+pub struct Selector {
     pub port: Option<u16>,
     pub path: Option<PathAndQuery>,
     pub method: Option<Method>,
     pub headers: Option<HeaderMap>,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct ResponseSelector {
-    pub port: Option<u16>,
-    pub path: Option<PathAndQuery>,
-    pub method: Option<Method>,
     pub code: Option<StatusCode>,
-    pub request_headers: Option<HeaderMap>,
     pub response_headers: Option<HeaderMap>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum RequestAction {
-    Abort,
-    Delay(Duration),
-    Append {
-        queries: Option<String>,
-        headers: Option<HeaderMap>,
-    },
-    Replace {
-        path: Option<String>,
-        method: Option<Method>,
-        body: Option<Vec<u8>>,
-        queries: Option<HashMap<String, String>>,
-        headers: Option<HeaderMap>,
-    },
+pub struct Actions {
+    pub abort: bool,
+    pub delay: Option<Duration>,
+    pub append: Option<AppendAction>,
+    pub replace: Option<ReplaceAction>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum ResponseAction {
-    Abort,
-    Delay(Duration),
-    Append {
-        headers: Option<HeaderMap>,
-    },
-    Replace {
-        code: Option<StatusCode>,
-        body: Option<Vec<u8>>,
-        headers: Option<HeaderMap>,
-    },
+pub struct AppendAction {
+    pub queries: Option<String>,
+    pub headers: Option<HeaderMap>,
 }
 
-pub fn select_request(port: u16, request: &Request<Body>, selector: &RequestSelector) -> bool {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ReplaceAction {
+    pub path: Option<String>,
+    pub method: Option<Method>,
+    pub body: Option<Vec<u8>>,
+    pub code: Option<StatusCode>,
+    pub queries: Option<HashMap<String, String>>,
+    pub headers: Option<HeaderMap>,
+}
+
+pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -> bool {
     selector.port.iter().all(|p| port == *p)
         && selector
             .path
@@ -96,7 +76,7 @@ pub fn select_response(
     method: &Method,
     request_headers: &HeaderMap,
     response: &Response<Body>,
-    selector: &ResponseSelector,
+    selector: &Selector,
 ) -> bool {
     selector.port.iter().all(|p| port == *p)
         && selector
@@ -105,7 +85,7 @@ pub fn select_response(
             .all(|p| uri.path().starts_with(p.path()))
         && selector.method.iter().all(|m| method == m)
         && selector.code.iter().all(|code| response.status() == *code)
-        && selector.request_headers.iter().all(|fields| {
+        && selector.headers.iter().all(|fields| {
             fields
                 .iter()
                 .all(|(header, value)| request_headers.get_all(header).iter().any(|f| f == value))
@@ -124,44 +104,43 @@ pub fn select_response(
 #[instrument]
 pub async fn apply_request_action(
     mut request: Request<Body>,
-    action: &RequestAction,
+    actions: &Actions,
 ) -> anyhow::Result<Request<Body>> {
-    match action {
-        RequestAction::Abort => return Err(anyhow!("Abort applied")),
-        RequestAction::Delay(dur) => sleep(*dur).await,
-        RequestAction::Append { queries, headers } => {
-            append_queries(request.uri_mut(), queries.as_ref())?;
-            if let Some(hdrs) = &headers {
-                for (key, value) in hdrs {
-                    request.headers_mut().append(key, value.clone());
-                }
+    if actions.abort {
+        return Err(anyhow!("Abort applied"));
+    }
+
+    if let Some(append) = &actions.append {
+        append_queries(request.uri_mut(), append.queries.as_ref())?;
+        if let Some(hdrs) = &append.headers {
+            for (key, value) in hdrs {
+                request.headers_mut().append(key, value.clone());
             }
         }
-        RequestAction::Replace {
-            path,
-            method,
-            body,
-            queries,
-            headers,
-        } => {
-            replace_path(request.uri_mut(), path.as_ref())?;
+    }
 
-            if let Some(md) = method {
-                *request.method_mut() = md.clone();
-            }
+    if let Some(replace) = &actions.replace {
+        replace_path(request.uri_mut(), replace.path.as_ref())?;
 
-            if let Some(data) = body {
-                *request.body_mut() = data.clone().into()
-            }
+        if let Some(md) = &replace.method {
+            *request.method_mut() = md.clone();
+        }
 
-            replace_queries(request.uri_mut(), queries.as_ref())?;
+        if let Some(data) = &replace.body {
+            *request.body_mut() = data.clone().into()
+        }
 
-            if let Some(hdrs) = &headers {
-                for (key, value) in hdrs {
-                    request.headers_mut().insert(key, value.clone());
-                }
+        replace_queries(request.uri_mut(), replace.queries.as_ref())?;
+
+        if let Some(hdrs) = &replace.headers {
+            for (key, value) in hdrs {
+                request.headers_mut().insert(key, value.clone());
             }
         }
+    }
+
+    if let Some(delay) = actions.delay {
+        sleep(delay).await
     }
 
     debug!("action applied: {:?}", request);
@@ -237,37 +216,38 @@ fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> 
 #[instrument]
 pub async fn apply_response_action(
     mut response: Response<Body>,
-    action: &ResponseAction,
+    actions: &Actions,
 ) -> anyhow::Result<Response<Body>> {
-    match action {
-        ResponseAction::Abort => return Err(anyhow!("Abort applied")),
-        ResponseAction::Delay(dur) => sleep(*dur).await,
-        ResponseAction::Append { headers } => {
-            if let Some(hdrs) = &headers {
-                for (key, value) in hdrs {
-                    response.headers_mut().append(key, value.clone());
-                }
+    if actions.abort {
+        return Err(anyhow!("Abort applied"));
+    }
+
+    if let Some(append) = &actions.append {
+        if let Some(hdrs) = &append.headers {
+            for (key, value) in hdrs {
+                response.headers_mut().append(key, value.clone());
             }
         }
-        ResponseAction::Replace {
-            code,
-            body,
-            headers,
-        } => {
-            if let Some(co) = code {
-                *response.status_mut() = *co;
-            }
+    }
 
-            if let Some(data) = body {
-                *response.body_mut() = data.clone().into()
-            }
+    if let Some(replace) = &actions.replace {
+        if let Some(co) = replace.code {
+            *response.status_mut() = co;
+        }
 
-            if let Some(hdrs) = &headers {
-                for (key, value) in hdrs {
-                    response.headers_mut().insert(key, value.clone());
-                }
+        if let Some(data) = &replace.body {
+            *response.body_mut() = data.clone().into()
+        }
+
+        if let Some(hdrs) = &replace.headers {
+            for (key, value) in hdrs {
+                response.headers_mut().insert(key, value.clone());
             }
         }
+    }
+
+    if let Some(delay) = actions.delay {
+        sleep(delay).await
     }
 
     debug!("action applied: {:?}", response);

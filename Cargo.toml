@@ -15,7 +15,6 @@ humantime-serde = "1.0"
 hyper = {version = "0.14.4", features = ["runtime", "client", "server", "http1", "http2"]}
 iptables = "0.4"
 libc = {version = "0.2.81", features = ["std"]}
-multimap = "0.8"
 paw = "1.0"
 serde = {version = "1.0", features = ["derive"]}
 serde_derive = "1.0.123"
