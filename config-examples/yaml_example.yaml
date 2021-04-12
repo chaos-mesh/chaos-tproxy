@@ -1,5 +1,5 @@
 listen_port: 58080 # optional
-proxy_ports: [80, 443, 8080]
+proxy_ports: [80, 443, 8080] # proxy will do nothing if empty
 proxy_mark: 1 # optional
 ignore_mark: 255 # optional
 rules:

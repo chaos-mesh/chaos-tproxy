@@ -63,7 +63,7 @@ impl ServeHandler {
         Self { sender, handler }
     }
 
-    async fn join(self) -> Result<()> {
+    async fn stop(self) -> Result<()> {
         let ServeHandler { sender, handler } = self;
         let _ = sender.send(());
         let _ = handler.await?;
@@ -88,15 +88,11 @@ impl HttpServer {
         let incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
         self.config.listen_port = incoming.local_addr().port();
 
-        if self.config.proxy_ports.is_some() {
-            let cfg = self.config.clone();
-            spawn_blocking(move || {
-                set_all_routes(&cfg)
-                    .map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
-            })
-            .await??;
-            debug!("set routes");
-        }
+        let cfg = self.config.clone();
+        spawn_blocking(move || {
+            set_all_routes(&cfg).map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
+        })
+        .await??;
 
         let server = Server::builder(incoming).serve(ServerImpl(Arc::new(self.config.clone())));
         self.handler = Some(ServeHandler::serve(server));
@@ -106,18 +102,13 @@ impl HttpServer {
     pub async fn stop(&mut self) -> Result<()> {
         match self.handler.take() {
             None => return Err(anyhow!("there is no server running")),
-            Some(handler) => handler.join().await?,
+            Some(handler) => handler.stop().await?,
         }
-        if self.config.proxy_ports.is_some() {
-            let cfg = self.config.clone();
-            spawn_blocking(move || {
-                clear_routes(&cfg)
-                    .map_err(|err| anyhow!("fail to clear routes: {}", err.to_string()))
-            })
-            .await??;
-            debug!("clear routes");
-        }
-        Ok(())
+        let cfg = self.config.clone();
+        spawn_blocking(move || {
+            clear_routes(&cfg).map_err(|err| anyhow!("fail to clear routes: {}", err.to_string()))
+        })
+        .await?
     }
 
     pub async fn reload(&mut self, config: Config) -> Result<()> {

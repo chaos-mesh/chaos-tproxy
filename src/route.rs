@@ -1,7 +1,6 @@
 use std::io;
 use std::process::Command;
 
-use anyhow::anyhow;
 use iptables::new;
 use tracing::debug;
 
@@ -14,13 +13,13 @@ const OUTPUT: &str = "OUTPUT";
 const CHAOS_PROXY_OUTPUT: &str = "CHAOS_PROXY_OUTPUT";
 const MANGLE: &str = "mangle";
 
-// panic if config.proxy_ports is None
+// do nothing if config.proxy_ports is None
 pub fn set_all_routes(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let iptables = new(false)?;
-    let proxy_ports = config
-        .proxy_ports
-        .as_ref()
-        .ok_or_else(|| anyhow!("proxy ports should not be empty"))?;
+    let proxy_ports = match config.proxy_ports.as_ref() {
+        Some(ports) => ports,
+        None => return Ok(()),
+    };
 
     iptables.new_chain(MANGLE, DIVERT)?;
     iptables.append(
@@ -94,10 +93,16 @@ pub fn set_all_routes(config: &Config) -> Result<(), Box<dyn std::error::Error>>
         );
     }
 
+    debug!("set routes");
     Ok(())
 }
 
+// do nothing if config.proxy_ports is None
 pub fn clear_routes(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    if config.proxy_ports.is_none() {
+        return Ok(());
+    }
+
     clear_ip_rule(config.route_table, config.proxy_mark)?;
     clear_ip_route(config.route_table)?;
 
@@ -106,6 +111,8 @@ pub fn clear_routes(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     iptables.delete_chain(MANGLE, DIVERT)?;
     iptables.delete_chain(MANGLE, CHAOS_PROXY_PREROUTING)?;
     iptables.delete_chain(MANGLE, CHAOS_PROXY_OUTPUT)?;
+
+    debug!("clear routes");
     Ok(())
 }
 
