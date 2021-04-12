@@ -1,16 +1,21 @@
 pub mod cmd;
 pub mod handler;
 pub mod route;
+pub mod signal;
 pub mod tproxy;
 
-use std::net::SocketAddr;
+use std::convert::TryInto;
 
 use anyhow::anyhow;
+use cmd::config::RawConfig;
 use cmd::get_config;
-use hyper::Server;
-use route::set_all_routes;
-use tproxy::{HttpServer, TcpIncoming};
-use tracing::info;
+use futures::future::FutureExt;
+use futures::{pin_mut, select};
+use signal::SignalHandler;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::signal::unix::SignalKind;
+use tproxy::HttpServer;
+use tracing::error;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -20,31 +25,42 @@ async fn main() -> anyhow::Result<()> {
         .try_init()
         .map_err(|err| anyhow!("{}", err))?;
 
-    let mut cfg = get_config().await?;
-    let addr = SocketAddr::from(([0, 0, 0, 0], cfg.listen_port));
-    let incoming = TcpIncoming::bind(addr, cfg.ignore_mark)?;
-    cfg.listen_port = incoming.local_addr().port();
+    let cfg = get_config().await?;
+    let mut server = HttpServer::new(cfg);
+    server.start().await?;
 
-    let route_guard = set_all_routes(cfg.clone())
-        .map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))?;
+    let mut signal_handler =
+        SignalHandler::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+    let signal_recv = signal_handler.wait().fuse();
+    pin_mut!(signal_recv);
 
-    let server = Server::builder(incoming).serve(HttpServer::new(cfg));
-    info!("tproxy is running on {}", addr);
+    let mut stdin = BufReader::new(tokio::io::stdin());
+    loop {
+        let mut buf = String::new();
+        let read_line = stdin.read_line(&mut buf).fuse();
+        pin_mut!(read_line);
 
-    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    let graceful = server.with_graceful_shutdown(async {
-        rx.await.ok();
-    });
+        select! {
+            _ = signal_recv => break,
+            read_ret = read_line => {
+                if let Err(err) = read_ret {
+                    error!("error in receiving new config: {}", err);
+                    break;
+                }
+                if let Err(err) = reload(&mut server, &buf).await {
+                    error!("error in reloading http server: {}", err);
+                    break;
+                }
+            }
+        };
+    }
 
-    tokio::spawn(async move {
-        // Await the `server` receiving the signal...
-        if let Err(e) = graceful.await {
-            info!("server error: {}", e);
-        }
-    });
+    server.stop().await?;
+    Ok(())
+}
 
-    tokio::signal::ctrl_c().await?;
-    let _ = tx.send(());
-    drop(route_guard);
+async fn reload(server: &mut HttpServer, buf: &str) -> anyhow::Result<()> {
+    let cfg = serde_json::from_str::<RawConfig>(buf)?;
+    server.reload(cfg.try_into()?).await?;
     Ok(())
 }
