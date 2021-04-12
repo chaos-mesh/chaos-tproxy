@@ -1,6 +1,7 @@
 pub mod cmd;
 pub mod handler;
 pub mod route;
+pub mod signal;
 pub mod tproxy;
 
 use std::convert::TryInto;
@@ -10,9 +11,9 @@ use cmd::config::RawConfig;
 use cmd::get_config;
 use futures::future::FutureExt;
 use futures::{pin_mut, select};
+use signal::SignalHandler;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::signal::ctrl_c;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::SignalKind;
 use tproxy::HttpServer;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
@@ -28,28 +29,19 @@ async fn main() -> anyhow::Result<()> {
     let mut server = HttpServer::new(cfg);
     server.start().await?;
 
-    let recv_sigint = ctrl_c().fuse();
-    let mut sigterm = signal(SignalKind::terminate())?;
-    let recv_sigterm = sigterm.recv().fuse();
+    let mut signal_handler =
+        SignalHandler::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+    let signal_recv = signal_handler.wait().fuse();
+    pin_mut!(signal_recv);
 
     let mut stdin = BufReader::new(tokio::io::stdin());
-
-    pin_mut!(recv_sigint);
-    pin_mut!(recv_sigterm);
-
     loop {
         let mut buf = String::new();
         let read_line = stdin.read_line(&mut buf).fuse();
         pin_mut!(read_line);
 
         select! {
-            _ = recv_sigterm => break,
-            sigint = recv_sigint => {
-                if let Err(err) = sigint {
-                    error!("error in receiving SIGINT: {}", err);
-                }
-                break;
-            },
+            _ = signal_recv => break,
             read_ret = read_line => {
                 if let Err(err) = read_ret {
                     error!("error in receiving new config: {}", err);
@@ -60,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
                     break;
                 }
             }
-        }
+        };
     }
 
     server.stop().await?;
