@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::handler::{Actions, AppendAction, ReplaceAction, Rule, Selector, Target};
 use crate::tproxy::config::Config;
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawConfig {
     pub listen_port: Option<u16>,
     pub proxy_ports: Vec<u16>,
@@ -26,6 +26,7 @@ pub struct RawRule {
     pub selector: RawSelector,
     pub actions: RawActions,
 }
+
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub enum RawTarget {
     Request,
@@ -72,10 +73,6 @@ impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
-        if raw.proxy_ports.is_empty() {
-            return Err(anyhow!("proxy ports cannot be empty"));
-        }
-
         let proxy_mark = raw.proxy_mark.unwrap_or(1);
         let ignore_mark = raw.ignore_mark.unwrap_or(255);
         let route_table = raw.route_table.unwrap_or(100);
@@ -94,12 +91,17 @@ impl TryFrom<RawConfig> for Config {
 
         Ok(Self {
             listen_port: raw.listen_port.unwrap_or(0),
-            proxy_ports: raw
-                .proxy_ports
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(","),
+            proxy_ports: if raw.proxy_ports.is_empty() {
+                None
+            } else {
+                Some(
+                    raw.proxy_ports
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(","),
+                )
+            },
             proxy_mark,
             ignore_mark,
             route_table,

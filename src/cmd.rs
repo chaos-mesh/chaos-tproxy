@@ -8,14 +8,14 @@ use tokio::fs::read_to_string;
 
 use crate::tproxy::config::Config;
 
-mod config;
+pub mod config;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
 struct Opt {
     ///path of config file
     #[structopt(parse(from_os_str))]
-    input: PathBuf,
+    input: Option<PathBuf>,
 }
 
 pub async fn get_config() -> Result<Config> {
@@ -23,13 +23,19 @@ pub async fn get_config() -> Result<Config> {
     get_config_from_opt(opt.input).await
 }
 
-pub async fn get_config_from_opt(path_buf: PathBuf) -> Result<Config> {
-    let buffer = read_to_string(&path_buf).await?;
-    match path_buf.extension().and_then(|ext| ext.to_str()) {
-        Some("json") => Ok(serde_json::from_str::<RawConfig>(&buffer)?.try_into()?),
-        Some("yaml") => Ok(serde_yaml::from_str::<RawConfig>(&buffer)?.try_into()?),
-        _ => Err(anyhow!("invalid file extension")),
+pub async fn get_config_from_opt(path: Option<PathBuf>) -> Result<Config> {
+    match path {
+        None => RawConfig::default(),
+        Some(path_buf) => {
+            let buffer = read_to_string(&path_buf).await?;
+            match path_buf.extension().and_then(|ext| ext.to_str()) {
+                Some("json") => serde_json::from_str(&buffer)?,
+                Some("yaml") => serde_yaml::from_str(&buffer)?,
+                _ => return Err(anyhow!("invalid file extension")),
+            }
+        }
     }
+    .try_into()
 }
 
 #[cfg(test)]
