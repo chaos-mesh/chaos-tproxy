@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::matches;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -17,7 +18,7 @@ use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tracing::{debug, error, info, instrument};
 
 use crate::handler::{
-    apply_request_action, apply_response_action, select_request, select_response,
+    apply_request_action, apply_response_action, select_request, select_response, Target,
 };
 use crate::route::{clear_routes, set_all_routes};
 
@@ -131,15 +132,12 @@ impl HttpService {
     }
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        if let Some(rule) = self
-            .config
-            .rules
-            .request
-            .iter()
-            .find(|rule| select_request(self.target.port(), &request, &rule.selector))
-        {
+        if let Some(rule) = self.config.rules.iter().find(|rule| {
+            matches!(rule.target, Target::Request)
+                && select_request(self.target.port(), &request, &rule.selector)
+        }) {
             debug!("request matched");
-            request = apply_request_action(request, &rule.action).await?;
+            request = apply_request_action(request, &rule.actions).await?;
         }
 
         let uri = request.uri().clone();
@@ -163,18 +161,19 @@ impl HttpService {
             }
         };
 
-        if let Some(rule) = self.config.rules.response.iter().find(|rule| {
-            select_response(
-                self.target.port(),
-                &uri,
-                &method,
-                &headers,
-                &response,
-                &rule.selector,
-            )
+        if let Some(rule) = self.config.rules.iter().find(|rule| {
+            matches!(rule.target, Target::Response)
+                && select_response(
+                    self.target.port(),
+                    &uri,
+                    &method,
+                    &headers,
+                    &response,
+                    &rule.selector,
+                )
         }) {
             debug!("response matched");
-            response = apply_response_action(response, &rule.action).await?;
+            response = apply_response_action(response, &rule.actions).await?;
         }
         Ok(response)
     }

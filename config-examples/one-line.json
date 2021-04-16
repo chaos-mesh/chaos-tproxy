@@ -1,1 +1,1 @@
-{"proxy_ports": [80, 8080, 30086], "rules": {"request": [{"selector": {"path": "/src", "method": "GET"}, "action": "abort"}]}}
+{"proxy_ports": [80, 8080, 30086], "rules": [{"target": "Request", "selector": {"path": "/src", "method": "GET"},"actions": {"abort": true}}]}

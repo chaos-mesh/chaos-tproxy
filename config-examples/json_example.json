@@ -1,33 +1,35 @@
 {
   "listen_port": 58080,
-  "proxy_ports": [80, 443, 8080],
+  "proxy_ports": [80, 8080, 30086],
   "proxy_mark": 1,
   "ignore_mark": 255,
-  "rules": {
-    "request": [
-      {
-        "selector": {
-          "path": "/example",
-          "method": "GET"
-        },
-        "action": {
-          "delay": "10s"
+  "rules": [
+    {
+      "target": "Request",
+      "selector": {
+        "path": "/example",
+        "method": "GET"
+      },
+      "actions": {
+        "delay": "10s",
+        "append": {
+          "queries": [
+            ["foo", "bar"],
+            ["foo", "other"]
+          ]
         }
       }
-    ],
-    "response": [
-      {
-        "selector": {
-          "path": "/example",
-          "method": "GET",
-          "code": 404,
-          "response_headers": {
-            "Server": "nginx"
-          }
-        },
-        "action": "abort"
+    },
+    {
+      "target": "Response",
+      "selector": {
+        "path": "/example",
+        "method": "GET",
+        "code": 404
+      },
+      "actions": {
+        "abort": true
       }
-    ]
-  }
+    }
+  ]
 }
-

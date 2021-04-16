@@ -44,10 +44,7 @@ mod test {
 
     use anyhow::Result;
 
-    use super::config::{
-        RawConfig, RawRequestAction, RawRequestRule, RawRequestSelector, RawResponseAction,
-        RawResponseRule, RawResponseSelector, RawRules,
-    };
+    use super::config::{RawActions, RawConfig, RawRule, RawSelector, RawTarget};
     #[test]
     fn test_serde_util() -> Result<()> {
         let conf = RawConfig {
@@ -56,33 +53,42 @@ mod test {
             proxy_mark: Some(255),
             ignore_mark: Some(255),
             route_table: Some(100),
-            rules: Some(RawRules {
-                request: Some(vec![RawRequestRule {
-                    selector: RawRequestSelector {
+            rules: Some(vec![
+                RawRule {
+                    target: RawTarget::Request,
+                    selector: RawSelector {
                         port: None,
                         path: Some("/rs-tproxy".to_string()),
                         method: Some("GET".to_string()),
-                        headers: Some(
-                            [("aname", "avalue")]
-                                .iter()
-                                .map(|(k, v)| (k.to_string(), v.to_string()))
-                                .collect(),
-                        ),
-                    },
-                    action: RawRequestAction::Delay(Duration::from_secs(1)),
-                }]),
-                response: Some(vec![RawResponseRule {
-                    selector: RawResponseSelector {
-                        port: None,
-                        path: Some("/rs-tproxy".to_string()),
-                        method: Some("GET".to_string()),
-                        code: Some(80),
                         request_headers: Some(
                             [("aname", "avalue")]
                                 .iter()
                                 .map(|(k, v)| (k.to_string(), v.to_string()))
                                 .collect(),
                         ),
+                        code: None,
+                        response_headers: None,
+                    },
+                    actions: RawActions {
+                        abort: None,
+                        delay: Some(Duration::from_secs(1)),
+                        append: None,
+                        replace: None,
+                    },
+                },
+                RawRule {
+                    target: RawTarget::Response,
+                    selector: RawSelector {
+                        port: None,
+                        path: Some("/rs-tproxy".to_string()),
+                        method: Some("GET".to_string()),
+                        request_headers: Some(
+                            [("aname", "avalue")]
+                                .iter()
+                                .map(|(k, v)| (k.to_string(), v.to_string()))
+                                .collect(),
+                        ),
+                        code: Some(80),
                         response_headers: Some(
                             [("server", "nginx")]
                                 .iter()
@@ -90,9 +96,14 @@ mod test {
                                 .collect(),
                         ),
                     },
-                    action: RawResponseAction::Delay(Duration::from_secs(1)),
-                }]),
-            }),
+                    actions: RawActions {
+                        abort: Some(true),
+                        delay: Some(Duration::from_secs(1)),
+                        append: None,
+                        replace: None,
+                    },
+                },
+            ]),
         };
         let json = serde_json::to_string(&conf)?;
         println!("{}", json);
