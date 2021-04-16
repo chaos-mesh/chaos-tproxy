@@ -27,8 +27,8 @@ pub struct Selector {
     pub port: Option<u16>,
     pub path: Option<PathAndQuery>,
     pub method: Option<Method>,
-    pub headers: Option<HeaderMap>,
     pub code: Option<StatusCode>,
+    pub request_headers: Option<HeaderMap>,
     pub response_headers: Option<HeaderMap>,
 }
 
@@ -63,7 +63,7 @@ pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -
             .iter()
             .all(|p| request.uri().path().starts_with(p.path()))
         && selector.method.iter().all(|m| request.method() == m)
-        && selector.headers.iter().all(|fields| {
+        && selector.request_headers.iter().all(|fields| {
             fields
                 .iter()
                 .all(|(header, value)| request.headers().get_all(header).iter().any(|f| f == value))
@@ -85,7 +85,7 @@ pub fn select_response(
             .all(|p| uri.path().starts_with(p.path()))
         && selector.method.iter().all(|m| method == m)
         && selector.code.iter().all(|code| response.status() == *code)
-        && selector.headers.iter().all(|fields| {
+        && selector.request_headers.iter().all(|fields| {
             fields
                 .iter()
                 .all(|(header, value)| request_headers.get_all(header).iter().any(|f| f == value))

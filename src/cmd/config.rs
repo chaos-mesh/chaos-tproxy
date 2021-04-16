@@ -39,7 +39,7 @@ pub struct RawSelector {
     pub path: Option<String>,
     pub method: Option<String>,
     pub code: Option<u16>,
-    pub headers: Option<HashMap<String, String>>,
+    pub request_headers: Option<HashMap<String, String>>,
     pub response_headers: Option<HashMap<String, String>>,
 }
 
@@ -148,8 +148,8 @@ impl TryFrom<RawSelector> for Selector {
                 .as_ref()
                 .map(|method| method.parse())
                 .transpose()?,
-            headers: raw
-                .headers
+            request_headers: raw
+                .request_headers
                 .as_ref()
                 .map(|headers| -> Result<_, Self::Error> {
                     let mut map = HeaderMap::new();
@@ -213,7 +213,7 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
 
     fn try_from(raw: RawReplaceAction) -> Result<Self, Self::Error> {
         Ok(Self {
-            path: raw.path.as_ref().map(|path| path.parse()).transpose()?,
+            path: raw.path,
             method: raw
                 .method
                 .as_ref()

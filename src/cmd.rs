@@ -60,7 +60,7 @@ mod test {
                         port: None,
                         path: Some("/rs-tproxy".to_string()),
                         method: Some("GET".to_string()),
-                        headers: Some(
+                        request_headers: Some(
                             [("aname", "avalue")]
                                 .iter()
                                 .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -82,7 +82,7 @@ mod test {
                         port: None,
                         path: Some("/rs-tproxy".to_string()),
                         method: Some("GET".to_string()),
-                        headers: Some(
+                        request_headers: Some(
                             [("aname", "avalue")]
                                 .iter()
                                 .map(|(k, v)| (k.to_string(), v.to_string()))
