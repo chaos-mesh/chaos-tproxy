@@ -12,7 +12,7 @@ use tracing::{debug, error, instrument, trace};
 
 use super::socketopt;
 /// A stream of connections from binding to an address.
-/// As an implementation of roa_core::Accept.
+/// As an implementation of `hyper::server::accept::Accept`.
 #[must_use = "streams do nothing unless polled"]
 pub struct TcpIncoming {
     addr: SocketAddr,

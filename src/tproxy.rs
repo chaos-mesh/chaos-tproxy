@@ -13,14 +13,14 @@ use http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response, Server};
 use tokio::net::TcpStream;
-use tokio::sync::oneshot::{channel, Sender};
-use tokio::task::{spawn, spawn_blocking, JoinHandle};
-use tracing::{debug, error, info, instrument};
+use tokio::task::spawn_blocking;
+use tracing::{debug, error, instrument};
 
 use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response, Target,
 };
 use crate::route::{clear_routes, set_all_routes};
+use crate::server_helper::ServeHandler;
 
 pub mod config;
 pub mod connector;
@@ -35,41 +35,11 @@ pub struct HttpServer {
 
 struct ServerImpl(Arc<Config>);
 
-struct ServeHandler {
-    sender: Sender<()>,
-    handler: JoinHandle<()>,
-}
-
 #[derive(Debug, Clone)]
 pub struct HttpService {
     target: SocketAddr,
     config: Arc<Config>,
     client: Arc<Client<HttpConnector>>,
-}
-
-impl ServeHandler {
-    fn serve(server: Server<TcpIncoming, ServerImpl>) -> Self {
-        let (sender, rx) = channel();
-        let handler = spawn(async move {
-            // Await the `server` receiving the signal...
-            if let Err(e) = server
-                .with_graceful_shutdown(async move {
-                    rx.await.ok();
-                })
-                .await
-            {
-                info!("server error: {}", e);
-            }
-        });
-        Self { sender, handler }
-    }
-
-    async fn stop(self) -> Result<()> {
-        let ServeHandler { sender, handler } = self;
-        let _ = sender.send(());
-        let _ = handler.await?;
-        Ok(())
-    }
 }
 
 impl HttpServer {
@@ -96,7 +66,11 @@ impl HttpServer {
         .await??;
 
         let server = Server::builder(incoming).serve(ServerImpl(Arc::new(self.config.clone())));
-        self.handler = Some(ServeHandler::serve(server));
+        self.handler = Some(ServeHandler::serve(move |rx| {
+            server.with_graceful_shutdown(async move {
+                rx.await.ok();
+            })
+        }));
         Ok(())
     }
 
