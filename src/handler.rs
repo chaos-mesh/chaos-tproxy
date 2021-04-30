@@ -36,8 +36,8 @@ pub struct Selector {
 pub struct Actions {
     pub abort: bool,
     pub delay: Option<Duration>,
-    pub append: Option<AppendAction>,
     pub replace: Option<ReplaceAction>,
+    pub append: Option<AppendAction>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -110,13 +110,8 @@ pub async fn apply_request_action(
         return Err(anyhow!("Abort applied"));
     }
 
-    if let Some(append) = &actions.append {
-        append_queries(request.uri_mut(), append.queries.as_ref())?;
-        if let Some(hdrs) = &append.headers {
-            for (key, value) in hdrs {
-                request.headers_mut().append(key, value.clone());
-            }
-        }
+    if let Some(delay) = actions.delay {
+        sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
@@ -139,8 +134,13 @@ pub async fn apply_request_action(
         }
     }
 
-    if let Some(delay) = actions.delay {
-        sleep(delay).await
+    if let Some(append) = &actions.append {
+        append_queries(request.uri_mut(), append.queries.as_ref())?;
+        if let Some(hdrs) = &append.headers {
+            for (key, value) in hdrs {
+                request.headers_mut().append(key, value.clone());
+            }
+        }
     }
 
     debug!("action applied: {:?}", request);
@@ -222,12 +222,8 @@ pub async fn apply_response_action(
         return Err(anyhow!("Abort applied"));
     }
 
-    if let Some(append) = &actions.append {
-        if let Some(hdrs) = &append.headers {
-            for (key, value) in hdrs {
-                response.headers_mut().append(key, value.clone());
-            }
-        }
+    if let Some(delay) = actions.delay {
+        sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
@@ -246,8 +242,12 @@ pub async fn apply_response_action(
         }
     }
 
-    if let Some(delay) = actions.delay {
-        sleep(delay).await
+    if let Some(append) = &actions.append {
+        if let Some(hdrs) = &append.headers {
+            for (key, value) in hdrs {
+                response.headers_mut().append(key, value.clone());
+            }
+        }
     }
 
     debug!("action applied: {:?}", response);

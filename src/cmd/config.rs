@@ -49,8 +49,8 @@ pub struct RawActions {
     #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub delay: Option<Duration>,
-    pub append: Option<RawAppendAction>,
     pub replace: Option<RawReplaceAction>,
+    pub append: Option<RawAppendAction>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
