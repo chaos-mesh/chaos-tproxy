@@ -182,8 +182,8 @@ impl TryFrom<RawActions> for Actions {
         Ok(Self {
             abort: raw.abort.unwrap_or(false),
             delay: raw.delay,
-            append: raw.append.map(TryInto::try_into).transpose()?,
             replace: raw.replace.map(TryInto::try_into).transpose()?,
+            append: raw.append.map(TryInto::try_into).transpose()?,
         })
     }
 }

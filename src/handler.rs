@@ -258,10 +258,16 @@ pub async fn apply_response_action(
 mod test {
     use std::collections::HashMap;
 
+    use http::header::{HeaderMap, HeaderName, HeaderValue};
+    use http::{Request, Response};
+    use hyper::Body;
     use serde_urlencoded::from_str;
     use test_case::test_case;
 
-    use super::{append_queries, replace_path, replace_queries};
+    use super::{
+        append_queries, apply_request_action, apply_response_action, replace_path, replace_queries,
+        Actions, AppendAction, ReplaceAction,
+    };
 
     #[test_case("/", None => "/")]
     #[test_case("/", Some("") => "/")]
@@ -336,5 +342,104 @@ mod test {
         let mut uri = uri_parse.unwrap();
         assert!(replace_path(&mut uri, path).is_ok());
         uri.to_string()
+    }
+
+    #[tokio::test]
+    async fn test_apply_request_order() -> anyhow::Result<()> {
+        let mut req = Request::new(Body::empty());
+        let mut actions = Actions {
+            abort: false,
+            delay: None,
+            replace: None,
+            append: None,
+        };
+
+        req = apply_request_action(req, &actions).await?;
+        let mut queries = HashMap::new();
+        queries.insert("foo".to_string(), "foo".to_string());
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("foo"),
+        );
+
+        actions.replace = Some(ReplaceAction {
+            path: None,
+            method: None,
+            body: None,
+            code: None,
+            queries: Some(queries),
+            headers: Some(headers),
+        });
+
+        let mut append_headers = HeaderMap::new();
+        append_headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("bar"),
+        );
+
+        actions.append = Some(AppendAction {
+            queries: Some("foo=bar".to_string()),
+            headers: Some(append_headers),
+        });
+
+        req = apply_request_action(req, &actions).await?;
+        assert_eq!(Some("foo=foo&foo=bar"), req.uri().query());
+        let foos = req.headers().get_all("foo").into_iter().collect::<Vec<_>>();
+        assert_eq!(2, foos.len());
+        assert_eq!(HeaderValue::from_static("foo"), foos[0]);
+        assert_eq!(HeaderValue::from_static("bar"), foos[1]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_apply_response_order() -> anyhow::Result<()> {
+        let mut resp = Response::new(Body::empty());
+        let mut actions = Actions {
+            abort: false,
+            delay: None,
+            replace: None,
+            append: None,
+        };
+
+        resp = apply_response_action(resp, &actions).await?;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("foo"),
+        );
+
+        actions.replace = Some(ReplaceAction {
+            path: None,
+            method: None,
+            body: None,
+            code: None,
+            queries: None,
+            headers: Some(headers),
+        });
+
+        let mut append_headers = HeaderMap::new();
+        append_headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("bar"),
+        );
+
+        actions.append = Some(AppendAction {
+            queries: None,
+            headers: Some(append_headers),
+        });
+
+        resp = apply_response_action(resp, &actions).await?;
+        let foos = resp
+            .headers()
+            .get_all("foo")
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(2, foos.len());
+        assert_eq!(HeaderValue::from_static("foo"), foos[0]);
+        assert_eq!(HeaderValue::from_static("bar"), foos[1]);
+        Ok(())
     }
 }
