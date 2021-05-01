@@ -946,7 +946,6 @@ dependencies = [
  "json-patch",
  "libc",
  "paw",
- "regex",
  "serde",
  "serde_derive",
  "serde_json",
@@ -959,6 +958,7 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "tracing-subscriber",
+ "wildmatch",
 ]
 
 [[package]]
@@ -1100,6 +1100,12 @@ dependencies = [
  "log",
  "try-lock",
 ]
+
+[[package]]
+name = "wildmatch"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6c48bd20df7e4ced539c12f570f937c6b4884928a87fee70a479d72f031d4e0"
 
 [[package]]
 name = "winapi"

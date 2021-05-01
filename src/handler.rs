@@ -6,10 +6,10 @@ use futures::TryStreamExt;
 use http::header::HeaderMap;
 use http::{Method, Request, Response, StatusCode, Uri};
 use hyper::Body;
-use regex::Regex;
 use serde_json::Value;
 use tokio::time::sleep;
 use tracing::{debug, instrument};
+use wildmatch::WildMatch;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Target {
@@ -27,7 +27,7 @@ pub struct Rule {
 #[derive(Debug, Clone)]
 pub struct Selector {
     pub port: Option<u16>,
-    pub path: Option<Regex>,
+    pub path: Option<WildMatch>,
     pub method: Option<Method>,
     pub code: Option<StatusCode>,
     pub request_headers: Option<HeaderMap>,
@@ -69,7 +69,7 @@ pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -
         && selector
             .path
             .iter()
-            .all(|p| p.is_match(request.uri().path()))
+            .all(|p| p.matches(request.uri().path()))
         && selector.method.iter().all(|m| request.method() == m)
         && selector.request_headers.iter().all(|fields| {
             fields
@@ -87,7 +87,7 @@ pub fn select_response(
     selector: &Selector,
 ) -> bool {
     selector.port.iter().all(|p| port == *p)
-        && selector.path.iter().all(|p| p.is_match(uri.path()))
+        && selector.path.iter().all(|p| p.matches(uri.path()))
         && selector.method.iter().all(|m| method == m)
         && selector.code.iter().all(|code| response.status() == *code)
         && selector.request_headers.iter().all(|fields| {

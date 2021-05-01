@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
@@ -6,6 +7,7 @@ use anyhow::{anyhow, Error};
 use http::header::{HeaderMap, HeaderName};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use wildmatch::WildMatch;
 
 use crate::handler::{
     Actions, PatchAction, PatchBodyAction, ReplaceAction, Rule, Selector, Target,
@@ -157,7 +159,7 @@ impl TryFrom<RawSelector> for Selector {
     fn try_from(raw: RawSelector) -> Result<Self, Self::Error> {
         Ok(Self {
             port: raw.port.clone(),
-            path: raw.path.as_ref().map(|path| path.parse()).transpose()?,
+            path: raw.path.as_ref().map(|p| WildMatch::new(&p)),
             method: raw
                 .method
                 .as_ref()
