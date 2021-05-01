@@ -1,9 +1,11 @@
 use std::future::Future;
+use std::pin::Pin;
 
 use futures::TryFutureExt;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::task::{spawn, JoinHandle};
 
+#[derive(Debug)]
 pub struct ServeHandler {
     sender: Sender<()>,
     handler: JoinHandle<anyhow::Result<()>>,
@@ -28,3 +30,5 @@ impl ServeHandler {
         Ok(())
     }
 }
+
+pub type BoxedSendFuture<T, E> = Pin<Box<dyn 'static + Send + Future<Output = Result<T, E>>>>;

@@ -1,7 +1,5 @@
-use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -20,7 +18,7 @@ use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response, Target,
 };
 use crate::route::{clear_routes, set_all_routes};
-use crate::server_helper::ServeHandler;
+use crate::server_helper::{BoxedSendFuture, ServeHandler};
 
 pub mod config;
 pub mod connector;
@@ -28,6 +26,8 @@ pub mod listener;
 pub mod socketopt;
 
 pub use listener::TcpIncoming;
+
+#[derive(Debug)]
 pub struct HttpServer {
     config: Config,
     handler: Option<ServeHandler>,
@@ -52,7 +52,7 @@ impl HttpServer {
 
     pub async fn start(&mut self) -> Result<()> {
         if self.handler.is_some() {
-            return Err(anyhow!("there is already a server running"));
+            return Err(anyhow!("there is already a tproxy server running"));
         }
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
@@ -76,7 +76,7 @@ impl HttpServer {
 
     pub async fn stop(&mut self) -> Result<()> {
         match self.handler.take() {
-            None => return Err(anyhow!("there is no server running")),
+            None => return Err(anyhow!("there is no tproxy server running")),
             Some(handler) => handler.stop().await?,
         }
         let cfg = self.config.clone();
@@ -153,12 +153,10 @@ impl HttpService {
     }
 }
 
-type BoxedFuture<T, E> = Pin<Box<dyn 'static + Send + Future<Output = Result<T, E>>>>;
-
 impl Service<&TcpStream> for ServerImpl {
     type Response = HttpService;
     type Error = std::io::Error;
-    type Future = BoxedFuture<Self::Response, Self::Error>;
+    type Future = BoxedSendFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -175,7 +173,7 @@ impl Service<&TcpStream> for ServerImpl {
 impl Service<Request<Body>> for HttpService {
     type Response = Response<Body>;
     type Error = Error;
-    type Future = BoxedFuture<Self::Response, Self::Error>;
+    type Future = BoxedSendFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

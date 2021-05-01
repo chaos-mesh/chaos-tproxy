@@ -11,7 +11,8 @@ use tokio::net::{TcpSocket, TcpStream};
 use tracing::{instrument, trace};
 
 use super::config::Config;
-use super::{socketopt, BoxedFuture};
+use super::socketopt;
+use crate::server_helper::BoxedSendFuture;
 
 #[derive(Debug, Clone)]
 pub struct HttpConnector {
@@ -41,7 +42,7 @@ impl HttpConnector {
 impl Service<Uri> for HttpConnector {
     type Response = TcpStream;
     type Error = Error;
-    type Future = BoxedFuture<Self::Response, Self::Error>;
+    type Future = BoxedSendFuture<Self::Response, Self::Error>;
 
     #[instrument]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
