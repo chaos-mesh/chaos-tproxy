@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
@@ -40,6 +39,8 @@ pub enum RawTarget {
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RawSelector {
     pub port: Option<u16>,
+
+    // [wildcard matches](https://www.wikiwand.com/en/Matching_wildcards)
     pub path: Option<String>,
     pub method: Option<String>,
     pub code: Option<u16>,
