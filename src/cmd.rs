@@ -72,8 +72,8 @@ mod test {
                     actions: RawActions {
                         abort: None,
                         delay: Some(Duration::from_secs(1)),
-                        append: None,
                         replace: None,
+                        patch: None,
                     },
                 },
                 RawRule {
@@ -99,8 +99,8 @@ mod test {
                     actions: RawActions {
                         abort: Some(true),
                         delay: Some(Duration::from_secs(1)),
-                        append: None,
                         replace: None,
+                        patch: None,
                     },
                 },
             ]),

@@ -7,7 +7,9 @@ use http::header::{HeaderMap, HeaderName};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::handler::{Actions, AppendAction, ReplaceAction, Rule, Selector, Target};
+use crate::handler::{
+    Actions, PatchAction, PatchBodyAction, ReplaceAction, Rule, Selector, Target,
+};
 use crate::tproxy::config::Config;
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
@@ -50,13 +52,26 @@ pub struct RawActions {
     #[serde(with = "humantime_serde")]
     pub delay: Option<Duration>,
     pub replace: Option<RawReplaceAction>,
-    pub append: Option<RawAppendAction>,
+    pub patch: Option<RawPatchAction>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub struct RawAppendAction {
+pub struct RawPatchAction {
+    // patch body
+    pub body: Option<RawPatchBody>,
+
+    // append queries by key-value
     pub queries: Option<Vec<(String, String)>>,
+
+    // append headers by key-value
     pub headers: Option<Vec<(String, String)>>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+pub enum RawPatchBody {
+    // merge patch json as [rfc7396](https://tools.ietf.org/html/rfc7396)
+    JSON(String),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -183,16 +198,17 @@ impl TryFrom<RawActions> for Actions {
             abort: raw.abort.unwrap_or(false),
             delay: raw.delay,
             replace: raw.replace.map(TryInto::try_into).transpose()?,
-            append: raw.append.map(TryInto::try_into).transpose()?,
+            patch: raw.patch.map(TryInto::try_into).transpose()?,
         })
     }
 }
 
-impl TryFrom<RawAppendAction> for AppendAction {
+impl TryFrom<RawPatchAction> for PatchAction {
     type Error = Error;
 
-    fn try_from(raw: RawAppendAction) -> Result<Self, Self::Error> {
+    fn try_from(raw: RawPatchAction) -> Result<Self, Self::Error> {
         Ok(Self {
+            body: raw.body.map(TryInto::try_into).transpose()?,
             queries: raw.queries.map(serde_urlencoded::to_string).transpose()?,
             headers: raw
                 .headers
@@ -205,6 +221,16 @@ impl TryFrom<RawAppendAction> for AppendAction {
                 })
                 .transpose()?,
         })
+    }
+}
+
+impl TryFrom<RawPatchBody> for PatchBodyAction {
+    type Error = Error;
+
+    fn try_from(raw: RawPatchBody) -> Result<Self, Self::Error> {
+        match raw {
+            RawPatchBody::JSON(ref raw) => Ok(PatchBodyAction::JSON(serde_json::from_str(&raw)?)),
+        }
     }
 }
 
