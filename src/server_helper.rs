@@ -1,9 +1,16 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use async_trait::async_trait;
 use futures::TryFutureExt;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::task::{spawn, JoinHandle};
+
+#[async_trait]
+pub trait SuperServer {
+    async fn start(&mut self) -> anyhow::Result<()>;
+    async fn stop(&mut self) -> anyhow::Result<()>;
+}
 
 #[derive(Debug)]
 pub struct ServeHandler {

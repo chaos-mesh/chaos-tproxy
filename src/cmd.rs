@@ -16,16 +16,16 @@ pub mod config;
 pub struct Opt {
     /// Allows to apply config by stdin/stdout
     #[structopt(short, long)]
-    interactive: bool,
+    pub interactive: bool,
 
     // The number of occurrences of the `v/verbose` flag
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
-    verbose: u8,
+    pub verbose: u8,
 
     /// path of config file, required if interactive mode is disabled
     #[structopt(name = "FILE", parse(from_os_str))]
-    input: Option<PathBuf>,
+    pub input: Option<PathBuf>,
 }
 
 impl Opt {
@@ -50,11 +50,11 @@ impl Opt {
     }
 }
 
-pub async fn get_config_from_opt(opt: Opt) -> Result<Config> {
+pub async fn get_config_from_opt(opt: &Opt) -> Result<Config> {
     match opt.input {
         None => RawConfig::default(),
-        Some(path_buf) => {
-            let buffer = read_to_string(&path_buf).await?;
+        Some(ref path_buf) => {
+            let buffer = read_to_string(path_buf).await?;
             match path_buf.extension().and_then(|ext| ext.to_str()) {
                 Some("json") => serde_json::from_str(&buffer)?,
                 Some("yaml") => serde_yaml::from_str(&buffer)?,

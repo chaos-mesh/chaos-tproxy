@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Error, Result};
-use config::Config;
+use async_trait::async_trait;
 use connector::HttpConnector;
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
@@ -14,11 +14,12 @@ use tokio::net::TcpStream;
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, instrument};
 
+use self::config::Config;
 use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response, Target,
 };
 use crate::route::{clear_routes, set_all_routes};
-use crate::server_helper::{BoxedSendFuture, ServeHandler};
+use crate::server_helper::{BoxedSendFuture, ServeHandler, SuperServer};
 
 pub mod config;
 pub mod connector;
@@ -50,7 +51,16 @@ impl HttpServer {
         }
     }
 
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn reload(&mut self, config: Config) -> Result<()> {
+        self.stop().await?;
+        self.config = config;
+        self.start().await
+    }
+}
+
+#[async_trait]
+impl SuperServer for HttpServer {
+    async fn start(&mut self) -> Result<()> {
         if self.handler.is_some() {
             return Err(anyhow!("there is already a tproxy server running"));
         }
@@ -74,7 +84,7 @@ impl HttpServer {
         Ok(())
     }
 
-    pub async fn stop(&mut self) -> Result<()> {
+    async fn stop(&mut self) -> Result<()> {
         match self.handler.take() {
             None => return Err(anyhow!("there is no tproxy server running")),
             Some(handler) => handler.stop().await?,
@@ -84,12 +94,6 @@ impl HttpServer {
             clear_routes(&cfg).map_err(|err| anyhow!("fail to clear routes: {}", err.to_string()))
         })
         .await?
-    }
-
-    pub async fn reload(&mut self, config: Config) -> Result<()> {
-        self.stop().await?;
-        self.config = config;
-        self.start().await
     }
 }
 

@@ -12,6 +12,7 @@ use tokio::signal::unix::SignalKind;
 use crate::cmd::config::RawConfig;
 use crate::cmd::{get_config_from_opt, Opt};
 use crate::config_server::ConfigServer;
+use crate::server_helper::SuperServer;
 use crate::signal::SignalHandler;
 use crate::tproxy::HttpServer;
 
@@ -24,16 +25,19 @@ async fn main() -> anyhow::Result<()> {
         .try_init()
         .map_err(|err| anyhow!("{}", err))?;
 
-    let cfg = get_config_from_opt(opt).await?;
-    let mut tproxy_server = HttpServer::new(cfg);
-    tproxy_server.start().await?;
+    let cfg = get_config_from_opt(&opt).await?;
+    let tproxy_server = HttpServer::new(cfg);
 
-    let mut config_server = ConfigServer::watch(tproxy_server);
-    config_server.start().await?;
+    let mut server: Box<dyn SuperServer> = if opt.interactive {
+        Box::new(ConfigServer::watch(tproxy_server))
+    } else {
+        Box::new(tproxy_server)
+    };
+    server.start().await?;
 
     let mut signal_handler =
         SignalHandler::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
     signal_handler.wait().await?;
-    config_server.stop().await?;
+    server.stop().await?;
     Ok(())
 }

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::anyhow;
+use async_trait::async_trait;
 use futures::{pin_mut, select, FutureExt, TryStreamExt};
 use http::{Method, Request, Response, StatusCode};
 use hyper::service::Service;
@@ -15,7 +16,7 @@ use tracing::instrument;
 
 use self::accept::accept_std_stream;
 use self::stream::StdStream;
-use crate::server_helper::{BoxedSendFuture, ServeHandler};
+use crate::server_helper::{BoxedSendFuture, ServeHandler, SuperServer};
 use crate::tproxy::config::Config;
 use crate::{tproxy, RawConfig};
 
@@ -31,12 +32,15 @@ impl ConfigServer {
             handler: None,
         }
     }
+}
 
-    pub async fn start(&mut self) -> anyhow::Result<()> {
+#[async_trait]
+impl SuperServer for ConfigServer {
+    async fn start(&mut self) -> anyhow::Result<()> {
         if self.handler.is_some() {
             return Err(anyhow!("there is already a config server running"));
         }
-
+        self.tproxy_server.lock().await.start().await?;
         let server = Server::builder(accept_std_stream())
             .http1_keepalive(true)
             .serve(ServerImpl(self.tproxy_server.clone()));
@@ -53,7 +57,7 @@ impl ConfigServer {
         Ok(())
     }
 
-    pub async fn stop(&mut self) -> anyhow::Result<()> {
+    async fn stop(&mut self) -> anyhow::Result<()> {
         self.tproxy_server.lock().await.stop().await?;
         match self.handler.take() {
             None => return Err(anyhow!("there is no config server running")),
