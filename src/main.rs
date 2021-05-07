@@ -7,7 +7,6 @@ pub mod signal;
 pub mod tproxy;
 
 use anyhow::anyhow;
-use structopt::StructOpt;
 use tokio::signal::unix::SignalKind;
 
 use crate::cmd::config::RawConfig;
@@ -18,7 +17,7 @@ use crate::tproxy::HttpServer;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args_safe()?;
+    let opt = Opt::from_args_checked()?;
     tracing_subscriber::fmt()
         .with_max_level(opt.get_level_filter())
         .with_writer(std::io::stderr)

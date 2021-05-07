@@ -23,8 +23,8 @@ pub struct Opt {
     #[structopt(short, long, parse(from_occurrences))]
     verbose: u8,
 
-    /// path of config file
-    #[structopt(name = "FILE", parse(from_os_str), required_if("interactive", "false"))]
+    /// path of config file, required if interactive mode is disabled
+    #[structopt(name = "FILE", parse(from_os_str))]
     input: Option<PathBuf>,
 }
 
@@ -36,6 +36,17 @@ impl Opt {
             2 => LevelFilter::DEBUG,
             _ => LevelFilter::TRACE,
         }
+    }
+
+    pub fn from_args_checked() -> Result<Self> {
+        Self::from_args_safe()?.checked()
+    }
+
+    fn checked(self) -> Result<Self> {
+        if !self.interactive && self.input.is_none() {
+            return Err(anyhow!("config file is required when interactive mode is disabled, use `-h | --help` for more details"));
+        }
+        Ok(self)
     }
 }
 
