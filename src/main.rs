@@ -7,24 +7,25 @@ pub mod signal;
 pub mod tproxy;
 
 use anyhow::anyhow;
-use cmd::config::RawConfig;
-use cmd::get_config;
-use signal::SignalHandler;
+use structopt::StructOpt;
 use tokio::signal::unix::SignalKind;
-use tracing_subscriber::EnvFilter;
 
+use crate::cmd::config::RawConfig;
+use crate::cmd::{get_config_from_opt, Opt};
 use crate::config_server::ConfigServer;
+use crate::signal::SignalHandler;
 use crate::tproxy::HttpServer;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let opt = Opt::from_args_safe()?;
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_max_level(opt.get_level_filter())
         .with_writer(std::io::stderr)
         .try_init()
         .map_err(|err| anyhow!("{}", err))?;
 
-    let cfg = get_config().await?;
+    let cfg = get_config_from_opt(opt).await?;
     let mut tproxy_server = HttpServer::new(cfg);
     tproxy_server.start().await?;
 

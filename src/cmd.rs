@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use config::RawConfig;
 use structopt::StructOpt;
 use tokio::fs::read_to_string;
+use tracing_subscriber::filter::LevelFilter;
 
 use crate::tproxy::config::Config;
 
@@ -12,19 +13,34 @@ pub mod config;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
-struct Opt {
-    ///path of config file
-    #[structopt(parse(from_os_str))]
+pub struct Opt {
+    /// Allows to apply config by stdin/stdout
+    #[structopt(short, long)]
+    interactive: bool,
+
+    // The number of occurrences of the `v/verbose` flag
+    /// Verbose mode (-v, -vv, -vvv, etc.)
+    #[structopt(short, long, parse(from_occurrences))]
+    verbose: u8,
+
+    /// path of config file
+    #[structopt(name = "FILE", parse(from_os_str), required_if("interactive", "false"))]
     input: Option<PathBuf>,
 }
 
-pub async fn get_config() -> Result<Config> {
-    let opt: Opt = Opt::from_args();
-    get_config_from_opt(opt.input).await
+impl Opt {
+    pub fn get_level_filter(&self) -> LevelFilter {
+        match self.verbose {
+            0 => LevelFilter::ERROR,
+            1 => LevelFilter::INFO,
+            2 => LevelFilter::DEBUG,
+            _ => LevelFilter::TRACE,
+        }
+    }
 }
 
-pub async fn get_config_from_opt(path: Option<PathBuf>) -> Result<Config> {
-    match path {
+pub async fn get_config_from_opt(opt: Opt) -> Result<Config> {
+    match opt.input {
         None => RawConfig::default(),
         Some(path_buf) => {
             let buffer = read_to_string(&path_buf).await?;
