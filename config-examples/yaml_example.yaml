@@ -10,7 +10,7 @@ rules:
       method: GET
     actions:
       delay: 10s 
-      append:
+      patch:
         queries:
         - [foo, bar]
         - [foo, other]

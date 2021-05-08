@@ -1,26 +1,25 @@
-use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Error, Result};
-use config::Config;
+use async_trait::async_trait;
 use connector::HttpConnector;
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response, Server};
 use tokio::net::TcpStream;
-use tokio::sync::oneshot::{channel, Sender};
-use tokio::task::{spawn, spawn_blocking, JoinHandle};
-use tracing::{debug, error, info, instrument};
+use tokio::task::spawn_blocking;
+use tracing::{debug, error, instrument};
 
+use self::config::Config;
 use crate::handler::{
     apply_request_action, apply_response_action, select_request, select_response, Target,
 };
 use crate::route::{clear_routes, set_all_routes};
+use crate::server_helper::{BoxedSendFuture, ServeHandler, SuperServer};
 
 pub mod config;
 pub mod connector;
@@ -28,6 +27,8 @@ pub mod listener;
 pub mod socketopt;
 
 pub use listener::TcpIncoming;
+
+#[derive(Debug)]
 pub struct HttpServer {
     config: Config,
     handler: Option<ServeHandler>,
@@ -35,41 +36,11 @@ pub struct HttpServer {
 
 struct ServerImpl(Arc<Config>);
 
-struct ServeHandler {
-    sender: Sender<()>,
-    handler: JoinHandle<()>,
-}
-
 #[derive(Debug, Clone)]
 pub struct HttpService {
     target: SocketAddr,
     config: Arc<Config>,
     client: Arc<Client<HttpConnector>>,
-}
-
-impl ServeHandler {
-    fn serve(server: Server<TcpIncoming, ServerImpl>) -> Self {
-        let (sender, rx) = channel();
-        let handler = spawn(async move {
-            // Await the `server` receiving the signal...
-            if let Err(e) = server
-                .with_graceful_shutdown(async move {
-                    rx.await.ok();
-                })
-                .await
-            {
-                info!("server error: {}", e);
-            }
-        });
-        Self { sender, handler }
-    }
-
-    async fn stop(self) -> Result<()> {
-        let ServeHandler { sender, handler } = self;
-        let _ = sender.send(());
-        let _ = handler.await?;
-        Ok(())
-    }
 }
 
 impl HttpServer {
@@ -80,9 +51,18 @@ impl HttpServer {
         }
     }
 
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn reload(&mut self, config: Config) -> Result<()> {
+        self.stop().await?;
+        self.config = config;
+        self.start().await
+    }
+}
+
+#[async_trait]
+impl SuperServer for HttpServer {
+    async fn start(&mut self) -> Result<()> {
         if self.handler.is_some() {
-            return Err(anyhow!("there is already a server running"));
+            return Err(anyhow!("there is already a tproxy server running"));
         }
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
@@ -96,13 +76,17 @@ impl HttpServer {
         .await??;
 
         let server = Server::builder(incoming).serve(ServerImpl(Arc::new(self.config.clone())));
-        self.handler = Some(ServeHandler::serve(server));
+        self.handler = Some(ServeHandler::serve(move |rx| {
+            server.with_graceful_shutdown(async move {
+                rx.await.ok();
+            })
+        }));
         Ok(())
     }
 
-    pub async fn stop(&mut self) -> Result<()> {
+    async fn stop(&mut self) -> Result<()> {
         match self.handler.take() {
-            None => return Err(anyhow!("there is no server running")),
+            None => return Err(anyhow!("there is no tproxy server running")),
             Some(handler) => handler.stop().await?,
         }
         let cfg = self.config.clone();
@@ -110,12 +94,6 @@ impl HttpServer {
             clear_routes(&cfg).map_err(|err| anyhow!("fail to clear routes: {}", err.to_string()))
         })
         .await?
-    }
-
-    pub async fn reload(&mut self, config: Config) -> Result<()> {
-        self.stop().await?;
-        self.config = config;
-        self.start().await
     }
 }
 
@@ -179,12 +157,10 @@ impl HttpService {
     }
 }
 
-type BoxedFuture<T, E> = Pin<Box<dyn 'static + Send + Future<Output = Result<T, E>>>>;
-
 impl Service<&TcpStream> for ServerImpl {
     type Response = HttpService;
     type Error = std::io::Error;
-    type Future = BoxedFuture<Self::Response, Self::Error>;
+    type Future = BoxedSendFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -201,7 +177,7 @@ impl Service<&TcpStream> for ServerImpl {
 impl Service<Request<Body>> for HttpService {
     type Response = Response<Body>;
     type Error = Error;
-    type Future = BoxedFuture<Self::Response, Self::Error>;
+    type Future = BoxedSendFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

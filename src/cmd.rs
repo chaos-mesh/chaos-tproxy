@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use config::RawConfig;
 use structopt::StructOpt;
 use tokio::fs::read_to_string;
+use tracing_subscriber::filter::LevelFilter;
 
 use crate::tproxy::config::Config;
 
@@ -12,22 +13,48 @@ pub mod config;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
-struct Opt {
-    ///path of config file
-    #[structopt(parse(from_os_str))]
-    input: Option<PathBuf>,
+pub struct Opt {
+    /// Allows to apply config by stdin/stdout
+    #[structopt(short, long)]
+    pub interactive: bool,
+
+    // The number of occurrences of the `v/verbose` flag
+    /// Verbose mode (-v, -vv, -vvv, etc.)
+    #[structopt(short, long, parse(from_occurrences))]
+    pub verbose: u8,
+
+    /// path of config file, required if interactive mode is disabled
+    #[structopt(name = "FILE", parse(from_os_str))]
+    pub input: Option<PathBuf>,
 }
 
-pub async fn get_config() -> Result<Config> {
-    let opt: Opt = Opt::from_args();
-    get_config_from_opt(opt.input).await
+impl Opt {
+    pub fn get_level_filter(&self) -> LevelFilter {
+        match self.verbose {
+            0 => LevelFilter::ERROR,
+            1 => LevelFilter::INFO,
+            2 => LevelFilter::DEBUG,
+            _ => LevelFilter::TRACE,
+        }
+    }
+
+    pub fn from_args_checked() -> Result<Self> {
+        Self::from_args_safe()?.checked()
+    }
+
+    fn checked(self) -> Result<Self> {
+        if !self.interactive && self.input.is_none() {
+            return Err(anyhow!("config file is required when interactive mode is disabled, use `-h | --help` for more details"));
+        }
+        Ok(self)
+    }
 }
 
-pub async fn get_config_from_opt(path: Option<PathBuf>) -> Result<Config> {
-    match path {
+pub async fn get_config_from_opt(opt: &Opt) -> Result<Config> {
+    match opt.input {
         None => RawConfig::default(),
-        Some(path_buf) => {
-            let buffer = read_to_string(&path_buf).await?;
+        Some(ref path_buf) => {
+            let buffer = read_to_string(path_buf).await?;
             match path_buf.extension().and_then(|ext| ext.to_str()) {
                 Some("json") => serde_json::from_str(&buffer)?,
                 Some("yaml") => serde_yaml::from_str(&buffer)?,
@@ -72,8 +99,8 @@ mod test {
                     actions: RawActions {
                         abort: None,
                         delay: Some(Duration::from_secs(1)),
-                        append: None,
                         replace: None,
+                        patch: None,
                     },
                 },
                 RawRule {
@@ -99,8 +126,8 @@ mod test {
                     actions: RawActions {
                         abort: Some(true),
                         delay: Some(Duration::from_secs(1)),
-                        append: None,
                         replace: None,
+                        patch: None,
                     },
                 },
             ]),

@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::anyhow;
+use futures::TryStreamExt;
 use http::header::HeaderMap;
-use http::uri::PathAndQuery;
 use http::{Method, Request, Response, StatusCode, Uri};
 use hyper::Body;
+use serde_json::Value;
 use tokio::time::sleep;
 use tracing::{debug, instrument};
+use wildmatch::WildMatch;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Target {
@@ -15,17 +17,17 @@ pub enum Target {
     Response,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct Rule {
     pub target: Target,
     pub selector: Selector,
     pub actions: Actions,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct Selector {
     pub port: Option<u16>,
-    pub path: Option<PathAndQuery>,
+    pub path: Option<WildMatch>,
     pub method: Option<Method>,
     pub code: Option<StatusCode>,
     pub request_headers: Option<HeaderMap>,
@@ -36,12 +38,13 @@ pub struct Selector {
 pub struct Actions {
     pub abort: bool,
     pub delay: Option<Duration>,
-    pub append: Option<AppendAction>,
     pub replace: Option<ReplaceAction>,
+    pub patch: Option<PatchAction>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct AppendAction {
+pub struct PatchAction {
+    pub body: Option<PatchBodyAction>,
     pub queries: Option<String>,
     pub headers: Option<HeaderMap>,
 }
@@ -56,12 +59,17 @@ pub struct ReplaceAction {
     pub headers: Option<HeaderMap>,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum PatchBodyAction {
+    JSON(Value),
+}
+
 pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -> bool {
     selector.port.iter().all(|p| port == *p)
         && selector
             .path
             .iter()
-            .all(|p| request.uri().path().starts_with(p.path()))
+            .all(|p| p.matches(request.uri().path()))
         && selector.method.iter().all(|m| request.method() == m)
         && selector.request_headers.iter().all(|fields| {
             fields
@@ -79,10 +87,7 @@ pub fn select_response(
     selector: &Selector,
 ) -> bool {
     selector.port.iter().all(|p| port == *p)
-        && selector
-            .path
-            .iter()
-            .all(|p| uri.path().starts_with(p.path()))
+        && selector.path.iter().all(|p| p.matches(uri.path()))
         && selector.method.iter().all(|m| method == m)
         && selector.code.iter().all(|code| response.status() == *code)
         && selector.request_headers.iter().all(|fields| {
@@ -101,6 +106,17 @@ pub fn select_response(
         })
 }
 
+async fn read_value(body: &mut Body) -> anyhow::Result<Value> {
+    let tmp = std::mem::take(body);
+    let data: Vec<u8> = tmp
+        .try_fold(vec![], |mut data, seg| {
+            data.extend(seg);
+            futures::future::ok(data)
+        })
+        .await?;
+    Ok(serde_json::from_slice(&data)?)
+}
+
 #[instrument]
 pub async fn apply_request_action(
     mut request: Request<Body>,
@@ -110,13 +126,8 @@ pub async fn apply_request_action(
         return Err(anyhow!("Abort applied"));
     }
 
-    if let Some(append) = &actions.append {
-        append_queries(request.uri_mut(), append.queries.as_ref())?;
-        if let Some(hdrs) = &append.headers {
-            for (key, value) in hdrs {
-                request.headers_mut().append(key, value.clone());
-            }
-        }
+    if let Some(delay) = actions.delay {
+        sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
@@ -139,8 +150,18 @@ pub async fn apply_request_action(
         }
     }
 
-    if let Some(delay) = actions.delay {
-        sleep(delay).await
+    if let Some(patch) = &actions.patch {
+        append_queries(request.uri_mut(), patch.queries.as_ref())?;
+        if let Some(hdrs) = &patch.headers {
+            for (key, value) in hdrs {
+                request.headers_mut().append(key, value.clone());
+            }
+        }
+        if let Some(PatchBodyAction::JSON(value)) = &patch.body {
+            let mut data = read_value(&mut request.body_mut()).await?;
+            json_patch::merge(&mut data, value);
+            *request.body_mut() = serde_json::to_vec(&data)?.into();
+        }
     }
 
     debug!("action applied: {:?}", request);
@@ -222,12 +243,8 @@ pub async fn apply_response_action(
         return Err(anyhow!("Abort applied"));
     }
 
-    if let Some(append) = &actions.append {
-        if let Some(hdrs) = &append.headers {
-            for (key, value) in hdrs {
-                response.headers_mut().append(key, value.clone());
-            }
-        }
+    if let Some(delay) = actions.delay {
+        sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
@@ -246,8 +263,17 @@ pub async fn apply_response_action(
         }
     }
 
-    if let Some(delay) = actions.delay {
-        sleep(delay).await
+    if let Some(patch) = &actions.patch {
+        if let Some(hdrs) = &patch.headers {
+            for (key, value) in hdrs {
+                response.headers_mut().append(key, value.clone());
+            }
+        }
+        if let Some(PatchBodyAction::JSON(value)) = &patch.body {
+            let mut data = read_value(&mut response.body_mut()).await?;
+            json_patch::merge(&mut data, value);
+            *response.body_mut() = serde_json::to_vec(&data)?.into();
+        }
     }
 
     debug!("action applied: {:?}", response);
@@ -258,10 +284,16 @@ pub async fn apply_response_action(
 mod test {
     use std::collections::HashMap;
 
+    use http::header::{HeaderMap, HeaderName, HeaderValue};
+    use http::{Request, Response};
+    use hyper::Body;
     use serde_urlencoded::from_str;
     use test_case::test_case;
 
-    use super::{append_queries, replace_path, replace_queries};
+    use super::{
+        append_queries, apply_request_action, apply_response_action, replace_path, replace_queries,
+        Actions, PatchAction, ReplaceAction,
+    };
 
     #[test_case("/", None => "/")]
     #[test_case("/", Some("") => "/")]
@@ -336,5 +368,106 @@ mod test {
         let mut uri = uri_parse.unwrap();
         assert!(replace_path(&mut uri, path).is_ok());
         uri.to_string()
+    }
+
+    #[tokio::test]
+    async fn test_apply_request_order() -> anyhow::Result<()> {
+        let mut req = Request::new(Body::empty());
+        let mut actions = Actions {
+            abort: false,
+            delay: None,
+            replace: None,
+            patch: None,
+        };
+
+        req = apply_request_action(req, &actions).await?;
+        let mut queries = HashMap::new();
+        queries.insert("foo".to_string(), "foo".to_string());
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("foo"),
+        );
+
+        actions.replace = Some(ReplaceAction {
+            path: None,
+            method: None,
+            body: None,
+            code: None,
+            queries: Some(queries),
+            headers: Some(headers),
+        });
+
+        let mut append_headers = HeaderMap::new();
+        append_headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("bar"),
+        );
+
+        actions.patch = Some(PatchAction {
+            queries: Some("foo=bar".to_string()),
+            headers: Some(append_headers),
+            body: None,
+        });
+
+        req = apply_request_action(req, &actions).await?;
+        assert_eq!(Some("foo=foo&foo=bar"), req.uri().query());
+        let foos = req.headers().get_all("foo").into_iter().collect::<Vec<_>>();
+        assert_eq!(2, foos.len());
+        assert_eq!(HeaderValue::from_static("foo"), foos[0]);
+        assert_eq!(HeaderValue::from_static("bar"), foos[1]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_apply_response_order() -> anyhow::Result<()> {
+        let mut resp = Response::new(Body::empty());
+        let mut actions = Actions {
+            abort: false,
+            delay: None,
+            replace: None,
+            patch: None,
+        };
+
+        resp = apply_response_action(resp, &actions).await?;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("foo"),
+        );
+
+        actions.replace = Some(ReplaceAction {
+            path: None,
+            method: None,
+            body: None,
+            code: None,
+            queries: None,
+            headers: Some(headers),
+        });
+
+        let mut append_headers = HeaderMap::new();
+        append_headers.insert(
+            HeaderName::from_static("foo"),
+            HeaderValue::from_static("bar"),
+        );
+
+        actions.patch = Some(PatchAction {
+            queries: None,
+            headers: Some(append_headers),
+            body: None,
+        });
+
+        resp = apply_response_action(resp, &actions).await?;
+        let foos = resp
+            .headers()
+            .get_all("foo")
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(2, foos.len());
+        assert_eq!(HeaderValue::from_static("foo"), foos[0]);
+        assert_eq!(HeaderValue::from_static("bar"), foos[1]);
+        Ok(())
     }
 }
