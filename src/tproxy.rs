@@ -110,11 +110,18 @@ impl HttpService {
     }
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        if let Some(rule) = self.config.rules.iter().find(|rule| {
-            matches!(rule.target, Target::Request)
-                && select_request(self.target.port(), &request, &rule.selector)
-        }) {
-            debug!("request matched");
+        let request_rules: Vec<_> = self
+            .config
+            .rules
+            .iter()
+            .filter(|rule| {
+                matches!(rule.target, Target::Request)
+                    && select_request(self.target.port(), &request, &rule.selector)
+            })
+            .collect();
+
+        for rule in request_rules {
+            debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
         }
 
@@ -139,17 +146,24 @@ impl HttpService {
             }
         };
 
-        if let Some(rule) = self.config.rules.iter().find(|rule| {
-            matches!(rule.target, Target::Response)
-                && select_response(
-                    self.target.port(),
-                    &uri,
-                    &method,
-                    &headers,
-                    &response,
-                    &rule.selector,
-                )
-        }) {
+        let response_rules: Vec<_> = self
+            .config
+            .rules
+            .iter()
+            .filter(|rule| {
+                matches!(rule.target, Target::Response)
+                    && select_response(
+                        self.target.port(),
+                        &uri,
+                        &method,
+                        &headers,
+                        &response,
+                        &rule.selector,
+                    )
+            })
+            .collect();
+
+        for rule in response_rules {
             debug!("response matched");
             response = apply_response_action(response, &rule.actions).await?;
         }
