@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::task::{spawn, JoinHandle};
+use std::task::{Context, Poll};
 
 #[async_trait]
 pub trait SuperServer {
@@ -19,7 +20,7 @@ pub struct ServeHandler {
 }
 
 impl ServeHandler {
-    pub fn serve<F, R, E>(with_signal: F) -> Self
+    pub async fn serve<F, R, E>(with_signal: F) -> Self
     where
         F: FnOnce(Receiver<()>) -> R,
         R: 'static + Send + Future<Output = Result<(), E>>,

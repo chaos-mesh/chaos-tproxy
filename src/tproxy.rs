@@ -10,7 +10,7 @@ use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response, Server};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, TcpSocket};
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, instrument};
 
@@ -27,10 +27,20 @@ pub mod listener;
 pub mod socketopt;
 
 pub use listener::TcpIncoming;
+use hyper::server::accept::Accept;
+use futures::{Future, TryFuture};
+use std::pin::Pin;
+use hyper::server::conn::{Http, Parts};
+use hyper::body::Bytes;
+use tokio::io::{AsyncWriteExt, AsyncWrite};
+use tokio::sync::oneshot::error::RecvError;
+use tokio::sync::oneshot::Receiver;
+use std::intrinsics::floorf32;
 
 #[derive(Debug)]
 pub struct HttpServer {
     config: Config,
+    rx: Option<Receiver<()>>,
     handler: Option<ServeHandler>,
 }
 
@@ -47,7 +57,8 @@ impl HttpServer {
     pub fn new(config: Config) -> Self {
         Self {
             config,
-            handler: None,
+            rx: None,
+            handler: None
         }
     }
 
@@ -58,6 +69,73 @@ impl HttpServer {
     }
 }
 
+impl Future for HttpServer {
+    type Output = Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.handler.is_some() {
+            return Poll::Ready(Err(anyhow!("there is already a tproxy server running")));
+        }
+
+        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
+        let incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
+        self.config.listen_port = incoming.local_addr().port();
+        let cfg = self.config.clone();
+        spawn_blocking(move || {
+            set_all_routes(&cfg).map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
+        }).await??;
+        let mut service = ServerImpl(Arc::new(self.config.clone()));
+
+        loop {
+            match service.poll_ready() {
+                Poll::Ready(_) => {},
+                Poll::Pending => continue,
+            };
+
+            if let Poll::Ready(Some(item)) = incoming.poll_accept(cx) {
+                let mut io = item.map_err(Err(anyhow!("new accept")))?;
+                let mut connection = service.call(&io).await?;
+                if self.rx.unwrap().poll(cx).is_ready() {
+                    io.shutdown().await?;
+                    return Poll::Ready(Ok(()));
+                }
+                tokio::spawn( async move {
+                    loop {
+                        let (io_, connection_) = {
+                        let (r, o) = Http::new()
+                            .error_return(true)
+                            .serve_connection_with_error_return(io,connection)
+                            .await;
+                        match r {
+                            Ok(o) => {
+                                (o.io, o.service)
+                            }
+                            Err(e) => {
+                                match o {
+                                    None => { return ;}
+                                    Some(p) => {
+                                        let socket = TcpSocket::new_v4()?;
+                                        let cf = socket.connect(p.io.peer_addr().unwrap())?;
+                                        cf.write_all(p.read_buf.as_ref()).await;
+                                        tokio::io::copy_bidirectional(p.io.into(), cf).await.map_err(
+                                            |e| return
+                                        );
+                                        return ;
+                                    }
+                                }
+                            }
+                        }
+                    };
+                        io = io_;
+                        connection = connection_;
+                    }
+                });
+            };
+        }
+    }
+}
+
+
 #[async_trait]
 impl SuperServer for HttpServer {
     async fn start(&mut self) -> Result<()> {
@@ -65,21 +143,9 @@ impl SuperServer for HttpServer {
             return Err(anyhow!("there is already a tproxy server running"));
         }
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
-        let incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
-        self.config.listen_port = incoming.local_addr().port();
-
-        let cfg = self.config.clone();
-        spawn_blocking(move || {
-            set_all_routes(&cfg).map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
-        })
-        .await??;
-
-        let server = Server::builder(incoming).serve(ServerImpl(Arc::new(self.config.clone())));
         self.handler = Some(ServeHandler::serve(move |rx| {
-            server.with_graceful_shutdown(async move {
-                rx.await.ok();
-            })
+            self.rx = Some(rx);
+            self.await;
         }));
         Ok(())
     }
