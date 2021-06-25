@@ -1,8 +1,8 @@
 use std::matches;
+use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::mem;
 
 use anyhow::{anyhow, Error, Result};
 use async_trait::async_trait;
@@ -33,7 +33,7 @@ use hyper::server::accept::Accept;
 use hyper::server::conn::{Http, Parts};
 pub use listener::TcpIncoming;
 use std::pin::Pin;
-use tokio::io::{AsyncWrite, AsyncWriteExt, AsyncReadExt};
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::oneshot::error::{RecvError, TryRecvError};
 use tokio::sync::oneshot::Receiver;
 
@@ -68,23 +68,25 @@ impl HttpServer {
 }
 
 impl HttpServer {
-    pub async fn serve_with_signal(mut incoming:TcpIncoming,mut service:ServerImpl, mut rx: Receiver<()>) -> anyhow::Result<()> {
+    pub async fn serve_with_signal(
+        mut incoming: TcpIncoming,
+        mut service: ServerImpl,
+        mut rx: Receiver<()>,
+    ) -> anyhow::Result<()> {
+        tokio::select! {
+            _ = async {
         loop {
-            {
-                if let Some(item) =(&mut incoming).await {
-                    let mut io = item.map_err(|e| anyhow!("new accept error: {}", e.to_string()))?;
-                    let mut connection = service.call(&io).await?;
+            if let Some(item) = (&mut incoming).await {
+                let mut io = item.map_err(|e| anyhow!("new accept error: {}", e.to_string()))?;
+                let mut connection = service.call(&io).await?;
+                debug!("0");
+                let cfg = service.0.clone();
+                tokio::spawn(async move {
                     loop {
-                        match rx.try_recv() {
-                            Ok(_) => { return Ok(()); }
-                            Err(TryRecvError::Empty) => {}
-                            Err(TryRecvError::Closed) => {
-                                return Ok(());
-                            }
-                        }
                         let (r, o) = Http::new()
                             .error_return(true)
-                            .serve_connection_with_error_return(io, connection).await;
+                            .serve_connection_with_error_return(io, connection)
+                            .await;
                         match r {
                             Ok(o) => {
                                 io = o.io;
@@ -92,27 +94,36 @@ impl HttpServer {
                             }
                             Err(e) => match o {
                                 None => {
-                                    return Err(anyhow!(e));
+                                    return;
                                 }
                                 Some(mut p) => {
-                                    let socket = TcpSocket::new_v4()?;
-                                    let mut cf = socket.connect(p.io.peer_addr().unwrap()).await?;
-                                    cf.write_all(p.read_buf.as_ref()).await;
-                                    tokio::io::copy_bidirectional(&mut p.io, &mut cf)
-                                        .await
-                                        .map_err(|e| return);
-                                    return Err(anyhow!(e));
+                                    if e.is_parse() {
+                                        let socket = TcpSocket::new_v4().unwrap();
+                                        socketopt::set_ip_transparent(&socket).unwrap();
+                                        socketopt::set_mark(&socket, cfg.ignore_mark).unwrap();
+                                        socket.set_reuseaddr(true).unwrap();
+                                        let mut cf = socket.connect(p.io.local_addr().unwrap()).await.unwrap();
+                                        cf.write_all(p.read_buf.as_ref()).await;
+                                        let co =
+                                            tokio::io::copy_bidirectional(&mut p.io, &mut cf).await;
+                                        return;
+                                    }
+                                    return;
                                 }
                             },
                         }
-                    };
-                };
-            }
-                }
+                    }
+                });
             }
         }
-
-
+                Ok::<_,  anyhow::Error>(())        }=> {Ok(())}
+            _ = rx => {
+                println!("terminating accept loop");
+                Ok(())
+            }
+            }
+    }
+}
 
 #[async_trait]
 impl SuperServer for HttpServer {
@@ -132,14 +143,13 @@ impl SuperServer for HttpServer {
         spawn_blocking(move || {
             set_all_routes(&cfg).map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
         })
-            .await??;
+        .await??;
 
         let mut service = ServerImpl(Arc::new(self.config.clone()));
 
         self.handler = Some(ServeHandler::serve(move |rx| {
             HttpServer::serve_with_signal(incoming, service, rx)
-        })
-        );
+        }));
         Ok(())
     }
 
@@ -178,7 +188,6 @@ impl HttpService {
                     && select_request(self.target.port(), &request, &rule.selector)
             })
             .collect();
-
         for rule in request_rules {
             debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
@@ -194,7 +203,7 @@ impl HttpService {
         }
         parts.authority = Some(self.target.to_string().parse()?);
         *request.uri_mut() = Uri::from_parts(parts)?;
-
+        debug!("7");
         let mut response = match self.client.request(request).await {
             Ok(resp) => resp,
             Err(err) => {
@@ -204,7 +213,6 @@ impl HttpService {
                     .body(Body::empty())?
             }
         };
-
         let response_rules: Vec<_> = self
             .config
             .rules
