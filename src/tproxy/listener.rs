@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::task::{self, Poll};
+use std::task::{self, Poll, Context};
 use std::time::Duration;
 use std::{fmt, io, matches};
 
@@ -136,6 +136,14 @@ impl Accept for TcpIncoming {
         let stream = futures::ready!(self.poll_next(cx))?;
         trace!("accept tcp stream to {}", stream.local_addr().unwrap());
         Poll::Ready(Some(Ok(stream)))
+    }
+}
+
+impl Future for TcpIncoming {
+    type Output = Option<io::Result<TcpStream>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.as_mut().poll_accept(cx)
     }
 }
 

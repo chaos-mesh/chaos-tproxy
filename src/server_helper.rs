@@ -20,7 +20,7 @@ pub struct ServeHandler {
 }
 
 impl ServeHandler {
-    pub async fn serve<F, R, E>(with_signal: F) -> Self
+    pub fn serve<F, R, E>(with_signal: F) -> Self
     where
         F: FnOnce(Receiver<()>) -> R,
         R: 'static + Send + Future<Output = Result<(), E>>,
