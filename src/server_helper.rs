@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::task::{spawn, JoinHandle};
-use std::task::{Context, Poll};
 
 #[async_trait]
 pub trait SuperServer {

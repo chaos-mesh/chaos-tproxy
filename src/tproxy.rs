@@ -1,5 +1,4 @@
 use std::matches;
-use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -10,7 +9,7 @@ use connector::HttpConnector;
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Response, Server};
+use hyper::{Body, Client, Request, Response};
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, instrument};
@@ -27,14 +26,9 @@ pub mod connector;
 pub mod listener;
 pub mod socketopt;
 
-use futures::{pin_mut, select, Future, FutureExt, TryFuture};
-use hyper::body::Bytes;
-use hyper::server::accept::Accept;
-use hyper::server::conn::{Http, Parts};
+use hyper::server::conn::Http;
 pub use listener::TcpIncoming;
-use std::pin::Pin;
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::oneshot::error::{RecvError, TryRecvError};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot::Receiver;
 
 #[derive(Debug)]
@@ -71,44 +65,48 @@ impl HttpServer {
     pub async fn serve_with_signal(
         mut incoming: TcpIncoming,
         mut service: ServerImpl,
-        mut rx: Receiver<()>,
+        rx: Receiver<()>,
     ) -> anyhow::Result<()> {
         tokio::select! {
             _ = async {
-        loop {
-            if let Some(item) = (&mut incoming).await {
-                let mut io = item.map_err(|e| anyhow!("new accept error: {}", e.to_string()))?;
-                let mut connection = service.call(&io).await?;
-                debug!("0");
-                let cfg = service.0.clone();
-                tokio::spawn(async move {
-                    loop {
-                        let (r, o) = Http::new()
+            loop {
+                if let Some(item) = (&mut incoming).await {
+                    let mut io = item.map_err(|e| anyhow!("new accept error: {}", e.to_string()))?;
+                    let mut connection = service.call(&io).await?;
+                    let cfg = service.0.clone();
+                    tokio::spawn(async move {
+                        loop {
+                            let (r, o) = Http::new()
                             .error_return(true)
-                            .serve_connection_with_error_return(io, connection)
+                            .serve_connection_with_parts(io, connection)
                             .await;
-                        match r {
-                            Ok(o) => {
-                                io = o.io;
-                                connection = o.service;
-                            }
-                            Err(e) => match o {
-                                None => {
-                                    return;
-                                }
-                                Some(mut p) => {
-                                    if e.is_parse() {
-                                        let socket = TcpSocket::new_v4().unwrap();
-                                        socketopt::set_ip_transparent(&socket).unwrap();
-                                        socketopt::set_mark(&socket, cfg.ignore_mark).unwrap();
-                                        socket.set_reuseaddr(true).unwrap();
-                                        let mut cf = socket.connect(p.io.local_addr().unwrap()).await.unwrap();
-                                        cf.write_all(p.read_buf.as_ref()).await;
-                                        let co =
-                                            tokio::io::copy_bidirectional(&mut p.io, &mut cf).await;
-                                        return;
+                            match r {
+                                Ok(_) => {
+                                    match o {
+                                        Some(p) => {
+                                            io = p.io;
+                                            connection = p.service;
+                                        },
+                                        None => {return;}
                                     }
-                                    return;
+                                }
+                                Err(e) =>
+                                    match o {
+                                        None => {
+                                            return;
+                                        }
+                                        Some(mut p) => {
+                                            if e.is_parse() {
+                                                let socket = TcpSocket::new_v4().unwrap();
+                                                socketopt::set_ip_transparent(&socket).unwrap();
+                                                socketopt::set_mark(&socket, cfg.ignore_mark).unwrap();
+                                                socket.set_reuseaddr(true).unwrap();
+                                                let mut cf = socket.connect(p.io.local_addr().unwrap()).await.unwrap();
+                                                cf.write_all(p.read_buf.as_ref()).await.unwrap();
+                                                tokio::io::copy_bidirectional(&mut p.io, &mut cf).await.unwrap();
+                                                return;
+                                            }
+                                            return;
                                 }
                             },
                         }
@@ -116,12 +114,13 @@ impl HttpServer {
                 });
             }
         }
-                Ok::<_,  anyhow::Error>(())        }=> {Ok(())}
+        Ok::<_,  anyhow::Error>(())
+        } => {Ok(())}
             _ = rx => {
                 println!("terminating accept loop");
                 Ok(())
             }
-            }
+        }
     }
 }
 
@@ -137,7 +136,7 @@ impl SuperServer for HttpServer {
         }
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
-        let mut incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
+        let incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
         self.config.listen_port = incoming.local_addr().port();
         let cfg = self.config.clone();
         spawn_blocking(move || {
@@ -145,7 +144,7 @@ impl SuperServer for HttpServer {
         })
         .await??;
 
-        let mut service = ServerImpl(Arc::new(self.config.clone()));
+        let service = ServerImpl(Arc::new(self.config.clone()));
 
         self.handler = Some(ServeHandler::serve(move |rx| {
             HttpServer::serve_with_signal(incoming, service, rx)

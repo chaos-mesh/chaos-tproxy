@@ -15,7 +15,6 @@ use crate::config_server::ConfigServer;
 use crate::server_helper::SuperServer;
 use crate::signal::SignalHandler;
 use crate::tproxy::HttpServer;
-use tokio::sync::oneshot::Receiver;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

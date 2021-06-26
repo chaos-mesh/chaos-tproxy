@@ -330,7 +330,7 @@ dependencies = [
 [[package]]
 name = "hyper"
 version = "0.14.9"
-source = "git+https://github.com/Andrewmatilde/hyper.git#a3333806bc5ea50c876c5f8788bb5640ed4594bf"
+source = "git+https://github.com/Andrewmatilde/hyper.git#b9b02c34ccab4e293dde418fee09a18cc91347a2"
 dependencies = [
  "bytes",
  "futures-channel",
