@@ -202,7 +202,6 @@ impl HttpService {
         }
         parts.authority = Some(self.target.to_string().parse()?);
         *request.uri_mut() = Uri::from_parts(parts)?;
-        debug!("7");
         let mut response = match self.client.request(request).await {
             Ok(resp) => resp,
             Err(err) => {
