@@ -2,25 +2,21 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 
-use anyhow::{anyhow, Error};
+use anyhow::Error;
 use http::header::{HeaderMap, HeaderName};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::handler::{
-    Actions, PatchAction, PatchBodyAction, ReplaceAction, Rule, Selector, Target,
-};
-use crate::tproxy::config::Config;
+use crate::proxy::http::config::Config;
+use crate::handler::http::{rule::{Rule, Target}, selector::{Selector},action::{Actions,PatchAction}};
+use crate::handler::http::action::{PatchBodyAction, ReplaceAction};
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
-pub struct RawConfig {
-    pub listen_port: Option<u16>,
-    pub proxy_ports: Vec<u16>,
-    pub proxy_mark: Option<i32>,
-    pub ignore_mark: Option<i32>,
-    pub route_table: Option<u8>,
-    pub rules: Option<Vec<RawRule>>,
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub struct RawConfig{
+    pub proxy_ports: Option<String>,
+    pub listen_port: u16,
+    pub rules : Vec<RawRule>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -91,41 +87,10 @@ impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
-        let proxy_mark = raw.proxy_mark.unwrap_or(1);
-        let ignore_mark = raw.ignore_mark.unwrap_or(255);
-        let route_table = raw.route_table.unwrap_or(100);
-
-        if proxy_mark == ignore_mark {
-            return Err(anyhow!(
-                "proxy mark cannot be the same with ignore mark: {}={}",
-                proxy_mark,
-                ignore_mark
-            ));
-        }
-
-        if route_table == 0 || route_table > 252 {
-            return Err(anyhow!("invalid route table: table({})", route_table));
-        }
-
         Ok(Self {
-            listen_port: raw.listen_port.unwrap_or(0),
-            proxy_ports: if raw.proxy_ports.is_empty() {
-                None
-            } else {
-                Some(
-                    raw.proxy_ports
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )
-            },
-            proxy_mark,
-            ignore_mark,
-            route_table,
+            proxy_port: raw.listen_port,
             rules: raw
                 .rules
-                .unwrap_or_default()
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, Self::Error>>()?,
