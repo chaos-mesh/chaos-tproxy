@@ -6,9 +6,8 @@ use structopt::StructOpt;
 use tokio::fs::read_to_string;
 use tracing_subscriber::filter::LevelFilter;
 
-
-use crate::raw_config::RawConfig;
 use crate::proxy::config::Config;
+use crate::raw_config::RawConfig;
 
 //todo: name & about. (need discussion)
 #[derive(Debug, StructOpt)]
@@ -77,5 +76,6 @@ pub async fn get_config_from_opt(opt: &Opt) -> Result<Config> {
                 _ => return Err(anyhow!("invalid file extension")),
             }
         }
-    }.try_into()
+    }
+    .try_into()
 }

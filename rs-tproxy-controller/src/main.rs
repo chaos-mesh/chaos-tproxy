@@ -14,7 +14,7 @@ pub mod proxy;
 pub mod raw_config;
 
 #[tokio::main]
-async fn main()-> anyhow::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args_checked()?;
     tracing_subscriber::fmt()
         .with_max_level(opt.get_level_filter())
@@ -30,8 +30,7 @@ async fn main()-> anyhow::Result<()> {
         let cfg = get_config_from_opt(&opt).await?;
         let mut proxy = Proxy::new(opt.verbose);
         proxy.reload(cfg.proxy_config).await?;
-        let mut signals =
-            Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         proxy.stop().await?;
     }
@@ -40,8 +39,7 @@ async fn main()-> anyhow::Result<()> {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose));
         config_server.serve_interactive();
 
-        let mut signals =
-            Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         config_server.stop().await?;
     }

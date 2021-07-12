@@ -1,5 +1,5 @@
-use crate::handler::http::selector::Selector;
 use crate::handler::http::action::Actions;
+use crate::handler::http::selector::Selector;
 
 #[derive(Debug, Clone)]
 pub struct Rule {

@@ -7,9 +7,9 @@ use hyper::service::Service;
 use tokio::net::TcpStream;
 use tracing::{instrument, trace};
 
-use hyper::client::connect::dns::GaiResolver;
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
 use http::uri::Scheme;
+use hyper::client::connect::dns::GaiResolver;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -37,7 +37,8 @@ impl HttpConnector {
 impl Service<Uri> for HttpConnector {
     type Response = TcpStream;
     type Error = Error;
-    type Future = Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Future =
+        Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
 
     #[instrument]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -54,7 +55,7 @@ impl Service<Uri> for HttpConnector {
 
 /// This function resolve uri and select uri with scheme like `http://`
 /// and get host addrs and dst port from Uri.
-pub(crate) async fn resolve(resolver:&mut GaiResolver, dst: &Uri) -> Result<SocketAddr, Error> {
+pub(crate) async fn resolve(resolver: &mut GaiResolver, dst: &Uri) -> Result<SocketAddr, Error> {
     if dst
         .scheme()
         .filter(|scheme| **scheme != Scheme::HTTP)

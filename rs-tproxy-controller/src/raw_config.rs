@@ -8,7 +8,7 @@ pub struct RawConfig {
     pub proxy_mark: Option<i32>,
     pub ignore_mark: Option<i32>,
     pub route_table: Option<u8>,
-    pub safe_mode : Option<bool>,
+    pub safe_mode: Option<bool>,
     pub interface: Option<String>,
     pub rules: Option<Vec<RawRule>>,
 }

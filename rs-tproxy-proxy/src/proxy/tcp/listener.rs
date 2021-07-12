@@ -1,9 +1,9 @@
 use std::io;
 use std::net::SocketAddr;
 
+use crate::proxy::tcp::transparent_socket::TransparentSocket;
 use tokio::net::{self, TcpStream};
 use tracing::{debug, instrument, trace};
-use crate::proxy::tcp::transparent_socket::TransparentSocket;
 
 /// A stream of connections from binding to an address.
 /// As an implementation of `hyper::server::accept::Accept`.
@@ -19,12 +19,10 @@ impl TcpListener {
     pub fn bind(addr: SocketAddr) -> io::Result<Self> {
         let socket = TransparentSocket::bind(addr)?;
 
-        Ok(
-            Self {
-                listener: socket.listen(1024)?,
-                tcp_nodelay: true
-            }
-        )
+        Ok(Self {
+            listener: socket.listen(1024)?,
+            tcp_nodelay: true,
+        })
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections.
@@ -42,7 +40,7 @@ impl TcpListener {
                         trace!("error trying to set TCP nodelay: {}", e);
                     }
                     return Ok(stream);
-                },
+                }
                 Err(e) => {
                     // Connection errors can be ignored directly, continue by
                     // accepting the next request.

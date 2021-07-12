@@ -41,3 +41,5 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 futures-util = { version = "0.3.7", default-features = false, features = ["alloc", "sink"] }
 rs-tproxy-proxy = {path = "../rs-tproxy-proxy"}
 pnet = "0.28.0"
+default-net = "0.2.0"
+system_gateway = {git="https://github.com/aruntomar/system_gateway"}

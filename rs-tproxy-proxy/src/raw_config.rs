@@ -8,17 +8,21 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::proxy::http::config::Config;
-use crate::handler::http::{rule::{Rule, Target}, selector::{Selector},action::{Actions,PatchAction}};
 use crate::handler::http::action::{PatchBodyAction, ReplaceAction};
+use crate::handler::http::{
+    action::{Actions, PatchAction},
+    rule::{Rule, Target},
+    selector::Selector,
+};
+use crate::proxy::http::config::Config;
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub struct RawConfig{
+pub struct RawConfig {
     pub proxy_ports: Option<String>,
     pub listen_port: u16,
-    pub safe_mode : bool,
+    pub safe_mode: bool,
     pub interface: Option<String>,
-    pub rules : Vec<RawRule>,
+    pub rules: Vec<RawRule>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]

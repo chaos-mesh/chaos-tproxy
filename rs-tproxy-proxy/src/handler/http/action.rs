@@ -10,7 +10,6 @@ use serde_json::Value;
 use tokio::time::sleep;
 use tracing::{debug, instrument};
 
-
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Actions {
     pub abort: bool,

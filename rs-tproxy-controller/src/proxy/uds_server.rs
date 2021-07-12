@@ -1,19 +1,16 @@
-use tokio::net::UnixListener;
-use std::path::PathBuf;
 use std::io;
+use std::path::PathBuf;
+use tokio::net::UnixListener;
 
 #[derive(Debug, Clone)]
-pub struct UdsDataServer<T>{
-    pub data : T,
-    pub path : PathBuf,
+pub struct UdsDataServer<T> {
+    pub data: T,
+    pub path: PathBuf,
 }
 
-impl <T: serde::ser::Serialize> UdsDataServer<T> {
-    pub fn new(data : T, path: PathBuf) -> Self {
-        Self {
-            data,
-            path,
-        }
+impl<T: serde::ser::Serialize> UdsDataServer<T> {
+    pub fn new(data: T, path: PathBuf) -> Self {
+        Self { data, path }
     }
 
     pub fn bind(&self) -> anyhow::Result<UnixListener> {
@@ -22,11 +19,11 @@ impl <T: serde::ser::Serialize> UdsDataServer<T> {
         Ok(listener)
     }
 
-    pub async fn listen(&self, listener : UnixListener) -> anyhow::Result<()> {
+    pub async fn listen(&self, listener: UnixListener) -> anyhow::Result<()> {
         tracing::debug!("Uds listener listening on {:?}.", &self.path);
         loop {
             match (&listener).accept().await {
-                Ok((stream , addr)) => {
+                Ok((stream, addr)) => {
                     let buf = bincode::serialize(&self.data)?;
                     loop {
                         stream.writable().await?;
@@ -39,18 +36,20 @@ impl <T: serde::ser::Serialize> UdsDataServer<T> {
                                 continue;
                             }
                             Err(e) => {
-                                tracing::debug!("error : try_write raw config to {:?} failed",addr);
-                                return Err(anyhow::anyhow!("{}",e));
+                                tracing::debug!(
+                                    "error : try_write raw config to {:?} failed",
+                                    addr
+                                );
+                                return Err(anyhow::anyhow!("{}", e));
                             }
                         }
                     }
                 }
                 Err(e) => {
                     tracing::debug!("error : accept connection failed");
-                    return Err(anyhow::anyhow!("{}",e));
+                    return Err(anyhow::anyhow!("{}", e));
                 }
             }
         }
     }
 }
-

@@ -1,2 +1,2 @@
-pub mod stdio;
 pub mod handler;
+pub mod stdio;

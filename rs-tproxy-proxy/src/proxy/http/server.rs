@@ -10,24 +10,23 @@ use http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
 use tokio::net::TcpStream;
-use tracing::{debug, error};
 use tokio::select;
+use tracing::{debug, error};
 
-use tokio::sync::oneshot::Receiver;
 use crate::proxy::http::connector::HttpConnector;
+use tokio::sync::oneshot::Receiver;
 
-use crate::proxy::tcp::listener::{TcpListener};
+use crate::proxy::tcp::listener::TcpListener;
 
-use hyper::server::conn::Http;
-use crate::proxy::tcp::transparent_socket::TransparentSocket;
-use crate::handler::http::action::{apply_response_action, apply_request_action};
-use crate::handler::http::selector::{select_response, select_request};
+use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
+use crate::handler::http::selector::{select_request, select_response};
 use crate::proxy::http::config::Config;
+use crate::proxy::tcp::transparent_socket::TransparentSocket;
+use hyper::server::conn::Http;
 use std::future::Future;
 use std::pin::Pin;
 use tokio::io::AsyncWriteExt;
-
 
 #[derive(Debug)]
 pub struct HttpServer {
@@ -36,12 +35,10 @@ pub struct HttpServer {
 
 impl HttpServer {
     pub fn new(config: Config) -> Self {
-        Self {
-            config,
-        }
+        Self { config }
     }
 
-    pub async fn serve(&mut self, rx : Receiver<()>) -> Result<()> {
+    pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
         let listener = TcpListener::bind(addr)?;
         select! {
@@ -70,46 +67,49 @@ impl HttpServer {
     }
 }
 
-pub async fn serve_http_with_error_return(mut stream: TcpStream, service: &HttpService) -> Result<()> {
+pub async fn serve_http_with_error_return(
+    mut stream: TcpStream,
+    service: &HttpService,
+) -> Result<()> {
     loop {
-            let (r, parts) = Http::new()
-                .error_return(true)
-                .serve_connection_with_parts(stream, service.clone())
-                .await;
+        let (r, parts) = Http::new()
+            .error_return(true)
+            .serve_connection_with_parts(stream, service.clone())
+            .await;
 
-
-            let part_stream = match r {
-                Ok(()) => {
+        let part_stream = match r {
+            Ok(()) => match parts {
+                Some(part) => part.io,
+                None => {
+                    return Ok(());
+                }
+            },
+            Err(e) => {
+                return if e.is_parse() {
+                    tracing::debug!("turn into tcp transfer");
                     match parts {
-                        Some(part) => {
-                            part.io
+                        Some(mut part) => {
+                            let addr_target = part.io.local_addr()?;
+                            let addr_local = part.io.peer_addr()?;
+                            let socket = TransparentSocket::bind(addr_local)?;
+                            let mut client_stream = socket.connect(addr_target).await?;
+                            println!("{:?}", part.read_buf.as_ref());
+                            client_stream
+                                .write_all(part.read_buf.as_ref())
+                                .await
+                                .unwrap();
+                            tokio::io::copy_bidirectional(&mut part.io, &mut client_stream).await?;
+                            Ok(())
                         }
-                        None => {return Ok(());}
+                        None => Ok(()),
                     }
+                } else {
+                    error!("fail to serve http: {}", e);
+                    Ok(())
                 }
-                Err(e) => {
-                    return if e.is_parse() {
-                        tracing::debug!("turn into tcp transfer");
-                        match parts {
-                            Some(mut part) => {
-                                let addr_target = part.io.local_addr()?;
-                                let addr_local = part.io.peer_addr()?;
-                                let socket = TransparentSocket::bind(addr_local)?;
-                                let mut client_stream = socket.connect(addr_target).await?;
-                                println!("{:?}",part.read_buf.as_ref());
-                                client_stream.write_all(part.read_buf.as_ref()).await.unwrap();
-                                tokio::io::copy_bidirectional(&mut part.io, &mut client_stream).await?;
-                                Ok(())
-                            }
-                            None => { Ok(()) }
-                        }
-                    } else {
-                        error!("fail to serve http: {}", e);
-                        Ok(())
-                    }
-                }
-            };
-            stream = part_stream;
+            }
+        };
+        stream = part_stream;
     }
 }
 
@@ -180,13 +180,13 @@ impl HttpService {
             .filter(|rule| {
                 matches!(rule.target, Target::Response)
                     && select_response(
-                    self.target.port(),
-                    &uri,
-                    &method,
-                    &headers,
-                    &response,
-                    &rule.selector,
-                )
+                        self.target.port(),
+                        &uri,
+                        &method,
+                        &headers,
+                        &response,
+                        &rule.selector,
+                    )
             })
             .collect();
 
@@ -201,7 +201,8 @@ impl HttpService {
 impl Service<Request<Body>> for HttpService {
     type Response = Response<Body>;
     type Error = anyhow::Error;
-    type Future = Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Future =
+        Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

@@ -1,8 +1,8 @@
 use std::os::unix::io::AsRawFd;
 use std::{io, mem};
 
-use tokio::net::{TcpSocket, TcpStream};
 use std::net::SocketAddr;
+use tokio::net::{TcpSocket, TcpStream};
 
 /// A socket generator with IP_TRANSPARENT flag.
 /// User can Clone this instead of clone a linux socket which may bring mistake.
@@ -11,12 +11,9 @@ pub struct TransparentSocket {
     addr: SocketAddr,
 }
 
-
 impl TransparentSocket {
     pub fn new(addr: SocketAddr) -> TransparentSocket {
-        Self {
-            addr
-        }
+        Self { addr }
     }
 
     pub fn bind(addr: SocketAddr) -> io::Result<TcpSocket> {
@@ -25,7 +22,7 @@ impl TransparentSocket {
         Ok(socket)
     }
 
-    pub async fn conn(&self ,dist: SocketAddr) -> io::Result<TcpStream> {
+    pub async fn conn(&self, dist: SocketAddr) -> io::Result<TcpStream> {
         let socket = TransparentSocket::set_socket()?;
         socket.bind(self.addr)?;
         socket.connect(dist).await
