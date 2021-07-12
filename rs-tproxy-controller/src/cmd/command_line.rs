@@ -7,10 +7,10 @@ use tokio::fs::read_to_string;
 use tracing_subscriber::filter::LevelFilter;
 
 
-use crate::cmd::raw_config::RawConfig;
+use crate::raw_config::RawConfig;
 use crate::proxy::config::Config;
 
-//todo: name & about.
+//todo: name & about. (need discussion)
 #[derive(Debug, StructOpt)]
 #[structopt(name = "proxy", about = "The option of rs-proxy.")]
 pub struct Opt {

@@ -10,7 +10,7 @@ use hyper::service::{Service};
 use hyper::Body;
 use tokio::sync::Mutex;
 use tracing::instrument;
-use crate::cmd::raw_config::RawConfig;
+use crate::raw_config::RawConfig;
 use crate::cmd::interactive::stdio::{StdStream};
 use crate::proxy::config::Config;
 

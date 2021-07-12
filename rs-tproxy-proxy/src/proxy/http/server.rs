@@ -26,7 +26,7 @@ use crate::handler::http::rule::Target;
 use crate::proxy::http::config::Config;
 use std::future::Future;
 use std::pin::Pin;
-
+use tokio::io::AsyncWriteExt;
 
 
 #[derive(Debug)]
@@ -53,7 +53,10 @@ impl HttpServer {
                     let config = Arc::new(self.config.clone());
                     let service = HttpService::new(addr_remote,addr_local, config);
                     tokio::spawn(async move {
-                        serve_http_with_error_return(stream, &service).await.unwrap();
+                        match serve_http_with_error_return(stream, &service).await{
+                            Ok(_)=>{}
+                            Err(e) => {tracing::error!("{}",e);}
+                        };
                     });
                 }
                 #[allow(unreachable_code)]
@@ -86,12 +89,15 @@ pub async fn serve_http_with_error_return(mut stream: TcpStream, service: &HttpS
                 }
                 Err(e) => {
                     return if e.is_parse() {
+                        tracing::debug!("turn into tcp transfer");
                         match parts {
                             Some(mut part) => {
                                 let addr_target = part.io.local_addr()?;
                                 let addr_local = part.io.peer_addr()?;
                                 let socket = TransparentSocket::bind(addr_local)?;
                                 let mut client_stream = socket.connect(addr_target).await?;
+                                println!("{:?}",part.read_buf.as_ref());
+                                client_stream.write_all(part.read_buf.as_ref()).await.unwrap();
                                 tokio::io::copy_bidirectional(&mut part.io, &mut client_stream).await?;
                                 Ok(())
                             }
@@ -125,7 +131,6 @@ impl HttpService {
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         debug!("Proxy is handling http request");
-        debug!("target port {},request path {}, rules {:?}",self.target.port(), &request.uri().path(), self.config.rules.clone());
         let request_rules: Vec<_> = self
             .config
             .rules
@@ -146,10 +151,15 @@ impl HttpService {
         let headers = request.headers().clone();
 
         let mut parts = request.uri().clone().into_parts();
-        if parts.scheme.is_none() {
+
+        parts.authority = match self.target.to_string().parse() {
+            Ok(o) => Some(o),
+            Err(_) => None,
+        };
+        if parts.path_and_query.is_some() && parts.authority.is_some() && parts.scheme.is_none() {
             parts.scheme = Some(Scheme::HTTP);
         }
-        parts.authority = Some(self.target.to_string().parse()?);
+
         *request.uri_mut() = Uri::from_parts(parts)?;
 
         let client = Client::builder().build(HttpConnector::new(self.remote));

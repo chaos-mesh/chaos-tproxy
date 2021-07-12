@@ -1,20 +1,17 @@
-pub mod cmd;
-pub mod proxy;
-
 use anyhow::anyhow;
-
-use rs_tproxy_proxy::proxy_main;
-
-use crate::cmd::command_line::Opt;
-
-
-use crate::cmd::command_line::get_config_from_opt;
-
-use crate::cmd::interactive::handler::ConfigServer;
-use crate::proxy::exec::Proxy;
-use rs_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
 
+use rs_tproxy_proxy::proxy_main;
+use rs_tproxy_proxy::signal::Signals;
+
+use crate::cmd::command_line::get_config_from_opt;
+use crate::cmd::command_line::Opt;
+use crate::cmd::interactive::handler::ConfigServer;
+use crate::proxy::exec::Proxy;
+
+pub mod cmd;
+pub mod proxy;
+pub mod raw_config;
 
 #[tokio::main]
 async fn main()-> anyhow::Result<()> {
