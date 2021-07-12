@@ -41,6 +41,9 @@ actix-server = "2.0.0-beta.5"
 actix-http = "3.0.0-beta.8"
 bytes = "1.0.1"
 rs-tproxy-proxy = {path = "./rs-tproxy-proxy"}
+uuid = { version = "0.8", features = ["serde", "v4"] }
+pnet = "0.28.0"
+bincode = "1.3.3"
 
 [dev-dependencies]
 test-case = "1.1"

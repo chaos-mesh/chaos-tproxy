@@ -3,12 +3,6 @@ name = "rs-tproxy-controller"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-name = "rs_tproxy_controller_lib"
-path = "src/lib.rs"
-
 [[bin]]
 name = "rs-tproxy-controller-bin"
 path = "src/main.rs"
@@ -47,6 +41,3 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 futures-util = { version = "0.3.7", default-features = false, features = ["alloc", "sink"] }
 rs-tproxy-proxy = {path = "../rs-tproxy-proxy"}
 pnet = "0.28.0"
-actix = "0.12.0"
-actix-web = "4.0.0-beta.8"
-actix-web-actors = "4.0.0-beta.6"

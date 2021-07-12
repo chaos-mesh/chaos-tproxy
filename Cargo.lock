@@ -1448,6 +1448,7 @@ dependencies = [
  "actix-server",
  "anyhow",
  "async-trait",
+ "bincode",
  "bytes",
  "clap",
  "futures",
@@ -1458,6 +1459,7 @@ dependencies = [
  "json-patch",
  "libc",
  "paw",
+ "pnet",
  "rs-tproxy-proxy",
  "serde",
  "serde_derive",
@@ -1471,6 +1473,7 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "tracing-subscriber",
+ "uuid",
  "wildmatch",
 ]
 
@@ -1478,11 +1481,8 @@ dependencies = [
 name = "rs-tproxy-controller"
 version = "0.1.0"
 dependencies = [
- "actix",
  "actix-http",
  "actix-server",
- "actix-web",
- "actix-web-actors",
  "anyhow",
  "async-trait",
  "bincode",
