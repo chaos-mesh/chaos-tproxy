@@ -1,32 +1,29 @@
+use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::Result;
-
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
+use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::select;
-use tracing::{debug, error};
-
-use crate::proxy::http::connector::HttpConnector;
 use tokio::sync::oneshot::Receiver;
-
-use crate::proxy::tcp::listener::TcpListener;
+use tracing::{debug, error};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
 use crate::handler::http::selector::{select_request, select_response};
 use crate::proxy::http::config::Config;
+use crate::proxy::http::connector::HttpConnector;
+use crate::proxy::tcp::listener::TcpListener;
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
-use hyper::server::conn::Http;
-use std::future::Future;
-use std::pin::Pin;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Debug)]
 pub struct HttpServer {

@@ -1,9 +1,10 @@
 use std::io;
 use std::net::SocketAddr;
 
-use crate::proxy::tcp::transparent_socket::TransparentSocket;
 use tokio::net::{self, TcpStream};
 use tracing::{debug, instrument, trace};
+
+use crate::proxy::tcp::transparent_socket::TransparentSocket;
 
 /// A stream of connections from binding to an address.
 /// As an implementation of `hyper::server::accept::Accept`.

@@ -1,12 +1,10 @@
-use crate::proxy::uds_server::UdsDataServer;
-use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
-use std::path::PathBuf;
-use tokio::process::Command;
-
 use std::env;
+use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::Error;
+use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use tokio::process::Command;
 use tokio::select;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -14,6 +12,7 @@ use uuid::Uuid;
 
 use crate::proxy::net::bridge::NetEnv;
 use crate::proxy::net::set_net::set_net;
+use crate::proxy::uds_server::UdsDataServer;
 
 #[derive(Debug, Clone)]
 pub struct ProxyOpt {

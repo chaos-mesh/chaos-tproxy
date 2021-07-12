@@ -1,10 +1,10 @@
+use std::process::Command;
+
 use anyhow::{anyhow, Result};
+use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
-use std::process::Command;
 use uuid::Uuid;
-use default_net;
-
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
@@ -12,7 +12,7 @@ pub struct NetEnv {
     pub device: String,
     pub ip: String,
 
-    ip_route_store:String,
+    ip_route_store: String,
 
     bridge1: String,
     bridge2: String,
@@ -73,12 +73,12 @@ impl NetEnv {
     pub fn setenv_bridge(&self) -> Result<()> {
         let gateway_ip = match try_get_default_gateway_ip() {
             Ok(s) => s,
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
         let gateway_mac = match default_net::get_default_gateway_mac(gateway_ip.clone()) {
             Ok(s) => s,
             Err(e) => {
-                tracing::error!("{}",e);
+                tracing::error!("{}", e);
                 return Err(anyhow!(e));
             }
         };
@@ -108,16 +108,53 @@ impl NetEnv {
             ip_netns(&self.netns, ip_link_set_up("lo")),
             ip_address("del", &self.ip, &self.device),
             ip_address("add", &self.ip, &self.veth4),
-            arp_set(&gateway_ip,&gateway_mac,&self.veth1),
-            ip_netns(&self.netns,arp_set(&gateway_ip, &gateway_mac,&self.veth2)),
-            ip_netns(&self.netns,arp_set(&gateway_ip, &gateway_mac,&self.bridge2)),
-            ip_route_add("default",&gateway_ip,&self.veth4),
-            ip_netns(&self.netns, ip_route_add("default",&gateway_ip,&self.bridge2)),
-            ip_netns(&self.netns, vec!["ip", "route", "add", &net_ip32, "dev", &self.bridge2, "proto", "kernel",]),
+            arp_set(&gateway_ip, &gateway_mac, &self.veth1),
+            ip_netns(&self.netns, arp_set(&gateway_ip, &gateway_mac, &self.veth2)),
+            ip_netns(
+                &self.netns,
+                arp_set(&gateway_ip, &gateway_mac, &self.bridge2),
+            ),
+            ip_route_add("default", &gateway_ip, &self.veth4),
+            ip_netns(
+                &self.netns,
+                ip_route_add("default", &gateway_ip, &self.bridge2),
+            ),
+            ip_netns(
+                &self.netns,
+                vec![
+                    "ip",
+                    "route",
+                    "add",
+                    &net_ip32,
+                    "dev",
+                    &self.bridge2,
+                    "proto",
+                    "kernel",
+                ],
+            ),
             ip_netns(&self.netns, vec!["sysctl", "-w", "net.ipv4.ip_forward=1"]),
-            ip_netns(&self.netns, vec!["sysctl", "-w", "net.ipv4.ip_nonlocal_bind=1"]),
-            ip_netns(&self.netns, vec!["ip", "rule", "add", "fwmark", "1", "lookup", "100"]),
-            ip_netns(&self.netns, vec!["ip", "route", "add", "local", "0.0.0.0/0", "dev", "lo", "table", "100"]),
+            ip_netns(
+                &self.netns,
+                vec!["sysctl", "-w", "net.ipv4.ip_nonlocal_bind=1"],
+            ),
+            ip_netns(
+                &self.netns,
+                vec!["ip", "rule", "add", "fwmark", "1", "lookup", "100"],
+            ),
+            ip_netns(
+                &self.netns,
+                vec![
+                    "ip",
+                    "route",
+                    "add",
+                    "local",
+                    "0.0.0.0/0",
+                    "dev",
+                    "lo",
+                    "table",
+                    "100",
+                ],
+            ),
             bash_c(&restore_dns),
         ];
         execute_all(cmdvv)?;
@@ -125,9 +162,9 @@ impl NetEnv {
     }
 
     pub fn clear_bridge(&self) -> Result<()> {
-        let restore = format!("ip route restore < {}",&self.ip_route_store);
+        let restore = format!("ip route restore < {}", &self.ip_route_store);
         let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
-        let remove_store = format!("rm -f {}",&self.ip_route_store);
+        let remove_store = format!("rm -f {}", &self.ip_route_store);
         let cmdvv = vec![
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
@@ -141,7 +178,7 @@ impl NetEnv {
     }
 }
 
-pub fn arp_set<'a>(ip:&'a str, mac: &'a str, device :&'a str) -> Vec<&'a str> {
+pub fn arp_set<'a>(ip: &'a str, mac: &'a str, device: &'a str) -> Vec<&'a str> {
     vec!["arp", "-s", ip, mac, "-i", device]
 }
 
@@ -212,9 +249,9 @@ pub fn ip_address<'a>(action: &'a str, address: &'a str, device: &'a str) -> Vec
     vec!["ip", "address", action, address, "dev", device]
 }
 
-pub fn ip_route_add<'a>(target:&'a str,gateway_ip:&'a str, device: &'a str) -> Vec<&'a str> {
+pub fn ip_route_add<'a>(target: &'a str, gateway_ip: &'a str, device: &'a str) -> Vec<&'a str> {
     vec![
-        "ip", "route", "add", target, "via", gateway_ip, "dev", device, "proto", "kernel","onlink",
+        "ip", "route", "add", target, "via", gateway_ip, "dev", device, "proto", "kernel", "onlink",
     ]
 }
 
@@ -222,17 +259,17 @@ pub fn try_get_default_gateway_ip() -> Result<String> {
     match system_gateway::gateway() {
         Ok(ip) => return Ok(ip),
         Err(e) => {
-            tracing::error!("{}",e);
+            tracing::error!("{}", e);
             let mut count = 5;
             while count > 0 {
                 let gataway_ip = default_net::get_default_gateway_ip();
                 match gataway_ip {
                     Ok(ip) => return Ok(ip),
-                    Err(e) => tracing::error!("{}",e),
+                    Err(e) => tracing::error!("{}", e),
                 }
                 count = count - 1;
             }
-        },
+        }
     };
     Err(anyhow!("tried 5 times but icmp target 8.8.8.8"))
 }

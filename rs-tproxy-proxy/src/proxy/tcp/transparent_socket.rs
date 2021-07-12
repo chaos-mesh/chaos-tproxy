@@ -1,7 +1,7 @@
+use std::net::SocketAddr;
 use std::os::unix::io::AsRawFd;
 use std::{io, mem};
 
-use std::net::SocketAddr;
 use tokio::net::{TcpSocket, TcpStream};
 
 /// A socket generator with IP_TRANSPARENT flag.

@@ -1,11 +1,9 @@
 use anyhow::anyhow;
-use tokio::signal::unix::SignalKind;
-
 use rs_tproxy_proxy::proxy_main;
 use rs_tproxy_proxy::signal::Signals;
+use tokio::signal::unix::SignalKind;
 
-use crate::cmd::command_line::get_config_from_opt;
-use crate::cmd::command_line::Opt;
+use crate::cmd::command_line::{get_config_from_opt, Opt};
 use crate::cmd::interactive::handler::ConfigServer;
 use crate::proxy::exec::Proxy;
 

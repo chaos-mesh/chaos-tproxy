@@ -1,7 +1,6 @@
 use http::header::HeaderMap;
 use http::{Method, Request, Response, StatusCode, Uri};
 use hyper::Body;
-
 use wildmatch::WildMatch;
 
 #[derive(Debug, Clone)]

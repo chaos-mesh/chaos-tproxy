@@ -1,17 +1,17 @@
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Error, Result};
+use http::uri::Scheme;
 use http::Uri;
+use hyper::client::connect::dns::GaiResolver;
 use hyper::service::Service;
 use tokio::net::TcpStream;
 use tracing::{instrument, trace};
 
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
-use http::uri::Scheme;
-use hyper::client::connect::dns::GaiResolver;
-use std::future::Future;
-use std::pin::Pin;
 
 #[derive(Debug, Clone)]
 pub struct HttpConnector {

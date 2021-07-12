@@ -8,12 +8,9 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::handler::http::action::{PatchBodyAction, ReplaceAction};
-use crate::handler::http::{
-    action::{Actions, PatchAction},
-    rule::{Rule, Target},
-    selector::Selector,
-};
+use crate::handler::http::action::{Actions, PatchAction, PatchBodyAction, ReplaceAction};
+use crate::handler::http::rule::{Rule, Target};
+use crate::handler::http::selector::Selector;
 use crate::proxy::http::config::Config;
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]

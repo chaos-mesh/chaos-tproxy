@@ -1,7 +1,9 @@
-use crate::raw_config::RawConfig;
+use std::convert::TryFrom;
+
 use anyhow::{anyhow, Error};
 use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
-use std::convert::TryFrom;
+
+use crate::raw_config::RawConfig;
 
 #[derive(Debug, Clone)]
 pub struct Config {

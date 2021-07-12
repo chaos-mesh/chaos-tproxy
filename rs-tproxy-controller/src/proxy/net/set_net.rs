@@ -1,6 +1,7 @@
+use std::option::Option::Some;
+
 use crate::proxy::net::bridge::{execute_all, NetEnv};
 use crate::proxy::net::iptables::{set_iptables, set_iptables_safe};
-use std::option::Option::Some;
 
 #[cfg(target_os = "linux")]
 pub fn set_net(

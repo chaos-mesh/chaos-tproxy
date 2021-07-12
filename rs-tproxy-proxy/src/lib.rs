@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::path::PathBuf;
 
+use tokio::signal::unix::SignalKind;
 use tokio::sync::oneshot::channel;
 use tracing::trace;
 
@@ -8,7 +9,6 @@ use crate::proxy::http::server::HttpServer;
 use crate::raw_config::RawConfig;
 use crate::signal::Signals;
 use crate::uds_client::UdsDataClient;
-use tokio::signal::unix::SignalKind;
 
 pub mod handler;
 pub mod proxy;
