@@ -5,6 +5,7 @@ use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use uuid::Uuid;
+use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
@@ -86,7 +87,8 @@ impl NetEnv {
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
         let net: Ipv4Network = self.ip.parse().unwrap();
-        let net_ip32 = net.ip().to_string() + "/32";
+        let net_ip32 = net.clone().ip().to_string() + "/32";
+        let net_domain =Ipv4Addr::from(u32::from(net.clone().ip())&u32::from(net.clone().mask())).to_string() + "/" + &net.prefix().to_string();
         let cmdvv = vec![
             bash_c(&save),
             bash_c(&save_dns),
@@ -130,6 +132,21 @@ impl NetEnv {
                     &self.bridge2,
                     "proto",
                     "kernel",
+                ],
+            ),
+            ip_netns(
+                &self.netns,
+                vec![
+                    "ip",
+                    "route",
+                    "add",
+                    &net_domain,
+                    "dev",
+                    &self.bridge2,
+                    "proto",
+                    "kernel",
+                    "scope",
+                    "link",
                 ],
             ),
             ip_netns(&self.netns, vec!["sysctl", "-w", "net.ipv4.ip_forward=1"]),
