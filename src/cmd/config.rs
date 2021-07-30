@@ -81,7 +81,9 @@ pub enum RawPatchBody {
 pub struct RawReplaceAction {
     pub path: Option<String>,
     pub method: Option<String>,
-    pub body: Option<Vec<u8>>,
+
+    // body to replace, encoded in base64
+    pub body: Option<String>,
     pub code: Option<u16>,
     pub queries: Option<HashMap<String, String>>,
     pub headers: Option<HashMap<String, String>>,
@@ -159,8 +161,8 @@ impl TryFrom<RawSelector> for Selector {
 
     fn try_from(raw: RawSelector) -> Result<Self, Self::Error> {
         Ok(Self {
-            port: raw.port.clone(),
-            path: raw.path.as_ref().map(|p| WildMatch::new(&p)),
+            port: raw.port,
+            path: raw.path.as_ref().map(|p| WildMatch::new(p)),
             method: raw
                 .method
                 .as_ref()
@@ -177,7 +179,7 @@ impl TryFrom<RawSelector> for Selector {
                     Ok(map)
                 })
                 .transpose()?,
-            code: raw.code.clone().map(StatusCode::from_u16).transpose()?,
+            code: raw.code.map(StatusCode::from_u16).transpose()?,
             response_headers: raw
                 .response_headers
                 .as_ref()
@@ -232,7 +234,7 @@ impl TryFrom<RawPatchBody> for PatchBodyAction {
 
     fn try_from(raw: RawPatchBody) -> Result<Self, Self::Error> {
         match raw {
-            RawPatchBody::JSON(ref raw) => Ok(PatchBodyAction::JSON(serde_json::from_str(&raw)?)),
+            RawPatchBody::JSON(ref raw) => Ok(PatchBodyAction::JSON(serde_json::from_str(raw)?)),
         }
     }
 }
@@ -248,8 +250,8 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
                 .as_ref()
                 .map(|method| method.parse())
                 .transpose()?,
-            body: raw.body,
-            code: raw.code.clone().map(StatusCode::from_u16).transpose()?,
+            body: raw.body.map(base64::decode).transpose()?,
+            code: raw.code.map(StatusCode::from_u16).transpose()?,
             queries: raw.queries,
             headers: raw
                 .headers
