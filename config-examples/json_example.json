@@ -12,6 +12,9 @@
       },
       "actions": {
         "delay": "10s",
+        "replace": {
+          "body": "SGVsbG8gQ2hhb3MgTWVzaAo"
+        },
         "patch": {
           "queries": [
             ["foo", "bar"],

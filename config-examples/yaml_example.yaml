@@ -9,7 +9,10 @@ rules:
       path: /example # match all path starts with "/example"
       method: GET
     actions:
-      delay: 10s 
+      delay: 10s
+      replace:
+         # "Hello Chaos Mesh" in base64 encoding
+        body: "SGVsbG8gQ2hhb3MgTWVzaAo"
       patch:
         queries:
         - [foo, bar]

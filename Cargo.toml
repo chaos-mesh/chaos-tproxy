@@ -30,6 +30,7 @@ tracing-futures = "0.2"
 tracing-subscriber = "0.2"
 json-patch = "0.2.6"
 async-trait = "0.1.50"
+base64 = "0.13"
 
 [dev-dependencies]
 test-case = "1.1"
