@@ -53,14 +53,26 @@ pub struct PatchAction {
 pub struct ReplaceAction {
     pub path: Option<String>,
     pub method: Option<Method>,
-    pub body: Option<Vec<u8>>,
+    pub body: Option<ReplaceBodyAction>,
     pub code: Option<StatusCode>,
     pub queries: Option<HashMap<String, String>>,
     pub headers: Option<HeaderMap>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum PatchBodyAction {
+pub struct ReplaceBodyAction {
+    pub update_content_lengths: bool,
+    pub contents: Vec<u8>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct PatchBodyAction {
+    pub update_content_lengths: bool,
+    pub contents: PatchBodyActionContents,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum PatchBodyActionContents {
     JSON(Value),
 }
 
@@ -137,8 +149,19 @@ pub async fn apply_request_action(
             *request.method_mut() = md.clone();
         }
 
-        if let Some(data) = &replace.body {
-            *request.body_mut() = data.clone().into()
+        if let Some(body) = &replace.body {
+            *request.body_mut() = body.contents.clone().into();
+            if body.update_content_lengths {
+                let header_value = http::HeaderValue::from_str(&body.contents.len().to_string())?;
+                match request.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                    Some(v) => *v = header_value,
+                    None => {
+                        request
+                            .headers_mut()
+                            .insert(http::header::CONTENT_LENGTH, header_value);
+                    }
+                }
+            }
         }
 
         replace_queries(request.uri_mut(), replace.queries.as_ref())?;
@@ -157,10 +180,24 @@ pub async fn apply_request_action(
                 request.headers_mut().append(key, value.clone());
             }
         }
-        if let Some(PatchBodyAction::JSON(value)) = &patch.body {
+        if let Some(patch_body) = &patch.body {
+            let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(&mut request.body_mut()).await?;
             json_patch::merge(&mut data, value);
-            *request.body_mut() = serde_json::to_vec(&data)?.into();
+            let merged = serde_json::to_vec(&data)?;
+            let content_length = merged.len();
+            *request.body_mut() = merged.into();
+            if patch_body.update_content_lengths {
+                let header_value = http::HeaderValue::from_str(&content_length.to_string())?;
+                match request.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                    Some(v) => *v = header_value,
+                    None => {
+                        request
+                            .headers_mut()
+                            .insert(http::header::CONTENT_LENGTH, header_value);
+                    }
+                }
+            }
         }
     }
 
@@ -252,8 +289,19 @@ pub async fn apply_response_action(
             *response.status_mut() = co;
         }
 
-        if let Some(data) = &replace.body {
-            *response.body_mut() = data.clone().into()
+        if let Some(body) = &replace.body {
+            *response.body_mut() = body.contents.clone().into();
+            if body.update_content_lengths {
+                let header_value = http::HeaderValue::from_str(&body.contents.len().to_string())?;
+                match response.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                    Some(v) => *v = header_value,
+                    None => {
+                        response
+                            .headers_mut()
+                            .insert(http::header::CONTENT_LENGTH, header_value);
+                    }
+                }
+            }
         }
 
         if let Some(hdrs) = &replace.headers {
@@ -269,10 +317,24 @@ pub async fn apply_response_action(
                 response.headers_mut().append(key, value.clone());
             }
         }
-        if let Some(PatchBodyAction::JSON(value)) = &patch.body {
+        if let Some(patch_body) = &patch.body {
+            let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(&mut response.body_mut()).await?;
             json_patch::merge(&mut data, value);
-            *response.body_mut() = serde_json::to_vec(&data)?.into();
+            let merged = serde_json::to_vec(&data)?;
+            let content_length = merged.len();
+            *response.body_mut() = merged.into();
+            if patch_body.update_content_lengths {
+                let header_value = http::HeaderValue::from_str(&content_length.to_string())?;
+                match response.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                    Some(v) => *v = header_value,
+                    None => {
+                        response
+                            .headers_mut()
+                            .insert(http::header::CONTENT_LENGTH, header_value);
+                    }
+                }
+            }
         }
     }
 

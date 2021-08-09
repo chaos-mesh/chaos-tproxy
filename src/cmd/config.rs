@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
 use crate::handler::{
-    Actions, PatchAction, PatchBodyAction, ReplaceAction, Rule, Selector, Target,
+    Actions, PatchAction, PatchBodyAction, PatchBodyActionContents, ReplaceAction,
+    ReplaceBodyAction, Rule, Selector, Target,
 };
 use crate::tproxy::config::Config;
 
@@ -71,8 +72,17 @@ pub struct RawPatchAction {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub struct RawPatchBody {
+    // if update content length after patching, true by default
+    pub update_content_length: Option<bool>,
+
+    // the contents of body patch
+    pub contents: RawPatchBodyContents,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", content = "value")]
-pub enum RawPatchBody {
+pub enum RawPatchBodyContents {
     // merge patch json as [rfc7396](https://tools.ietf.org/html/rfc7396)
     JSON(String),
 }
@@ -81,12 +91,29 @@ pub enum RawPatchBody {
 pub struct RawReplaceAction {
     pub path: Option<String>,
     pub method: Option<String>,
-
-    // body to replace, encoded in base64
-    pub body: Option<String>,
+    pub body: Option<RawReplaceBody>,
     pub code: Option<u16>,
     pub queries: Option<HashMap<String, String>>,
     pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub struct RawReplaceBody {
+    // if update content length after replacing, true by default
+    pub update_content_length: Option<bool>,
+
+    // the contents of body patch
+    pub contents: RawReplaceBodyContents,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+pub enum RawReplaceBodyContents {
+    // replace body with text
+    TEXT(String),
+
+    // replace body with base64 encoded data
+    BASE64(String),
 }
 
 impl TryFrom<RawConfig> for Config {
@@ -229,13 +256,40 @@ impl TryFrom<RawPatchAction> for PatchAction {
     }
 }
 
+impl TryFrom<RawPatchBodyContents> for PatchBodyActionContents {
+    type Error = Error;
+
+    fn try_from(raw: RawPatchBodyContents) -> Result<Self, Self::Error> {
+        match raw {
+            RawPatchBodyContents::JSON(ref raw) => {
+                Ok(PatchBodyActionContents::JSON(serde_json::from_str(raw)?))
+            }
+        }
+    }
+}
+
 impl TryFrom<RawPatchBody> for PatchBodyAction {
     type Error = Error;
 
     fn try_from(raw: RawPatchBody) -> Result<Self, Self::Error> {
-        match raw {
-            RawPatchBody::JSON(ref raw) => Ok(PatchBodyAction::JSON(serde_json::from_str(raw)?)),
-        }
+        Ok(Self {
+            update_content_lengths: !matches!(raw.update_content_length, Some(false)),
+            contents: raw.contents.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<RawReplaceBody> for ReplaceBodyAction {
+    type Error = Error;
+
+    fn try_from(raw: RawReplaceBody) -> Result<Self, Self::Error> {
+        Ok(Self {
+            update_content_lengths: !matches!(raw.update_content_length, Some(false)),
+            contents: match raw.contents {
+                RawReplaceBodyContents::TEXT(text) => text.into_bytes(),
+                RawReplaceBodyContents::BASE64(encoded) => base64::decode(&encoded)?,
+            },
+        })
     }
 }
 
@@ -250,7 +304,7 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
                 .as_ref()
                 .map(|method| method.parse())
                 .transpose()?,
-            body: raw.body.map(base64::decode).transpose()?,
+            body: raw.body.map(TryFrom::try_from).transpose()?,
             code: raw.code.map(StatusCode::from_u16).transpose()?,
             queries: raw.queries,
             headers: raw

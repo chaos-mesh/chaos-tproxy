@@ -11,12 +11,24 @@ rules:
     actions:
       delay: 10s
       replace:
-         # "Hello Chaos Mesh" in base64 encoding
-        body: "SGVsbG8gQ2hhb3MgTWVzaAo"
+        body:
+          update_content_length: false # true by default
+          contents:
+            type: TEXT
+            value: '{"name": "Chaos Mesh", "message": "Hello!"}'
+        # contents:
+        #   type: BASE64
+        #   value: 'eyJuYW1lIjogIkNoYW9zIE1lc2giLCAibWVzc2FnZSI6ICJIZWxsbyEifQ=='
       patch:
         queries:
         - [foo, bar]
         - [foo, other]
+        body:
+          update_content_length: false # true by default
+          contents:
+            type: JSON
+            value: '{"message": "Hi!"}'
+
   - target: Response
     selector:
       port: 80

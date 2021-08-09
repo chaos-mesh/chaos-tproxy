@@ -13,13 +13,24 @@
       "actions": {
         "delay": "10s",
         "replace": {
-          "body": "SGVsbG8gQ2hhb3MgTWVzaAo"
+          "body": {
+            "contents": {
+              "type": "TEXT",
+              "value": "{\"name\": \"Chaos Mesh\", \"message\": \"Hello!\"}"
+            }
+          }
         },
         "patch": {
           "queries": [
             ["foo", "bar"],
             ["foo", "other"]
-          ]
+          ],
+          "body": {
+            "contents": {
+              "type": "JSON",
+              "value": "{\"message\": \"Hi!\"}"
+            }
+          }
         }
       }
     },
