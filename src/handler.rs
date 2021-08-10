@@ -138,7 +138,10 @@ pub async fn apply_request_action(
         }
 
         if let Some(data) = &replace.body {
-            *request.body_mut() = data.clone().into()
+            *request.body_mut() = data.clone().into();
+            if let Some(value) = request.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                *value = http::HeaderValue::from_str(&data.len().to_string())?;
+            }
         }
 
         replace_queries(request.uri_mut(), replace.queries.as_ref())?;
@@ -158,9 +161,13 @@ pub async fn apply_request_action(
             }
         }
         if let Some(PatchBodyAction::JSON(value)) = &patch.body {
-            let mut data = read_value(&mut request.body_mut()).await?;
-            json_patch::merge(&mut data, value);
-            *request.body_mut() = serde_json::to_vec(&data)?.into();
+            let mut body = read_value(&mut request.body_mut()).await?;
+            json_patch::merge(&mut body, value);
+            let data = serde_json::to_vec(&body)?;
+            if let Some(value) = request.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                *value = http::HeaderValue::from_str(&data.len().to_string())?;
+            }
+            *request.body_mut() = data.into();
         }
     }
 
@@ -253,7 +260,10 @@ pub async fn apply_response_action(
         }
 
         if let Some(data) = &replace.body {
-            *response.body_mut() = data.clone().into()
+            *response.body_mut() = data.clone().into();
+            if let Some(value) = response.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                *value = http::HeaderValue::from_str(&data.len().to_string())?;
+            }
         }
 
         if let Some(hdrs) = &replace.headers {
@@ -270,9 +280,13 @@ pub async fn apply_response_action(
             }
         }
         if let Some(PatchBodyAction::JSON(value)) = &patch.body {
-            let mut data = read_value(&mut response.body_mut()).await?;
-            json_patch::merge(&mut data, value);
-            *response.body_mut() = serde_json::to_vec(&data)?.into();
+            let mut body = read_value(&mut response.body_mut()).await?;
+            json_patch::merge(&mut body, value);
+            let data = serde_json::to_vec(&body)?;
+            if let Some(value) = response.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
+                *value = http::HeaderValue::from_str(&data.len().to_string())?;
+            }
+            *response.body_mut() = data.into();
         }
     }
 
