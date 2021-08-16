@@ -8,19 +8,18 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::handler::{
-    Actions, PatchAction, PatchBodyAction, ReplaceAction, Rule, Selector, Target,
-};
-use crate::tproxy::config::Config;
+use crate::handler::http::action::{Actions, PatchAction, PatchBodyAction, ReplaceAction, PatchBodyActionContents, ReplaceBodyAction};
+use crate::handler::http::rule::{Rule, Target};
+use crate::handler::http::selector::Selector;
+use crate::proxy::http::config::Config;
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawConfig {
-    pub listen_port: Option<u16>,
-    pub proxy_ports: Vec<u16>,
-    pub proxy_mark: Option<i32>,
-    pub ignore_mark: Option<i32>,
-    pub route_table: Option<u8>,
-    pub rules: Option<Vec<RawRule>>,
+    pub proxy_ports: Option<String>,
+    pub listen_port: u16,
+    pub safe_mode: bool,
+    pub interface: Option<String>,
+    pub rules: Vec<RawRule>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -71,8 +70,17 @@ pub struct RawPatchAction {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub struct RawPatchBody {
+    // if update content length after patching, true by default
+    pub update_content_length: Option<bool>,
+
+    // the contents of body patch
+    pub contents: RawPatchBodyContents,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", content = "value")]
-pub enum RawPatchBody {
+pub enum RawPatchBodyContents {
     // merge patch json as [rfc7396](https://tools.ietf.org/html/rfc7396)
     JSON(String),
 }
@@ -81,51 +89,39 @@ pub enum RawPatchBody {
 pub struct RawReplaceAction {
     pub path: Option<String>,
     pub method: Option<String>,
-    pub body: Option<Vec<u8>>,
+    pub body: Option<RawReplaceBody>,
     pub code: Option<u16>,
     pub queries: Option<HashMap<String, String>>,
     pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub struct RawReplaceBody {
+    // if update content length after replacing, true by default
+    pub update_content_length: Option<bool>,
+
+    // the contents of body patch
+    pub contents: RawReplaceBodyContents,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+pub enum RawReplaceBodyContents {
+    // replace body with text
+    TEXT(String),
+
+    // replace body with base64 encoded data
+    BASE64(String),
 }
 
 impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
-        let proxy_mark = raw.proxy_mark.unwrap_or(1);
-        let ignore_mark = raw.ignore_mark.unwrap_or(255);
-        let route_table = raw.route_table.unwrap_or(100);
-
-        if proxy_mark == ignore_mark {
-            return Err(anyhow!(
-                "proxy mark cannot be the same with ignore mark: {}={}",
-                proxy_mark,
-                ignore_mark
-            ));
-        }
-
-        if route_table == 0 || route_table > 252 {
-            return Err(anyhow!("invalid route table: table({})", route_table));
-        }
-
         Ok(Self {
-            listen_port: raw.listen_port.unwrap_or(0),
-            proxy_ports: if raw.proxy_ports.is_empty() {
-                None
-            } else {
-                Some(
-                    raw.proxy_ports
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )
-            },
-            proxy_mark,
-            ignore_mark,
-            route_table,
+            proxy_port: raw.listen_port,
             rules: raw
                 .rules
-                .unwrap_or_default()
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, Self::Error>>()?,
@@ -159,8 +155,8 @@ impl TryFrom<RawSelector> for Selector {
 
     fn try_from(raw: RawSelector) -> Result<Self, Self::Error> {
         Ok(Self {
-            port: raw.port.clone(),
-            path: raw.path.as_ref().map(|p| WildMatch::new(&p)),
+            port: raw.port,
+            path: raw.path.as_ref().map(|p| WildMatch::new(p)),
             method: raw
                 .method
                 .as_ref()
@@ -177,7 +173,7 @@ impl TryFrom<RawSelector> for Selector {
                     Ok(map)
                 })
                 .transpose()?,
-            code: raw.code.clone().map(StatusCode::from_u16).transpose()?,
+            code: raw.code.map(StatusCode::from_u16).transpose()?,
             response_headers: raw
                 .response_headers
                 .as_ref()
@@ -227,13 +223,40 @@ impl TryFrom<RawPatchAction> for PatchAction {
     }
 }
 
+impl TryFrom<RawPatchBodyContents> for PatchBodyActionContents {
+    type Error = Error;
+
+    fn try_from(raw: RawPatchBodyContents) -> Result<Self, Self::Error> {
+        match raw {
+            RawPatchBodyContents::JSON(ref raw) => {
+                Ok(PatchBodyActionContents::JSON(serde_json::from_str(raw)?))
+            }
+        }
+    }
+}
+
 impl TryFrom<RawPatchBody> for PatchBodyAction {
     type Error = Error;
 
     fn try_from(raw: RawPatchBody) -> Result<Self, Self::Error> {
-        match raw {
-            RawPatchBody::JSON(ref raw) => Ok(PatchBodyAction::JSON(serde_json::from_str(&raw)?)),
-        }
+        Ok(Self {
+            update_content_lengths: !matches!(raw.update_content_length, Some(false)),
+            contents: raw.contents.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<RawReplaceBody> for ReplaceBodyAction {
+    type Error = Error;
+
+    fn try_from(raw: RawReplaceBody) -> Result<Self, Self::Error> {
+        Ok(Self {
+            update_content_lengths: !matches!(raw.update_content_length, Some(false)),
+            contents: match raw.contents {
+                RawReplaceBodyContents::TEXT(text) => text.into_bytes(),
+                RawReplaceBodyContents::BASE64(encoded) => base64::decode(&encoded)?,
+            },
+        })
     }
 }
 
@@ -248,8 +271,8 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
                 .as_ref()
                 .map(|method| method.parse())
                 .transpose()?,
-            body: raw.body,
-            code: raw.code.clone().map(StatusCode::from_u16).transpose()?,
+            body: raw.body.map(TryFrom::try_from).transpose()?,
+            code: raw.code.map(StatusCode::from_u16).transpose()?,
             queries: raw.queries,
             headers: raw
                 .headers

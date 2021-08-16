@@ -1,9 +1,9 @@
 use futures::future::select_all;
 use tokio::signal::unix::{signal, Signal, SignalKind};
 
-pub struct SignalHandler(Vec<Signal>);
+pub struct Signals(Vec<Signal>);
 
-impl SignalHandler {
+impl Signals {
     pub fn from_kinds<'a>(
         kinds: impl 'a + IntoIterator<Item = &'a SignalKind>,
     ) -> anyhow::Result<Self> {
