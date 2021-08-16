@@ -9,8 +9,8 @@ use connector::HttpConnector;
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Response, Server};
-use tokio::net::TcpStream;
+use hyper::{Body, Client, Request, Response};
+use tokio::net::{TcpSocket, TcpStream};
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, instrument};
 
@@ -26,7 +26,10 @@ pub mod connector;
 pub mod listener;
 pub mod socketopt;
 
+use hyper::server::conn::Http;
 pub use listener::TcpIncoming;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::oneshot::Receiver;
 
 #[derive(Debug)]
 pub struct HttpServer {
@@ -34,7 +37,7 @@ pub struct HttpServer {
     handler: Option<ServeHandler>,
 }
 
-struct ServerImpl(Arc<Config>);
+pub struct ServerImpl(Arc<Config>);
 
 #[derive(Debug, Clone)]
 pub struct HttpService {
@@ -58,9 +61,76 @@ impl HttpServer {
     }
 }
 
+impl HttpServer {
+    pub async fn serve_with_signal(
+        mut incoming: TcpIncoming,
+        mut service: ServerImpl,
+        rx: Receiver<()>,
+    ) -> anyhow::Result<()> {
+        tokio::select! {
+            _ = async {
+            loop {
+                if let Some(item) = (&mut incoming).await {
+                    let mut io = item.map_err(|e| anyhow!("new accept error: {}", e.to_string()))?;
+                    let mut connection = service.call(&io).await?;
+                    let cfg = service.0.clone();
+                    tokio::spawn(async move {
+                        loop {
+                            let (r, o) = Http::new()
+                            .error_return(true)
+                            .serve_connection_with_parts(io, connection)
+                            .await;
+                            match r {
+                                Ok(_) => {
+                                    match o {
+                                        Some(p) => {
+                                            io = p.io;
+                                            connection = p.service;
+                                        },
+                                        None => {return;}
+                                    }
+                                }
+                                Err(e) =>
+                                    match o {
+                                        None => {
+                                            return;
+                                        }
+                                        Some(mut p) => {
+                                            if e.is_parse() {
+                                                let socket = TcpSocket::new_v4().unwrap();
+                                                socketopt::set_ip_transparent(&socket).unwrap();
+                                                socketopt::set_mark(&socket, cfg.ignore_mark).unwrap();
+                                                socket.set_reuseaddr(true).unwrap();
+                                                let mut cf = socket.connect(p.io.local_addr().unwrap()).await.unwrap();
+                                                cf.write_all(p.read_buf.as_ref()).await.unwrap();
+                                                tokio::io::copy_bidirectional(&mut p.io, &mut cf).await.unwrap();
+                                                return;
+                                            }
+                                            return;
+                                }
+                            },
+                        }
+                    }
+                });
+            }
+        }
+        Ok::<_,  anyhow::Error>(())
+        } => {Ok(())}
+            _ = rx => {
+                println!("terminating accept loop");
+                Ok(())
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl SuperServer for HttpServer {
-    async fn start(&mut self) -> Result<()> {
+    async fn start(&mut self) -> anyhow::Result<()> {
+        if self.handler.is_some() {
+            return Err(anyhow!("there is already a tproxy server running"));
+        }
+
         if self.handler.is_some() {
             return Err(anyhow!("there is already a tproxy server running"));
         }
@@ -68,18 +138,16 @@ impl SuperServer for HttpServer {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.listen_port));
         let incoming = TcpIncoming::bind(addr, self.config.ignore_mark)?;
         self.config.listen_port = incoming.local_addr().port();
-
         let cfg = self.config.clone();
         spawn_blocking(move || {
             set_all_routes(&cfg).map_err(|err| anyhow!("fail to set routes: {}", err.to_string()))
         })
         .await??;
 
-        let server = Server::builder(incoming).serve(ServerImpl(Arc::new(self.config.clone())));
+        let service = ServerImpl(Arc::new(self.config.clone()));
+
         self.handler = Some(ServeHandler::serve(move |rx| {
-            server.with_graceful_shutdown(async move {
-                rx.await.ok();
-            })
+            HttpServer::serve_with_signal(incoming, service, rx)
         }));
         Ok(())
     }
@@ -119,7 +187,6 @@ impl HttpService {
                     && select_request(self.target.port(), &request, &rule.selector)
             })
             .collect();
-
         for rule in request_rules {
             debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
@@ -135,7 +202,6 @@ impl HttpService {
         }
         parts.authority = Some(self.target.to_string().parse()?);
         *request.uri_mut() = Uri::from_parts(parts)?;
-
         let mut response = match self.client.request(request).await {
             Ok(resp) => resp,
             Err(err) => {
@@ -145,7 +211,6 @@ impl HttpService {
                     .body(Body::empty())?
             }
         };
-
         let response_rules: Vec<_> = self
             .config
             .rules
