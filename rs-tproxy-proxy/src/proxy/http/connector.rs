@@ -61,7 +61,7 @@ pub(crate) async fn resolve(resolver: &mut GaiResolver, dst: &Uri) -> Result<Soc
         .filter(|scheme| **scheme != Scheme::HTTP)
         .is_some()
     {
-        return Err(anyhow!("http connector cannot handle http request"));
+        return Err(anyhow!("https connector cannot handle http request"));
     }
 
     let host = dst

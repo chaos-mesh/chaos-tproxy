@@ -26,7 +26,7 @@ impl TryFrom<RawConfig> for Config {
                     None => None,
                 },
                 safe_mode: match &raw.safe_mode {
-                    Some(b) => b.clone(),
+                    Some(b) => *b,
                     None => false,
                 },
                 interface: raw.interface,
