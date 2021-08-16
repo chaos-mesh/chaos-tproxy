@@ -9,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
 use crate::handler::{
-    Actions, PatchAction, PatchBodyAction, PatchBodyActionContents, ReplaceAction,
-    ReplaceBodyAction, Rule, Selector, Target,
+    Actions, PatchAction, PatchBodyAction, ReplaceAction, Rule, Selector, Target,
 };
 use crate::tproxy::config::Config;
 
@@ -120,41 +119,10 @@ impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
-        let proxy_mark = raw.proxy_mark.unwrap_or(1);
-        let ignore_mark = raw.ignore_mark.unwrap_or(255);
-        let route_table = raw.route_table.unwrap_or(100);
-
-        if proxy_mark == ignore_mark {
-            return Err(anyhow!(
-                "proxy mark cannot be the same with ignore mark: {}={}",
-                proxy_mark,
-                ignore_mark
-            ));
-        }
-
-        if route_table == 0 || route_table > 252 {
-            return Err(anyhow!("invalid route table: table({})", route_table));
-        }
-
         Ok(Self {
-            listen_port: raw.listen_port.unwrap_or(0),
-            proxy_ports: if raw.proxy_ports.is_empty() {
-                None
-            } else {
-                Some(
-                    raw.proxy_ports
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )
-            },
-            proxy_mark,
-            ignore_mark,
-            route_table,
+            proxy_port: raw.listen_port,
             rules: raw
                 .rules
-                .unwrap_or_default()
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, Self::Error>>()?,
