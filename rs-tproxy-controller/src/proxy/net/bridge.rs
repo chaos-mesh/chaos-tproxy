@@ -5,7 +5,7 @@ use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use uuid::Uuid;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {

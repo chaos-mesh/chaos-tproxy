@@ -37,13 +37,11 @@ pub struct ReplaceAction {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ReplaceBodyAction {
-    pub update_content_lengths: bool,
     pub contents: Vec<u8>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct PatchBodyAction {
-    pub update_content_lengths: bool,
     pub contents: PatchBodyActionContents,
 }
 
@@ -85,44 +83,32 @@ pub async fn apply_request_action(
 
         if let Some(body) = &replace.body {
             *request.body_mut() = body.contents.clone().into();
-            if body.update_content_lengths {
-                let header_value = http::HeaderValue::from_str(&body.contents.len().to_string())?;
-                match request.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
-                    Some(v) => *v = header_value,
-                    None => {
-                        request
-                            .headers_mut()
-                            .insert(http::header::CONTENT_LENGTH, header_value);
-                    }
-                }
+            request.headers_mut().remove(http::header::CONTENT_LENGTH);
+        }
+
+        replace_queries(request.uri_mut(), replace.queries.as_ref())?;
+
+        if let Some(hdrs) = &replace.headers {
+            for (key, value) in hdrs {
+                request.headers_mut().insert(key, value.clone());
             }
         }
     }
 
     if let Some(patch) = &actions.patch {
         append_queries(request.uri_mut(), patch.queries.as_ref())?;
-        if let Some(hdrs) = &patch.headers {
-            for (key, value) in hdrs {
-                request.headers_mut().append(key, value.clone());
-            }
-        }
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(&mut request.body_mut()).await?;
             json_patch::merge(&mut data, value);
             let merged = serde_json::to_vec(&data)?;
-            let content_length = merged.len();
             *request.body_mut() = merged.into();
-            if patch_body.update_content_lengths {
-                let header_value = http::HeaderValue::from_str(&content_length.to_string())?;
-                match request.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
-                    Some(v) => *v = header_value,
-                    None => {
-                        request
-                            .headers_mut()
-                            .insert(http::header::CONTENT_LENGTH, header_value);
-                    }
-                }
+            request.headers_mut().remove(http::header::CONTENT_LENGTH);
+        }
+
+        if let Some(hdrs) = &patch.headers {
+            for (key, value) in hdrs {
+                request.headers_mut().append(key, value.clone());
             }
         }
     }
@@ -217,17 +203,7 @@ pub async fn apply_response_action(
 
         if let Some(body) = &replace.body {
             *response.body_mut() = body.contents.clone().into();
-            if body.update_content_lengths {
-                let header_value = http::HeaderValue::from_str(&body.contents.len().to_string())?;
-                match response.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
-                    Some(v) => *v = header_value,
-                    None => {
-                        response
-                            .headers_mut()
-                            .insert(http::header::CONTENT_LENGTH, header_value);
-                    }
-                }
-            }
+            response.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
         if let Some(hdrs) = &replace.headers {
@@ -238,28 +214,17 @@ pub async fn apply_response_action(
     }
 
     if let Some(patch) = &actions.patch {
-        if let Some(hdrs) = &patch.headers {
-            for (key, value) in hdrs {
-                response.headers_mut().append(key, value.clone());
-            }
-        }
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(&mut response.body_mut()).await?;
             json_patch::merge(&mut data, value);
             let merged = serde_json::to_vec(&data)?;
-            let content_length = merged.len();
             *response.body_mut() = merged.into();
-            if patch_body.update_content_lengths {
-                let header_value = http::HeaderValue::from_str(&content_length.to_string())?;
-                match response.headers_mut().get_mut(http::header::CONTENT_LENGTH) {
-                    Some(v) => *v = header_value,
-                    None => {
-                        response
-                            .headers_mut()
-                            .insert(http::header::CONTENT_LENGTH, header_value);
-                    }
-                }
+            response.headers_mut().remove(http::header::CONTENT_LENGTH);
+        }
+        if let Some(hdrs) = &patch.headers {
+            for (key, value) in hdrs {
+                response.headers_mut().append(key, value.clone());
             }
         }
     }

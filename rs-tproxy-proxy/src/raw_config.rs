@@ -71,9 +71,6 @@ pub struct RawPatchAction {
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RawPatchBody {
-    // if update content length after patching, true by default
-    pub update_content_length: Option<bool>,
-
     // the contents of body patch
     pub contents: RawPatchBodyContents,
 }
@@ -97,9 +94,6 @@ pub struct RawReplaceAction {
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RawReplaceBody {
-    // if update content length after replacing, true by default
-    pub update_content_length: Option<bool>,
-
     // the contents of body patch
     pub contents: RawReplaceBodyContents,
 }
@@ -112,6 +106,23 @@ pub enum RawReplaceBodyContents {
 
     // replace body with base64 encoded data
     BASE64(String),
+}
+
+pub(crate) fn try_from_hash_map(t :Option<HashMap<String, String>>) -> Result<Option<HeaderMap>, anyhow::Error> {
+    t.as_ref()
+        .map(|headers| -> Result<_, anyhow::Error> {
+            headers.try_into().map_err(|e:http::Error| -> anyhow::Error{ anyhow!(e)})
+        }).transpose()
+}
+
+pub(crate) fn try_from_vec(t :Option<Vec<(String, String)>>) -> Result<Option<HeaderMap>, anyhow::Error> {
+    t.map(|headers| -> Result<_, anyhow::Error> {
+        let mut map = HeaderMap::new();
+        for (key, value) in headers {
+            map.insert(key.parse::<HeaderName>()?, value.parse()?);
+        }
+        Ok(map)
+    }).transpose()
 }
 
 impl TryFrom<RawConfig> for Config {
@@ -162,29 +173,10 @@ impl TryFrom<RawSelector> for Selector {
                 .as_ref()
                 .map(|method| method.parse())
                 .transpose()?,
-            request_headers: raw
-                .request_headers
-                .as_ref()
-                .map(|headers| -> Result<_, Self::Error> {
-                    let mut map = HeaderMap::new();
-                    for (key, value) in headers {
-                        map.insert(key.parse::<HeaderName>()?, value.parse()?);
-                    }
-                    Ok(map)
-                })
-                .transpose()?,
+            request_headers:
+                try_from_hash_map(raw.request_headers)?,
             code: raw.code.map(StatusCode::from_u16).transpose()?,
-            response_headers: raw
-                .response_headers
-                .as_ref()
-                .map(|headers| -> Result<_, Self::Error> {
-                    let mut map = HeaderMap::new();
-                    for (key, value) in headers {
-                        map.insert(key.parse::<HeaderName>()?, value.parse()?);
-                    }
-                    Ok(map)
-                })
-                .transpose()?,
+            response_headers: try_from_hash_map(raw.response_headers)?,
         })
     }
 }
@@ -209,16 +201,7 @@ impl TryFrom<RawPatchAction> for PatchAction {
         Ok(Self {
             body: raw.body.map(TryInto::try_into).transpose()?,
             queries: raw.queries.map(serde_urlencoded::to_string).transpose()?,
-            headers: raw
-                .headers
-                .map(|headers| -> Result<_, Self::Error> {
-                    let mut map = HeaderMap::new();
-                    for (key, value) in headers {
-                        map.insert(key.parse::<HeaderName>()?, value.parse()?);
-                    }
-                    Ok(map)
-                })
-                .transpose()?,
+            headers: try_from_vec(raw.headers)?,
         })
     }
 }
@@ -240,7 +223,6 @@ impl TryFrom<RawPatchBody> for PatchBodyAction {
 
     fn try_from(raw: RawPatchBody) -> Result<Self, Self::Error> {
         Ok(Self {
-            update_content_lengths: !matches!(raw.update_content_length, Some(false)),
             contents: raw.contents.try_into()?,
         })
     }
@@ -251,7 +233,6 @@ impl TryFrom<RawReplaceBody> for ReplaceBodyAction {
 
     fn try_from(raw: RawReplaceBody) -> Result<Self, Self::Error> {
         Ok(Self {
-            update_content_lengths: !matches!(raw.update_content_length, Some(false)),
             contents: match raw.contents {
                 RawReplaceBodyContents::TEXT(text) => text.into_bytes(),
                 RawReplaceBodyContents::BASE64(encoded) => base64::decode(&encoded)?,
@@ -274,17 +255,7 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
             body: raw.body.map(TryFrom::try_from).transpose()?,
             code: raw.code.map(StatusCode::from_u16).transpose()?,
             queries: raw.queries,
-            headers: raw
-                .headers
-                .as_ref()
-                .map(|headers| -> Result<_, Self::Error> {
-                    let mut map = HeaderMap::new();
-                    for (key, value) in headers {
-                        map.insert(key.parse::<HeaderName>()?, value.parse()?);
-                    }
-                    Ok(map)
-                })
-                .transpose()?,
+            headers: try_from_hash_map(raw.headers)?,
         })
     }
 }
