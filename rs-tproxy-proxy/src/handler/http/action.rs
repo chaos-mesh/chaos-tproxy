@@ -232,3 +232,46 @@ pub async fn apply_response_action(
     debug!("action applied: {:?}", response);
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::handler::http::action::{append_queries, replace_path};
+
+    #[test]
+    fn test_append_queries() {
+        let mut uri = http::Uri::builder()
+            .scheme("https")
+            .authority("hyper.rs")
+            .path_and_query("/hhh?").build().unwrap();
+
+        append_queries(&mut uri,Some("a=b")).unwrap();
+        assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?&a=b");
+
+        append_queries(&mut uri,Some("a=b")).unwrap();
+        assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?&a=b&a=b");
+    }
+
+    #[test]
+    fn test_replace_path() {
+        let mut uri = http::Uri::builder()
+            .scheme("https")
+            .authority("hyper.rs")
+            .path_and_query("/hhh/").build().unwrap();
+
+        replace_path(&mut uri,Some("hhh")).unwrap();
+        assert_eq!(&uri.to_string(), "https://hyper.rshhh");
+
+        let mut uri = http::Uri::builder()
+            .scheme("https")
+            .authority("hyper.rs")
+            .path_and_query("/ccc?a=b").build().unwrap();
+
+        replace_path(&mut uri,Some("/hhh")).unwrap();
+        assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?a=b");
+    }
+
+    #[test]
+    fn test_replace_queries() {
+        //todo
+    }
+}

@@ -38,8 +38,18 @@ pub enum RawTarget {
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RawSelector {
     pub port: Option<u16>,
-
-    // [wildcard matches](https://www.wikiwand.com/en/Matching_wildcards)
+    /// Mathc path of `Uri` with wildcard matches.
+    ///
+    /// Both relative and absolute URIs contain a path component, though it
+    /// might be the empty string. The path component is **case sensitive**.
+    ///
+    /// ```notrust
+    /// abc://username:password@example.com:123/path/data?key=value&key2=value2#fragid1
+    ///                                        |--------|
+    ///                                             |
+    ///                                           path
+    /// ```
+    /// [wildcard matches](https://www.wikiwand.com/en/Matching_wildcards)
     pub path: Option<String>,
     pub method: Option<String>,
     pub code: Option<u16>,
