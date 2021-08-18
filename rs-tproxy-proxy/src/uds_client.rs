@@ -1,4 +1,3 @@
-use std::io;
 use std::path::PathBuf;
 
 use tokio::io::AsyncReadExt;
@@ -20,31 +19,24 @@ impl UdsDataClient {
     ) -> anyhow::Result<T> {
         tracing::debug!("try connect path : {:?}", &self.path);
         let mut stream = UnixStream::connect(self.path.clone()).await?;
-        loop {
-            stream.readable().await?;
+        return match stream.read_to_end(buf).await {
+            Ok(_) => {
+                tracing::debug!("Read data successfully.");
 
-            match stream.read_to_end(buf).await {
-                Ok(_) => {
-                    tracing::debug!("Read data successfully.");
-
-                    return match bincode::deserialize(buf.as_slice()) {
-                        Ok(o) => {
-                            tracing::debug!("Deserialize data successfully.");
-                            Ok(o)
-                        }
-                        Err(e) => {
-                            tracing::debug!("Deserialize data failed.");
-                            Err(anyhow::anyhow!("{}", e))
-                        }
-                    };
+                match bincode::deserialize(buf.as_slice()) {
+                    Ok(o) => {
+                        tracing::debug!("Deserialize data successfully.");
+                        Ok(o)
+                    }
+                    Err(e) => {
+                        tracing::debug!("Deserialize data failed.");
+                        Err(anyhow::anyhow!("{}", e))
+                    }
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    continue;
-                }
-                Err(e) => {
-                    tracing::debug!("Read data failed with err {:?}.", e);
-                    return Err(anyhow::anyhow!("{}", e));
-                }
+            }
+            Err(e) => {
+                tracing::debug!("Read data failed with err {:?}.", e);
+                Err(anyhow::anyhow!("{}", e))
             }
         }
     }

@@ -1,7 +1,7 @@
-use std::io;
 use std::path::PathBuf;
 
 use tokio::net::UnixListener;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone)]
 pub struct UdsDataServer<T> {
@@ -29,27 +29,23 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
         tracing::debug!("Uds listener listening on {:?}.", &self.path);
         loop {
             match (&listener).accept().await {
-                Ok((stream, addr)) => {
+                Ok((mut stream, addr)) => {
                     let buf = bincode::serialize(&self.data)?;
-                    loop {
-                        stream.writable().await?;
-                        match stream.try_write(buf.as_slice()) {
+                    tokio::spawn(async move {
+                        return match stream.write_all(buf.as_slice()).await {
                             Ok(_) => {
                                 tracing::debug!("Config successfully transferred.");
-                                return Ok(());
-                            }
-                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                                continue;
+                                Ok(())
                             }
                             Err(e) => {
                                 tracing::debug!(
-                                    "error : try_write raw config to {:?} failed",
+                                    "error : write_all raw config to {:?} failed",
                                     addr
                                 );
-                                return Err(anyhow::anyhow!("{}", e));
+                                Err(anyhow::anyhow!("{}", e))
                             }
                         }
-                    }
+                    });
                 }
                 Err(e) => {
                     tracing::debug!("error : accept connection failed");
