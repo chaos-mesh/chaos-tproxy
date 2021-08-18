@@ -20,6 +20,11 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
         Ok(listener)
     }
 
+    pub fn clear(&self) -> anyhow::Result<()> {
+        std::fs::remove_file(&self.path)?;
+        Ok(())
+    }
+
     pub async fn listen(&self, listener: UnixListener) -> anyhow::Result<()> {
         tracing::debug!("Uds listener listening on {:?}.", &self.path);
         loop {

@@ -1916,6 +1916,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "tests"
+version = "0.1.0"
+dependencies = [
+ "actix-http",
+ "actix-server",
+ "anyhow",
+ "async-trait",
+ "bincode",
+ "bytes",
+ "cfg-if",
+ "clap",
+ "default-net",
+ "futures",
+ "futures-util",
+ "http",
+ "humantime-serde",
+ "hyper 0.14.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "iptables",
+ "json-patch",
+ "libc",
+ "paw",
+ "pnet 0.28.0",
+ "rs-tproxy-controller",
+ "rs-tproxy-proxy",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_yaml",
+ "socket2 0.3.19",
+ "structopt",
+ "system_gateway",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+ "tracing-subscriber",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,15 +1,11 @@
 [package]
-name = "rs-tproxy-controller"
+name = "tests"
 version = "0.1.0"
 edition = "2018"
 
-[[bin]]
-name = "rs-tproxy-controller-bin"
-path = "src/main.rs"
-
-[lib]
-name = "rs_tproxy_controller_lib"
-path = "src/lib.rs"
+[[test]]
+name = "integration"
+path = "./integrations/mod.rs"
 
 [dependencies]
 anyhow = "1.0"
@@ -44,6 +40,7 @@ tempfile = "3.2.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 futures-util = { version = "0.3.7", default-features = false, features = ["alloc", "sink"] }
 rs-tproxy-proxy = {path = "../rs-tproxy-proxy"}
+rs-tproxy-controller = {path = "../rs-tproxy-controller"}
 pnet = "0.28.0"
 default-net = "0.2.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
