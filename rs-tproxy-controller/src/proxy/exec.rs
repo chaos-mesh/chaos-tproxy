@@ -90,7 +90,7 @@ impl Proxy {
         )?;
 
         let mut proxy = Command::new("ip");
-        (&mut proxy)
+        proxy
             .arg("netns")
             .arg("exec")
             .arg(&self.net_env.netns)
