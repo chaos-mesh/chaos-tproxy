@@ -38,7 +38,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
                                 Ok(())
                             }
                             Err(e) => {
-                                tracing::info!(
+                                tracing::error!(
                                     "error : write_all raw config to {:?} failed",
                                     addr
                                 );
@@ -48,7 +48,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
                     });
                 }
                 Err(e) => {
-                    tracing::info!("error : accept connection failed");
+                    tracing::error!("error : accept connection failed");
                     return Err(anyhow::anyhow!("{}", e));
                 }
             }
