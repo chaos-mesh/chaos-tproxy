@@ -13,7 +13,7 @@ clap = "2.33.3"
 futures = "0.3.10"
 http = "0.2.3"
 humantime-serde = "1.0"
-hyper = {version = "0.14.4", features = ["runtime", "client", "server", "http1", "http2", "stream"]}
+hyper = {git = "https://github.com/Andrewmatilde/hyper.git", features = ["runtime", "client", "server", "http1", "http2", "stream", "error_return"]}
 iptables = "0.4"
 libc = {version = "0.2.81", features = ["std"]}
 paw = "1.0"
@@ -31,8 +31,6 @@ tracing-futures = "0.2"
 tracing-subscriber = "0.2"
 json-patch = "0.2.6"
 async-trait = "0.1.50"
-actix-server = "2.0.0-beta.5"
-actix-http = "3.0.0-beta.8"
 bytes = "1.0.1"
 cfg-if = "1.0.0"
 bincode = "1.3.3"
@@ -44,3 +42,5 @@ rs-tproxy-controller = {path = "../rs-tproxy-controller"}
 pnet = "0.28.0"
 default-net = "0.2.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
+actix-web = "3.3.2"
+actix-rt = "2.2.0"
