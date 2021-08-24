@@ -18,7 +18,16 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.7'
+          architecture: 'x64'
       - name: Build
         run: cargo build --verbose
       - name: Test
         run: cargo test
+      - name: Integration test
+        run: |
+          cd ./tests/
+          cargo test
+          python exec.py
