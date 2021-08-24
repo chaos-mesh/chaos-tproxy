@@ -13,13 +13,13 @@ pub fn set_net(
     net_env.setenv_bridge()?;
     let port = listen_port.to_string();
     if let Some(ref proxy_ports) = proxy_ports {
-        execute_all(set_iptables(&net_env, Some(proxy_ports), &port))?;
+        execute_all(set_iptables(net_env, Some(proxy_ports), &port))?;
     } else {
-        execute_all(set_iptables(&net_env, None, &port))?;
+        execute_all(set_iptables(net_env, None, &port))?;
     }
 
     if safe {
-        execute_all(set_iptables_safe(&net_env))?;
+        execute_all(set_iptables_safe(net_env))?;
     }
 
     Ok(())

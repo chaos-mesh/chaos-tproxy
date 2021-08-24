@@ -91,7 +91,7 @@ impl NetEnv {
         let net_domain =Ipv4Addr::from(u32::from(net.ip())&u32::from(net.mask())).to_string() + "/" + &net.prefix().to_string();
         let cmdvv = vec![
             bash_c(&save),
-            bash_c(&save_dns),
+            bash_c(save_dns),
             ip_netns_add(&self.netns),
             ip_link_add_bridge(&self.bridge1),
             ip_link_add_veth_peer(&self.veth1, None, &self.veth2, Some(&self.netns)),
@@ -172,7 +172,7 @@ impl NetEnv {
                     "100",
                 ],
             ),
-            bash_c(&restore_dns),
+            bash_c(restore_dns),
         ];
         execute_all(cmdvv)?;
         Ok(())
@@ -186,7 +186,7 @@ impl NetEnv {
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
-            bash_c(&restore_dns),
+            bash_c(restore_dns),
             bash_c(&restore),
             bash_c(&remove_store),
         ];
