@@ -47,4 +47,4 @@ system_gateway = {git="https://github.com/aruntomar/system_gateway"}
 base64 = "0.13.0"
 
 [dev-dependencies]
-test-case = "1.1"
+test-case = "1.2"
