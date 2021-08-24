@@ -18,6 +18,8 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+      - name: Lint
+        run: cargo clippy --all-targets
       - name: Build
         run: cargo build --verbose
       - name: Test
