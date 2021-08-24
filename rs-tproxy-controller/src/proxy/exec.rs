@@ -57,7 +57,7 @@ impl Proxy {
         let uds_server = UdsDataServer::new(config.clone(), self.opt.ipc_path.clone());
         let listener = uds_server.bind()?;
 
-        let server = uds_server.clone();
+        let server = uds_server;
         tokio::spawn(async move {
             let _ = server
                 .listen(listener)
@@ -94,7 +94,7 @@ impl Proxy {
             .arg("netns")
             .arg("exec")
             .arg(&self.net_env.netns)
-            .arg(exe_path.clone())
+            .arg(exe_path)
             .arg(format!(
                 "-{}",
                 String::from_utf8(vec![b'v'; self.opt.verbose as usize]).unwrap()
@@ -130,7 +130,7 @@ impl Proxy {
             if let Some(sender) = self.sender.take() {
                 let _ = sender.send(());
             };
-            &self.net_env.clear_bridge();
+            let _ = self.net_env.clear_bridge();
             let _ = task.await?;
         }
         Ok(())

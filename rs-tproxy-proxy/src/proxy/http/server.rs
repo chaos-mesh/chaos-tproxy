@@ -122,7 +122,7 @@ impl HttpService {
         Self {
             remote: addr_remote,
             target: addr_target,
-            config: config.clone(),
+            config,
         }
     }
 
@@ -198,6 +198,7 @@ impl HttpService {
 impl Service<Request<Body>> for HttpService {
     type Response = Response<Body>;
     type Error = anyhow::Error;
+    #[allow(clippy::type_complexity)]
     type Future =
         Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
 

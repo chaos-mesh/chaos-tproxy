@@ -37,6 +37,7 @@ impl HttpConnector {
 impl Service<Uri> for HttpConnector {
     type Response = TcpStream;
     type Error = Error;
+    #[allow(clippy::type_complexity)]
     type Future =
         Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
 

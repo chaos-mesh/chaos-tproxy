@@ -16,15 +16,11 @@ impl TryFrom<RawConfig> for Config {
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(Config {
             proxy_config: ProxyRawConfig {
-                proxy_ports: match raw.proxy_ports.clone() {
-                    Some(c) => Some(
-                        c.iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(","),
-                    ),
-                    None => None,
-                },
+                proxy_ports: raw.proxy_ports.clone().map(
+                    |c| c.iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",")),
                 safe_mode: match &raw.safe_mode {
                     Some(b) => *b,
                     None => false,

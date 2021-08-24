@@ -44,7 +44,7 @@ impl NetEnv {
         let veth2 = key.clone() + "v2";
         let bridge2 = key.clone() + "b2";
         let veth3 = key.clone() + "v3";
-        let veth4 = key.clone() + "v4";
+        let veth4 = key + "v4";
         let ip = get_ipv4(&device).unwrap();
         Self {
             netns,
@@ -87,8 +87,8 @@ impl NetEnv {
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
         let net: Ipv4Network = self.ip.parse().unwrap();
-        let net_ip32 = net.clone().ip().to_string() + "/32";
-        let net_domain =Ipv4Addr::from(u32::from(net.clone().ip())&u32::from(net.clone().mask())).to_string() + "/" + &net.prefix().to_string();
+        let net_ip32 = net.ip().to_string() + "/32";
+        let net_domain =Ipv4Addr::from(u32::from(net.ip())&u32::from(net.mask())).to_string() + "/" + &net.prefix().to_string();
         let cmdvv = vec![
             bash_c(&save),
             bash_c(&save_dns),
@@ -195,6 +195,12 @@ impl NetEnv {
     }
 }
 
+impl Default for NetEnv {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn arp_set<'a>(ip: &'a str, mac: &'a str, device: &'a str) -> Vec<&'a str> {
     vec!["arp", "-s", ip, mac, "-i", device]
 }
@@ -284,7 +290,7 @@ pub fn try_get_default_gateway_ip() -> Result<String> {
                     Ok(ip) => return Ok(ip),
                     Err(e) => tracing::error!("{}", e),
                 }
-                count = count - 1;
+                count -= 1;
             }
         }
     };
@@ -293,11 +299,8 @@ pub fn try_get_default_gateway_ip() -> Result<String> {
 
 pub fn get_ipv4(device: &NetworkInterface) -> Option<String> {
     for ip in &device.ips {
-        match ip {
-            IpNetwork::V4(ipv4) => {
-                return Some(ipv4.ip().to_string() + "/" + &ipv4.prefix().to_string());
-            }
-            _ => {}
+        if let IpNetwork::V4(ipv4) = ip {
+            return Some(ipv4.ip().to_string() + "/" + &ipv4.prefix().to_string());
         }
     }
     None

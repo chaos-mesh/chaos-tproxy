@@ -93,7 +93,7 @@ impl ConfigService {
             .await?;
 
         let raw_config: RawConfig = serde_json::from_slice(&request_data)?;
-        return raw_config.try_into();
+        raw_config.try_into()
     }
 
     #[instrument]
@@ -124,6 +124,7 @@ impl ConfigService {
 impl Service<Request<Body>> for ConfigService {
     type Response = Response<Body>;
     type Error = anyhow::Error;
+    #[allow(clippy::type_complexity)]
     type Future =
         Pin<Box<dyn 'static + Send + Future<Output = Result<Self::Response, Self::Error>>>>;
 

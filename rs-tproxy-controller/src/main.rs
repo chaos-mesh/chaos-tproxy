@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         proxy_main(opt.ipc_path.clone().unwrap()).await?;
     }
 
-    if let Some(_) = opt.input {
+    if opt.input.is_some() {
         let cfg = get_config_from_opt(&opt).await?;
         let mut proxy = Proxy::new(opt.verbose);
         proxy.reload(cfg.proxy_config).await?;
