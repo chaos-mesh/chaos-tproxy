@@ -1,5 +1,5 @@
 import http
-from http.server import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 
 
@@ -43,7 +43,5 @@ class HttpHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    from http.server import HTTPServer
-
     server = HTTPServer(('localhost', 8080), HttpHandler)
     server.serve_forever()

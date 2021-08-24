@@ -3,7 +3,8 @@ use rs_tproxy_proxy::handler::http::action::{apply_request_action, Actions, Repl
 use http::HeaderMap;
 use http::header::CONTENT_LENGTH;
 
-//todo :need configure ci
+#[tokio::test]
+#[ignore]
 async fn test_http_content_length_replace() {
     let client = Client::new();
     let data = serde_json::to_string("Hallo").unwrap();
