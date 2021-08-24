@@ -33,4 +33,4 @@ async-trait = "0.1.50"
 base64 = "0.13"
 
 [dev-dependencies]
-test-case = "1.1"
+test-case = "1.2"
