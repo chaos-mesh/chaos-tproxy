@@ -42,5 +42,3 @@ rs-tproxy-controller = {path = "../rs-tproxy-controller"}
 pnet = "0.28.0"
 default-net = "0.2.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
-actix-web = "3.3.2"
-actix-rt = "2.2.0"
