@@ -15,7 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
-use tracing::{debug, error, Level};
+use tracing::{debug, error};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -70,13 +70,8 @@ pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
+    let log_key = format!("{{ peer={},local={} }}",stream.peer_addr()?,stream.local_addr()?);
     loop {
-        let span = tracing::span!(
-            Level::DEBUG,
-            "stream",
-            peer = ?stream.peer_addr()?,
-            local = ?stream.local_addr()?);
-        let _enter = span.enter();
         let (r, parts) = Http::new()
             .error_return(true)
             .serve_connection_with_parts(stream, service.clone())
@@ -90,13 +85,15 @@ pub async fn serve_http_with_error_return(
             },
             Err(e) => {
                 return if e.is_parse() {
-                    tracing::debug!("turn into tcp transfer");
+                    tracing::debug!("{}:Turn into tcp transfer.", log_key);
                     match parts {
                         Some(mut part) => {
                             let addr_target = part.io.local_addr()?;
                             let addr_local = part.io.peer_addr()?;
                             let socket = TransparentSocket::bind(addr_local)?;
+                            tracing::debug!("{}:Bind local addrs.", log_key);
                             let mut client_stream = socket.connect(addr_target).await?;
+                            tracing::debug!("{}:Connected target addrs.", log_key);
                             client_stream
                                 .write_all(part.read_buf.as_ref())
                                 .await
@@ -108,7 +105,7 @@ pub async fn serve_http_with_error_return(
                     }
                 } else {
                     if !e.to_string().contains("error shutting down connection") {
-                        error!("fail to serve http: {}", e);
+                        error!("{}:fail to serve http: {}", log_key, e);
                     }
                     Ok(())
                 }
@@ -135,7 +132,8 @@ impl HttpService {
     }
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        debug!("Proxy is handling http request");
+        let log_key = format!("{{remote = {}, target = {} }}",self.remote,self.target);
+        debug!("{} : Proxy is handling http request",log_key);
         let request_rules: Vec<_> = self
             .config
             .rules
@@ -147,7 +145,7 @@ impl HttpService {
             .collect();
 
         for rule in request_rules {
-            debug!("request matched, rule({:?})", rule);
+            debug!("{} : request matched, rule({:?})", log_key, rule);
             request = apply_request_action(request, &rule.actions).await?;
         }
 
@@ -168,10 +166,11 @@ impl HttpService {
         *request.uri_mut() = Uri::from_parts(parts)?;
 
         let client = Client::builder().build(HttpConnector::new(self.remote));
+
         let mut response = match client.request(request).await {
             Ok(resp) => resp,
             Err(err) => {
-                error!("fail to forward request: {}", err);
+                error!("{} : fail to forward request: {}", log_key, err);
                 Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .body(Body::empty())?
@@ -196,7 +195,7 @@ impl HttpService {
             .collect();
 
         for rule in response_rules {
-            debug!("response matched");
+            debug!("{} : response matched",log_key);
             response = apply_response_action(response, &rule.actions).await?;
         }
         Ok(response)
