@@ -53,7 +53,7 @@ impl Proxy {
     }
 
     pub async fn exec(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
-        tracing::trace!("transferring proxy raw config : {:?}", &config);
+        tracing::info!(target : "transferring proxy raw config ", "{:?}" ,&config);
         let uds_server = UdsDataServer::new(config.clone(), self.opt.ipc_path.clone());
         let listener = uds_server.bind()?;
 
@@ -76,6 +76,7 @@ impl Proxy {
             Ok(path) => path,
         };
 
+        tracing::info!(target: "Network device name", "{}", self.net_env.device.clone());
         match config.interface {
             None => {}
             Some(interface) => {
@@ -104,8 +105,12 @@ impl Proxy {
 
         let rx = self.rx.take().unwrap();
         self.task = Some(tokio::spawn(async move {
+            tracing::info!(target : "Proxy executor", "Starting proxy.");
             let mut process = match proxy.stdin(Stdio::piped()).spawn() {
-                Ok(process) => process,
+                Ok(process) => {
+                    tracing::info!(target : "Proxy executor", "Proxy is running.");
+                    process
+                },
                 Err(e) => {
                     return Err(anyhow::anyhow!("failed to exec sub proxy : {:?}", e));
                 }
@@ -113,7 +118,7 @@ impl Proxy {
             select! {
                 _ = process.wait() => {}
                 _ = rx => {
-                    tracing::trace!("killing sub process");
+                    tracing::info!(target : "Proxy executor","killing sub process");
                     let id = process.id().unwrap() as i32;
                     unsafe {
                         libc::kill(id, libc::SIGINT);

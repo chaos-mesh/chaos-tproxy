@@ -15,7 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
-use tracing::{debug, error};
+use tracing::{debug, error, Level};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -38,14 +38,16 @@ impl HttpServer {
     pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
         let listener = TcpListener::bind(addr)?;
+        tracing::info!(target : "Proxy", "Listening");
         select! {
             _ = async {
                 loop {
                     let stream = listener.accept().await?;
                     let addr_remote = stream.peer_addr()?;
                     let addr_local = stream.local_addr()?;
+                    tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}", addr_remote, addr_local);
                     let config = Arc::new(self.config.clone());
-                    let service = HttpService::new(addr_remote,addr_local, config);
+                    let service = HttpService::new(addr_remote, addr_local, config);
                     tokio::spawn(async move {
                         match serve_http_with_error_return(stream, &service).await{
                             Ok(_)=>{}
@@ -69,11 +71,16 @@ pub async fn serve_http_with_error_return(
     service: &HttpService,
 ) -> Result<()> {
     loop {
+        let span = tracing::span!(
+            Level::DEBUG,
+            "stream",
+            peer = ?stream.peer_addr()?,
+            local = ?stream.local_addr()?);
+        let _enter = span.enter();
         let (r, parts) = Http::new()
             .error_return(true)
             .serve_connection_with_parts(stream, service.clone())
             .await;
-
         let part_stream = match r {
             Ok(()) => match parts {
                 Some(part) => part.io,
@@ -90,7 +97,6 @@ pub async fn serve_http_with_error_return(
                             let addr_local = part.io.peer_addr()?;
                             let socket = TransparentSocket::bind(addr_local)?;
                             let mut client_stream = socket.connect(addr_target).await?;
-                            println!("{:?}", part.read_buf.as_ref());
                             client_stream
                                 .write_all(part.read_buf.as_ref())
                                 .await
@@ -101,7 +107,9 @@ pub async fn serve_http_with_error_return(
                         None => Ok(()),
                     }
                 } else {
-                    error!("fail to serve http: {}", e);
+                    if !e.to_string().contains("error shutting down connection") {
+                        error!("fail to serve http: {}", e);
+                    }
                     Ok(())
                 }
             }

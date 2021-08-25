@@ -27,8 +27,9 @@ pub struct NetEnv {
 impl NetEnv {
     pub fn new() -> Self {
         let interfaces = pnet::datalink::interfaces();
-        let key = loop {
+        let prefix = loop {
             let key = Uuid::new_v4().to_string()[0..13].to_string();
+            // For avoid there are any interface named start with key.
             if interfaces
                 .iter()
                 .all(|i| !i.name.as_str().starts_with(&key))
@@ -38,13 +39,13 @@ impl NetEnv {
         };
         let ip_route_store = Uuid::new_v4().to_string();
         let device = get_default_interface().unwrap();
-        let netns = key.clone() + "ns";
-        let bridge1 = key.clone() + "b1";
-        let veth1 = key.clone() + "v1";
-        let veth2 = key.clone() + "v2";
-        let bridge2 = key.clone() + "b2";
-        let veth3 = key.clone() + "v3";
-        let veth4 = key + "v4";
+        let netns = prefix.clone() + "ns";
+        let bridge1 = prefix.clone() + "b1";
+        let veth1 = prefix.clone() + "v1";
+        let veth2 = prefix.clone() + "v2";
+        let bridge2 = prefix.clone() + "b2";
+        let veth3 = prefix.clone() + "v3";
+        let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
         Self {
             netns,

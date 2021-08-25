@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use tokio::signal::unix::SignalKind;
 use tokio::sync::oneshot::channel;
-use tracing::trace;
 
 use crate::proxy::http::server::HttpServer;
 use crate::raw_config::RawConfig;
@@ -17,7 +16,7 @@ pub mod signal;
 pub mod uds_client;
 
 pub async fn proxy_main(path: PathBuf) -> anyhow::Result<()> {
-    trace!("proxy get uds path :{:?}", path);
+    tracing::info!(target: "Proxy get uds path", "{:?}", path);
     let client = UdsDataClient::new(path);
     let mut buf: Vec<u8> = vec![];
     let raw_config: RawConfig = client.read_into(&mut buf).await?;
@@ -25,6 +24,7 @@ pub async fn proxy_main(path: PathBuf) -> anyhow::Result<()> {
     let (sender, rx) = channel();
 
     let spawn = tokio::spawn(async move {
+        tracing::info!(target: "Proxy", "Starting");
         let mut server = HttpServer::new(config);
         server.serve(rx).await.unwrap();
     });

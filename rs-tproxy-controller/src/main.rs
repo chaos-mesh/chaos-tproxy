@@ -31,6 +31,7 @@ async fn main() -> anyhow::Result<()> {
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         proxy.stop().await?;
+        return Ok(());
     }
 
     if opt.interactive {
