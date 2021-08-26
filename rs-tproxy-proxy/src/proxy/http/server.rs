@@ -105,7 +105,7 @@ pub async fn serve_http_with_error_return(
                     }
                 } else {
                     if !e.to_string().contains("error shutting down connection") {
-                        error!("{}:fail to serve http: {}", log_key, e);
+                        tracing::info!("{}:fail to serve http: {}", log_key, e);
                     }
                     Ok(())
                 }
