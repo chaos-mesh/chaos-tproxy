@@ -70,7 +70,11 @@ pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
-    let log_key = format!("{{ peer={},local={} }}",stream.peer_addr()?,stream.local_addr()?);
+    let log_key = format!(
+        "{{ peer={},local={} }}",
+        stream.peer_addr()?,
+        stream.local_addr()?
+    );
     loop {
         let (r, parts) = Http::new()
             .error_return(true)
@@ -132,8 +136,8 @@ impl HttpService {
     }
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        let log_key = format!("{{remote = {}, target = {} }}",self.remote,self.target);
-        debug!("{} : Proxy is handling http request",log_key);
+        let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
+        debug!("{} : Proxy is handling http request", log_key);
         let request_rules: Vec<_> = self
             .config
             .rules
@@ -195,7 +199,7 @@ impl HttpService {
             .collect();
 
         for rule in response_rules {
-            debug!("{} : response matched",log_key);
+            debug!("{} : response matched", log_key);
             response = apply_response_action(response, &rule.actions).await?;
         }
         Ok(response)

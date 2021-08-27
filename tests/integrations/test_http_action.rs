@@ -1,7 +1,7 @@
-use hyper::{Client, Request, Method, Body};
-use rs_tproxy_proxy::handler::http::action::{apply_request_action, Actions, ReplaceAction};
-use http::HeaderMap;
 use http::header::CONTENT_LENGTH;
+use http::HeaderMap;
+use hyper::{Body, Client, Method, Request};
+use rs_tproxy_proxy::handler::http::action::{apply_request_action, Actions, ReplaceAction};
 
 #[tokio::test]
 #[ignore]
@@ -11,10 +11,14 @@ async fn test_http_content_length_replace() {
     let req = Request::builder()
         .method(Method::POST)
         .uri("http://127.0.0.1:8080/set-body")
-        .body(Body::from(data.clone())).unwrap();
+        .body(Body::from(data.clone()))
+        .unwrap();
 
     let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_LENGTH, (data.len() - 2).to_string().parse().unwrap());
+    headers.insert(
+        CONTENT_LENGTH,
+        (data.len() - 2).to_string().parse().unwrap(),
+    );
     let actions = Actions {
         abort: false,
         delay: None,
@@ -24,7 +28,7 @@ async fn test_http_content_length_replace() {
             body: None,
             code: None,
             queries: None,
-            headers: Some(headers)
+            headers: Some(headers),
         }),
         patch: None,
     };

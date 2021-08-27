@@ -16,11 +16,12 @@ impl TryFrom<RawConfig> for Config {
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(Config {
             proxy_config: ProxyRawConfig {
-                proxy_ports: raw.proxy_ports.clone().map(
-                    |c| c.iter()
+                proxy_ports: raw.proxy_ports.clone().map(|c| {
+                    c.iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
-                        .join(",")),
+                        .join(",")
+                }),
                 safe_mode: match &raw.safe_mode {
                     Some(b) => *b,
                     None => false,
@@ -56,10 +57,10 @@ pub(crate) fn get_free_port(ports: Option<Vec<u16>>) -> anyhow::Result<u16> {
 
 #[cfg(test)]
 mod tests {
+    use crate::proxy::config::{get_free_port, Config};
     use crate::raw_config::RawConfig;
-    use std::convert::TryInto;
-    use crate::proxy::config::{Config, get_free_port};
     use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+    use std::convert::TryInto;
 
     #[test]
     fn test_get_free_port() {
@@ -68,7 +69,7 @@ mod tests {
 
     #[test]
     fn test_try_into() {
-        let config : Config = RawConfig {
+        let config: Config = RawConfig {
             proxy_ports: None,
             safe_mode: None,
             interface: None,
@@ -77,19 +78,24 @@ mod tests {
             listen_port: None,
             proxy_mark: None,
             ignore_mark: None,
-            route_table: None
-        }.try_into().unwrap();
-        assert_eq!(config, Config{
-            proxy_config: ProxyRawConfig {
-                proxy_ports: None,
-                listen_port: get_free_port(None).unwrap(),
-                safe_mode: false,
-                interface: None,
-                rules: vec![]
+            route_table: None,
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(
+            config,
+            Config {
+                proxy_config: ProxyRawConfig {
+                    proxy_ports: None,
+                    listen_port: get_free_port(None).unwrap(),
+                    safe_mode: false,
+                    interface: None,
+                    rules: vec![]
+                }
             }
-        });
+        );
 
-        let config : Config = RawConfig{
+        let config: Config = RawConfig {
             proxy_ports: Some(vec![1025u16, 1026u16]),
             safe_mode: Some(true),
             interface: Some("ens33".parse().unwrap()),
@@ -98,16 +104,21 @@ mod tests {
             listen_port: None,
             proxy_mark: None,
             ignore_mark: None,
-            route_table: None
-        }.try_into().unwrap();
-        assert_eq!(config, Config{
-            proxy_config: ProxyRawConfig {
-                proxy_ports: Some("1025,1026".parse().unwrap()),
-                listen_port: 1027u16,
-                safe_mode: true,
-                interface: Some("ens33".parse().unwrap()),
-                rules: vec![]
+            route_table: None,
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(
+            config,
+            Config {
+                proxy_config: ProxyRawConfig {
+                    proxy_ports: Some("1025,1026".parse().unwrap()),
+                    listen_port: 1027u16,
+                    safe_mode: true,
+                    interface: Some("ens33".parse().unwrap()),
+                    rules: vec![]
+                }
             }
-        });
+        );
     }
 }

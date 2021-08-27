@@ -55,36 +55,38 @@ pub fn select_response(
         })
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::handler::http::selector::{Selector, select_request};
+    use crate::handler::http::selector::{select_request, Selector};
     use http::Request;
     use hyper::Body;
 
     #[test]
     fn test_select_request() {
         let port = 1025;
-        let selector = Selector{
+        let selector = Selector {
             port: Some(1025),
             path: None,
             method: None,
             code: None,
             request_headers: None,
-            response_headers: None
+            response_headers: None,
         };
         let req = Request::builder().body(Body::empty()).unwrap();
         assert_eq!(select_request(port, &req, &selector), true);
 
-        let mut selector = Selector{
+        let mut selector = Selector {
             port: None,
             path: Some(wildmatch::WildMatch::new("/src")),
             method: None,
             code: None,
             request_headers: None,
-            response_headers: None
+            response_headers: None,
         };
-        let req = Request::builder().uri("http://www.google.com/src/").body(Body::empty()).unwrap();
+        let req = Request::builder()
+            .uri("http://www.google.com/src/")
+            .body(Body::empty())
+            .unwrap();
         assert_eq!(select_request(0, &req, &selector), false);
 
         selector.path = Some(wildmatch::WildMatch::new("src"));

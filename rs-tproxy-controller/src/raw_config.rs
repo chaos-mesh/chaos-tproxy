@@ -15,4 +15,3 @@ pub struct RawConfig {
     pub ignore_mark: Option<i32>,
     pub route_table: Option<u8>,
 }
-

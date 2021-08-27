@@ -38,6 +38,6 @@ impl UdsDataClient {
                 tracing::debug!("Read data failed with err {:?}.", e);
                 Err(anyhow::anyhow!("{}", e))
             }
-        }
+        };
     }
 }

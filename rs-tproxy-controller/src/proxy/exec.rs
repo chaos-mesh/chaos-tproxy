@@ -110,7 +110,7 @@ impl Proxy {
                 Ok(process) => {
                     tracing::info!(target : "Proxy executor", "Proxy is running.");
                     process
-                },
+                }
                 Err(e) => {
                     return Err(anyhow::anyhow!("failed to exec sub proxy : {:?}", e));
                 }

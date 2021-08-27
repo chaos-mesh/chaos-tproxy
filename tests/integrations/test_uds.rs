@@ -1,9 +1,8 @@
-use std::env;
-use uuid::Uuid;
 use rs_tproxy_controller_lib::proxy::uds_server::UdsDataServer;
 use rs_tproxy_proxy::uds_client::UdsDataClient;
+use std::env;
 use tokio::time::Duration;
-
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_uds() {
@@ -17,7 +16,7 @@ async fn test_uds() {
     let server = uds_server.clone();
 
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::new(5,0)).await;
+        tokio::time::sleep(Duration::new(5, 0)).await;
         let _ = server
             .listen(listener)
             .await

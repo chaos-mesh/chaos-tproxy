@@ -1,6 +1,6 @@
 use std::option::Option::Some;
 
-use crate::proxy::net::bridge::{execute_all_with_log_error, NetEnv, execute_all};
+use crate::proxy::net::bridge::{execute_all, NetEnv};
 use crate::proxy::net::iptables::{set_iptables, set_iptables_safe};
 
 #[cfg(target_os = "linux")]

@@ -4,8 +4,8 @@ use anyhow::{anyhow, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
-use uuid::Uuid;
 use std::net::Ipv4Addr;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
@@ -89,7 +89,9 @@ impl NetEnv {
         let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
         let net: Ipv4Network = self.ip.parse().unwrap();
         let net_ip32 = net.ip().to_string() + "/32";
-        let net_domain =Ipv4Addr::from(u32::from(net.ip())&u32::from(net.mask())).to_string() + "/" + &net.prefix().to_string();
+        let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
+            + "/"
+            + &net.prefix().to_string();
         let cmdvv = vec![
             bash_c(&save),
             bash_c(save_dns),
@@ -345,4 +347,3 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
     }
     Err(anyhow!("no valid interface"))
 }
-

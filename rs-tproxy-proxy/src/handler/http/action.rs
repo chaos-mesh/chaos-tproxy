@@ -242,12 +242,14 @@ mod tests {
         let mut uri = http::Uri::builder()
             .scheme("https")
             .authority("hyper.rs")
-            .path_and_query("/hhh?").build().unwrap();
+            .path_and_query("/hhh?")
+            .build()
+            .unwrap();
 
-        append_queries(&mut uri,Some("a=b")).unwrap();
+        append_queries(&mut uri, Some("a=b")).unwrap();
         assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?&a=b");
 
-        append_queries(&mut uri,Some("a=b")).unwrap();
+        append_queries(&mut uri, Some("a=b")).unwrap();
         assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?&a=b&a=b");
     }
 
@@ -256,17 +258,21 @@ mod tests {
         let mut uri = http::Uri::builder()
             .scheme("https")
             .authority("hyper.rs")
-            .path_and_query("/hhh/").build().unwrap();
+            .path_and_query("/hhh/")
+            .build()
+            .unwrap();
 
-        replace_path(&mut uri,Some("hhh")).unwrap();
+        replace_path(&mut uri, Some("hhh")).unwrap();
         assert_eq!(&uri.to_string(), "https://hyper.rshhh");
 
         let mut uri = http::Uri::builder()
             .scheme("https")
             .authority("hyper.rs")
-            .path_and_query("/ccc?a=b").build().unwrap();
+            .path_and_query("/ccc?a=b")
+            .build()
+            .unwrap();
 
-        replace_path(&mut uri,Some("/hhh")).unwrap();
+        replace_path(&mut uri, Some("/hhh")).unwrap();
         assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?a=b");
     }
 

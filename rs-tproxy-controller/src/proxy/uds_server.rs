@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use tokio::net::UnixListener;
 use tokio::io::AsyncWriteExt;
+use tokio::net::UnixListener;
 
 #[derive(Debug, Clone)]
 pub struct UdsDataServer<T> {
@@ -44,7 +44,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
                                 );
                                 Err(anyhow::anyhow!("{}", e))
                             }
-                        }
+                        };
                     });
                 }
                 Err(e) => {

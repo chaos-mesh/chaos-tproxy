@@ -8,7 +8,10 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::handler::http::action::{Actions, PatchAction, PatchBodyAction, ReplaceAction, PatchBodyActionContents, ReplaceBodyAction};
+use crate::handler::http::action::{
+    Actions, PatchAction, PatchBodyAction, PatchBodyActionContents, ReplaceAction,
+    ReplaceBodyAction,
+};
 use crate::handler::http::rule::{Rule, Target};
 use crate::handler::http::selector::Selector;
 use crate::proxy::http::config::Config;
@@ -118,21 +121,29 @@ pub enum RawReplaceBodyContents {
     BASE64(String),
 }
 
-pub(crate) fn try_from_hash_map(t :Option<HashMap<String, String>>) -> Result<Option<HeaderMap>, anyhow::Error> {
+pub(crate) fn try_from_hash_map(
+    t: Option<HashMap<String, String>>,
+) -> Result<Option<HeaderMap>, anyhow::Error> {
     t.as_ref()
         .map(|headers| -> Result<_, anyhow::Error> {
-            headers.try_into().map_err(|e:http::Error| -> anyhow::Error{ anyhow!(e)})
-        }).transpose()
+            headers
+                .try_into()
+                .map_err(|e: http::Error| -> anyhow::Error { anyhow!(e) })
+        })
+        .transpose()
 }
 
-pub(crate) fn try_from_vec(t :Option<Vec<(String, String)>>) -> Result<Option<HeaderMap>, anyhow::Error> {
+pub(crate) fn try_from_vec(
+    t: Option<Vec<(String, String)>>,
+) -> Result<Option<HeaderMap>, anyhow::Error> {
     t.map(|headers| -> Result<_, anyhow::Error> {
         let mut map = HeaderMap::new();
         for (key, value) in headers {
             map.insert(key.parse::<HeaderName>()?, value.parse()?);
         }
         Ok(map)
-    }).transpose()
+    })
+    .transpose()
 }
 
 impl TryFrom<RawConfig> for Config {
@@ -183,8 +194,7 @@ impl TryFrom<RawSelector> for Selector {
                 .as_ref()
                 .map(|method| method.parse())
                 .transpose()?,
-            request_headers:
-                try_from_hash_map(raw.request_headers)?,
+            request_headers: try_from_hash_map(raw.request_headers)?,
             code: raw.code.map(StatusCode::from_u16).transpose()?,
             response_headers: try_from_hash_map(raw.response_headers)?,
         })
