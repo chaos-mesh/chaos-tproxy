@@ -175,7 +175,7 @@ impl NetEnv {
             ),
             bash_c(restore_dns),
         ];
-        execute_all(cmdvv)?;
+        execute_all_with_log_error(cmdvv)?;
         Ok(())
     }
 
@@ -191,7 +191,7 @@ impl NetEnv {
             bash_c(&restore),
             bash_c(&remove_store),
         ];
-        execute_all(cmdvv)?;
+        execute_all_with_log_error(cmdvv)?;
         Ok(())
     }
 }
@@ -307,9 +307,16 @@ pub fn get_ipv4(device: &NetworkInterface) -> Option<String> {
     None
 }
 
-pub fn execute_all(cmdvv: Vec<Vec<&str>>) -> Result<()> {
+pub fn execute_all_with_log_error(cmdvv: Vec<Vec<&str>>) -> Result<()> {
     for cmdv in cmdvv {
         let _ = execute(cmdv);
+    }
+    Ok(())
+}
+
+pub fn execute_all(cmdvv: Vec<Vec<&str>>) -> Result<()> {
+    for cmdv in cmdvv {
+        let _ = execute(cmdv)?;
     }
     Ok(())
 }
