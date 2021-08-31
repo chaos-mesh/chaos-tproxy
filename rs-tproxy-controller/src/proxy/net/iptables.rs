@@ -108,7 +108,7 @@ pub fn set_iptables<'a>(
             ],
         ),
         vec![
-            "ebtables-legacy",
+            "ebtables",
             "-t",
             "nat",
             "-A",
