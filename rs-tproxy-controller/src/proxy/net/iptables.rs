@@ -220,5 +220,5 @@ pub fn set_iptables_safe<'a>(net_env: &'a NetEnv, device_mac: &'a str) -> Vec<Ve
 }
 
 pub fn clear_ebtables() -> Vec<&'static str> {
-    vec!["ebtables-legacy", "-t", "nat", "-F"]
+    vec!["ebtables", "-t", "nat", "-F"]
 }
