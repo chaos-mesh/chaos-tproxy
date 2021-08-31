@@ -93,6 +93,9 @@ impl NetEnv {
         let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
             + "/"
             + &net.prefix().to_string();
+        let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
+        let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
+        let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
         let cmdvv = vec![
             bash_c(&save),
             bash_c(save_dns),
@@ -157,6 +160,22 @@ impl NetEnv {
             ip_netns(
                 &self.netns,
                 vec!["sysctl", "-w", "net.ipv4.ip_nonlocal_bind=1"],
+            ),
+            ip_netns(
+                &self.netns,
+                vec!["sysctl", "-w", &rp_filter_br2],
+            ),
+            ip_netns(
+                &self.netns,
+                vec!["sysctl", "-w", &rp_filter_v2],
+            ),
+            ip_netns(
+                &self.netns,
+                vec!["sysctl", "-w", &rp_filter_v3],
+            ),
+            ip_netns(
+                &self.netns,
+                vec!["sysctl", "-w", "net.ipv4.conf.lo.rp_filter=0"],
             ),
             ip_netns(
                 &self.netns,
