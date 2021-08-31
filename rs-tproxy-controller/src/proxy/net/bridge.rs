@@ -1,5 +1,6 @@
 use std::process::Command;
 
+use crate::proxy::net::iptables::clear_ebtables;
 use anyhow::{anyhow, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
@@ -21,7 +22,7 @@ pub struct NetEnv {
     veth1: String,
     veth2: String,
     veth3: String,
-    veth4: String,
+    pub veth4: String,
 }
 
 impl NetEnv {
@@ -159,6 +160,10 @@ impl NetEnv {
             ),
             ip_netns(
                 &self.netns,
+                vec!["sysctl", "-w", "net.ipv4.conf.all.rp_filter=0"],
+            ),
+            ip_netns(
+                &self.netns,
                 vec!["ip", "rule", "add", "fwmark", "1", "lookup", "100"],
             ),
             ip_netns(
@@ -192,6 +197,7 @@ impl NetEnv {
             bash_c(restore_dns),
             bash_c(&restore),
             bash_c(&remove_store),
+            clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
@@ -336,6 +342,16 @@ pub fn execute(cmdv: Vec<&str>) -> Result<()> {
         cmd.arg(*s);
     }
     os_err(cmd.output().unwrap().stderr)
+}
+
+pub fn get_interface(name: String) -> Result<NetworkInterface> {
+    let interfaces = pnet::datalink::interfaces();
+    for interface in interfaces {
+        if interface.name == name {
+            return Ok(interface);
+        }
+    }
+    Err(anyhow!("no valid interface"))
 }
 
 pub fn get_default_interface() -> Result<NetworkInterface> {
