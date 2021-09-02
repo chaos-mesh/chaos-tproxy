@@ -18,9 +18,19 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.7'
+          architecture: 'x64'
       - name: Lint
         run: cargo clippy --all-targets -- -D warnings
       - name: Build
         run: cargo build --all --verbose
       - name: Test
         run: cargo test --all
+      - name: Integration test
+        run: |
+          cd ./tests/
+          cargo test
+          python exec.py
