@@ -39,4 +39,4 @@ RUN --mount=type=cache,target=/tproxy-build/target \
     cargo build --release --all --target $TARGET
 
 RUN --mount=type=cache,target=/tproxy-build/target \
-    cp /tproxy-build/target/$TARGET/release/rs-tproxy /tproxy
+    cp /tproxy-build/target/$TARGET/release/tproxy /tproxy
