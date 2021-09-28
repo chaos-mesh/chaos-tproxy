@@ -6,6 +6,7 @@ use tokio::signal::unix::SignalKind;
 use crate::cmd::command_line::{get_config_from_opt, Opt};
 use crate::cmd::interactive::handler::ConfigServer;
 use crate::proxy::exec::Proxy;
+use std::process::exit;
 
 pub mod cmd;
 pub mod proxy;
@@ -13,7 +14,13 @@ pub mod raw_config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args_checked()?;
+    let opt = match Opt::from_args_checked() {
+        Err(e) => {
+            println!("{}",e.to_string());
+            exit(1)
+        }
+        Ok(o) => {o}
+    };
     tracing_subscriber::fmt()
         .with_max_level(opt.get_level_filter())
         .with_writer(std::io::stderr)

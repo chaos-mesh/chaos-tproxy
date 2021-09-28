@@ -87,7 +87,6 @@ impl NetEnv {
         };
         let save = format!("ip route save table all > {}", &self.ip_route_store);
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
-        let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
         let net: Ipv4Network = self.ip.parse().unwrap();
         let net_ip32 = net.ip().to_string() + "/32";
         let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
@@ -199,7 +198,6 @@ impl NetEnv {
                     "100",
                 ],
             ),
-            bash_c(restore_dns),
         ];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
@@ -207,7 +205,7 @@ impl NetEnv {
 
     pub fn clear_bridge(&self) -> Result<()> {
         let restore = format!("ip route restore < {}", &self.ip_route_store);
-        let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
+        let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
         let cmdvv = vec![
             ip_netns_del(&self.netns),

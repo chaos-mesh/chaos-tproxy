@@ -11,7 +11,7 @@ use crate::raw_config::RawConfig;
 
 //todo: name & about. (need discussion)
 #[derive(Debug, StructOpt)]
-#[structopt(name = "proxy", about = "The option of rs-proxy.")]
+#[structopt(name = "proxy", about = "The option of proxy.")]
 pub struct Opt {
     /// path of config file, required if interactive and daemon mode is disabled
     #[structopt(name = "FILE", parse(from_os_str))]
@@ -20,14 +20,6 @@ pub struct Opt {
     /// Allows applying json config by stdin/stdout
     #[structopt(short, long)]
     pub interactive: bool,
-
-    /// Allows applying json config by http.
-    #[structopt(short, long)]
-    pub daemon: bool,
-
-    /// Port of daemon server. Default is a random port.
-    #[structopt(long)]
-    pub daemon_port: Option<u16>,
 
     // The number of occurrences of the `v/verbose` flag
     /// Verbose mode (-v, -vv, -vvv, etc.)
@@ -58,7 +50,7 @@ impl Opt {
     }
 
     fn checked(self) -> Result<Self> {
-        if !self.interactive && !self.daemon && !self.proxy && self.input.is_none() {
+        if !self.interactive && !self.proxy && self.input.is_none() {
             return Err(anyhow!("config file is required when interactive mode and daemon mode is all disabled, use `-h | --help` for more details"));
         }
         Ok(self)
