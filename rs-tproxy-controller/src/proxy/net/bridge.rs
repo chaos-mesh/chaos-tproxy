@@ -248,7 +248,7 @@ pub fn bash_c(cmd: &str) -> Vec<&str> {
 }
 
 pub fn ip_link_del_bridge(name: &str) -> Vec<&str> {
-    vec!["ip", "link", "delete", "name", name, "type", "bridge"]
+    vec!["ip", "link", "delete", "dev", name, "type", "bridge"]
 }
 
 pub fn ip_link_add_veth_peer<'a>(
