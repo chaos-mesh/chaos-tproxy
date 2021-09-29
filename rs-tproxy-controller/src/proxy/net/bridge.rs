@@ -199,7 +199,7 @@ impl NetEnv {
                 ],
             ),
         ];
-        execute_all_with_log_error(cmdvv)?;
+        execute_all(cmdvv)?;
         Ok(())
     }
 
