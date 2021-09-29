@@ -211,6 +211,8 @@ pub fn set_iptables_safe<'a>(net_env: &'a NetEnv, device_mac: &'a str) -> Vec<Ve
             "PREROUTING",
             "-i",
             &net_env.device,
+            "-j",
+            "dnat",
             "--to-dst",
             device_mac,
             "--dnat-target",

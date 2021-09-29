@@ -43,9 +43,9 @@ impl NetEnv {
         let netns = prefix.clone() + "ns";
         let bridge1 = prefix.clone() + "b1";
         let veth1 = prefix.clone() + "v1";
-        let veth2 = prefix.clone() + "v2";
+        let veth2 = "veth0".to_string();
         let bridge2 = prefix.clone() + "b2";
-        let veth3 = prefix.clone() + "v3";
+        let veth3 = "veth1".to_string();
         let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
         Self {
@@ -102,7 +102,7 @@ impl NetEnv {
             ip_link_add_bridge(&self.bridge1),
             ip_link_add_veth_peer(&self.veth1, None, &self.veth2, Some(&self.netns)),
             ip_netns(&self.netns, ip_link_add_bridge(&self.bridge2)),
-            ip_link_add_veth_peer(&self.veth3, Some(&self.netns), &self.veth4, None),
+            ip_link_add_veth_peer(&self.veth4, None, &self.veth3, Some(&self.netns)),
             ip_link_set_up(&self.bridge1),
             ip_link_set_up(&self.veth1),
             ip_netns(&self.netns, ip_link_set_up(&self.veth2)),
