@@ -1,6 +1,7 @@
+use std::env;
+
 use rs_tproxy_controller_lib::proxy::uds_server::UdsDataServer;
 use rs_tproxy_proxy::uds_client::UdsDataClient;
-use std::env;
 use tokio::time::Duration;
 use uuid::Uuid;
 

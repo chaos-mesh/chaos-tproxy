@@ -12,6 +12,7 @@ use crate::handler::http::action::{
     Actions, PatchAction, PatchBodyAction, PatchBodyActionContents, ReplaceAction,
     ReplaceBodyAction,
 };
+use crate::handler::http::plugin::Plugin;
 use crate::handler::http::rule::{Rule, Target};
 use crate::handler::http::selector::Selector;
 use crate::proxy::http::config::Config;
@@ -30,6 +31,13 @@ pub struct RawRule {
     pub target: RawTarget,
     pub selector: RawSelector,
     pub actions: RawActions,
+    pub plugins: Vec<RawPlugin>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+pub enum RawPlugin {
+    WASM(Vec<u8>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -169,6 +177,7 @@ impl TryFrom<RawRule> for Rule {
             target: rule.target.into(),
             selector: rule.selector.try_into()?,
             actions: rule.actions.try_into()?,
+            plugins: rule.plugins.into_iter().map(Into::into).collect::<Vec<_>>(),
         })
     }
 }
@@ -178,6 +187,14 @@ impl From<RawTarget> for Target {
         match target {
             RawTarget::Request => Target::Request,
             RawTarget::Response => Target::Response,
+        }
+    }
+}
+
+impl From<RawPlugin> for Plugin {
+    fn from(plugin: RawPlugin) -> Self {
+        match plugin {
+            RawPlugin::WASM(data) => Plugin::WASM(data),
         }
     }
 }

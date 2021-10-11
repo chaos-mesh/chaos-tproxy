@@ -57,9 +57,10 @@ pub fn select_response(
 
 #[cfg(test)]
 mod tests {
-    use crate::handler::http::selector::{select_request, Selector};
     use http::Request;
     use hyper::Body;
+
+    use crate::handler::http::selector::{select_request, Selector};
 
     #[test]
     fn test_select_request() {

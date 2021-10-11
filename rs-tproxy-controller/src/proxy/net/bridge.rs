@@ -1,12 +1,13 @@
+use std::net::Ipv4Addr;
 use std::process::Command;
 
-use crate::proxy::net::iptables::clear_ebtables;
 use anyhow::{anyhow, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
-use std::net::Ipv4Addr;
 use uuid::Uuid;
+
+use crate::proxy::net::iptables::clear_ebtables;
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
@@ -161,18 +162,9 @@ impl NetEnv {
                 &self.netns,
                 vec!["sysctl", "-w", "net.ipv4.ip_nonlocal_bind=1"],
             ),
-            ip_netns(
-                &self.netns,
-                vec!["sysctl", "-w", &rp_filter_br2],
-            ),
-            ip_netns(
-                &self.netns,
-                vec!["sysctl", "-w", &rp_filter_v2],
-            ),
-            ip_netns(
-                &self.netns,
-                vec!["sysctl", "-w", &rp_filter_v3],
-            ),
+            ip_netns(&self.netns, vec!["sysctl", "-w", &rp_filter_br2]),
+            ip_netns(&self.netns, vec!["sysctl", "-w", &rp_filter_v2]),
+            ip_netns(&self.netns, vec!["sysctl", "-w", &rp_filter_v3]),
             ip_netns(
                 &self.netns,
                 vec!["sysctl", "-w", "net.ipv4.conf.lo.rp_filter=0"],
