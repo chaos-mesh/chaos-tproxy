@@ -57,10 +57,12 @@ pub(crate) fn get_free_port(ports: Option<Vec<u16>>) -> anyhow::Result<u16> {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
+    use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+
     use crate::proxy::config::{get_free_port, Config};
     use crate::raw_config::RawConfig;
-    use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
-    use std::convert::TryInto;
 
     #[test]
     fn test_get_free_port() {

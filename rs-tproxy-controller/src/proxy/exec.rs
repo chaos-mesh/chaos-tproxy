@@ -155,9 +155,7 @@ impl Proxy {
                 self.net_env.clear_bridge()?;
                 Err(e)
             }
-            Ok(_) => {
-                Ok(())
-            }
-        }
+            Ok(_) => Ok(()),
+        };
     }
 }
