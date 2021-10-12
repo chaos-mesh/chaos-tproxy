@@ -1553,7 +1553,6 @@ dependencies = [
  "tracing-futures",
  "tracing-subscriber",
  "uuid",
- "wasmer-runtime",
  "wildmatch",
 ]
 
@@ -1595,6 +1594,10 @@ dependencies = [
  "uuid",
  "wildmatch",
 ]
+
+[[package]]
+name = "rs-tproxy-plugin"
+version = "0.1.0"
 
 [[package]]
 name = "rs-tproxy-proxy"

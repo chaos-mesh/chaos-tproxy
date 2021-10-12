@@ -38,7 +38,7 @@ pub struct RawRule {
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", content = "value")]
 pub enum RawPlugin {
-    WASM(Vec<u8>),
+    WASM(String), // WASM in base64
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -178,7 +178,11 @@ impl TryFrom<RawRule> for Rule {
             target: rule.target.into(),
             selector: rule.selector.try_into()?,
             actions: rule.actions.try_into()?,
-            plugins: rule.plugins.into_iter().map(Into::into).collect::<Vec<_>>(),
+            plugins: rule
+                .plugins
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, Self::Error>>()?,
         })
     }
 }
@@ -192,10 +196,12 @@ impl From<RawTarget> for Target {
     }
 }
 
-impl From<RawPlugin> for Plugin {
-    fn from(plugin: RawPlugin) -> Self {
+impl TryFrom<RawPlugin> for Plugin {
+    type Error = Error;
+
+    fn try_from(plugin: RawPlugin) -> Result<Self, Self::Error> {
         match plugin {
-            RawPlugin::WASM(data) => Plugin::WASM(Arc::new(data)),
+            RawPlugin::WASM(data) => Ok(Plugin::WASM(Arc::new(base64::decode(&data)?))),
         }
     }
 }

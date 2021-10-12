@@ -11,7 +11,7 @@ name = "rs-tproxy"
 path = "rs-tproxy-controller/src/main.rs"
 
 [workspace]
-members = ["rs-tproxy-controller", "rs-tproxy-proxy", "tests"]
+members = ["rs-tproxy-controller", "rs-tproxy-proxy", "rs-tproxy-plugin", "tests"]
 
 [dependencies]
 anyhow = "1.0"
@@ -45,7 +45,6 @@ bincode = "1.3.3"
 default-net = "0.2.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
 base64 = "0.13.0"
-wasmer-runtime = "0.17"
 
 [dev-dependencies]
 test-case = "1.2"
