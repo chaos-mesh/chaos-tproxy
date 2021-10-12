@@ -149,9 +149,13 @@ impl Proxy {
             self.sender = new.sender.take();
             self.rx = new.rx.take();
         }
-        if self.exec(config).await.is_err() {
-            self.net_env.clear_bridge()?;
-        }
-        Ok(())
+
+        return match self.exec(config).await {
+            Err(e) => {
+                self.net_env.clear_bridge()?;
+                Err(e)
+            }
+            Ok(_) => Ok(()),
+        };
     }
 }

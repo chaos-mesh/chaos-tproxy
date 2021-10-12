@@ -1,12 +1,13 @@
+use std::net::Ipv4Addr;
 use std::process::Command;
 
-use crate::proxy::net::iptables::clear_ebtables;
 use anyhow::{anyhow, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
-use std::net::Ipv4Addr;
 use uuid::Uuid;
+
+use crate::proxy::net::iptables::clear_ebtables;
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
@@ -43,9 +44,9 @@ impl NetEnv {
         let netns = prefix.clone() + "ns";
         let bridge1 = prefix.clone() + "b1";
         let veth1 = prefix.clone() + "v1";
-        let veth2 = prefix.clone() + "v2";
+        let veth2 = "veth0".to_string();
         let bridge2 = prefix.clone() + "b2";
-        let veth3 = prefix.clone() + "v3";
+        let veth3 = "veth1".to_string();
         let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
         Self {
@@ -87,7 +88,6 @@ impl NetEnv {
         };
         let save = format!("ip route save table all > {}", &self.ip_route_store);
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
-        let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
         let net: Ipv4Network = self.ip.parse().unwrap();
         let net_ip32 = net.ip().to_string() + "/32";
         let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
@@ -103,7 +103,7 @@ impl NetEnv {
             ip_link_add_bridge(&self.bridge1),
             ip_link_add_veth_peer(&self.veth1, None, &self.veth2, Some(&self.netns)),
             ip_netns(&self.netns, ip_link_add_bridge(&self.bridge2)),
-            ip_link_add_veth_peer(&self.veth3, Some(&self.netns), &self.veth4, None),
+            ip_link_add_veth_peer(&self.veth4, None, &self.veth3, Some(&self.netns)),
             ip_link_set_up(&self.bridge1),
             ip_link_set_up(&self.veth1),
             ip_netns(&self.netns, ip_link_set_up(&self.veth2)),
@@ -161,18 +161,9 @@ impl NetEnv {
                 &self.netns,
                 vec!["sysctl", "-w", "net.ipv4.ip_nonlocal_bind=1"],
             ),
-            ip_netns(
-                &self.netns,
-                vec!["sysctl", "-w", &rp_filter_br2],
-            ),
-            ip_netns(
-                &self.netns,
-                vec!["sysctl", "-w", &rp_filter_v2],
-            ),
-            ip_netns(
-                &self.netns,
-                vec!["sysctl", "-w", &rp_filter_v3],
-            ),
+            ip_netns(&self.netns, vec!["sysctl", "-w", &rp_filter_br2]),
+            ip_netns(&self.netns, vec!["sysctl", "-w", &rp_filter_v2]),
+            ip_netns(&self.netns, vec!["sysctl", "-w", &rp_filter_v3]),
             ip_netns(
                 &self.netns,
                 vec!["sysctl", "-w", "net.ipv4.conf.lo.rp_filter=0"],
@@ -199,15 +190,14 @@ impl NetEnv {
                     "100",
                 ],
             ),
-            bash_c(restore_dns),
         ];
-        execute_all_with_log_error(cmdvv)?;
+        execute_all(cmdvv)?;
         Ok(())
     }
 
     pub fn clear_bridge(&self) -> Result<()> {
         let restore = format!("ip route restore < {}", &self.ip_route_store);
-        let restore_dns = "mv /etc/resolv.conf.bak /etc/resolv.conf";
+        let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
         let cmdvv = vec![
             ip_netns_del(&self.netns),
@@ -250,7 +240,7 @@ pub fn bash_c(cmd: &str) -> Vec<&str> {
 }
 
 pub fn ip_link_del_bridge(name: &str) -> Vec<&str> {
-    vec!["ip", "link", "delete", "name", name, "type", "bridge"]
+    vec!["ip", "link", "delete", "dev", name, "type", "bridge"]
 }
 
 pub fn ip_link_add_veth_peer<'a>(
