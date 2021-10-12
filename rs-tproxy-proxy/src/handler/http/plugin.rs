@@ -1,11 +1,14 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
+use std::io;
 use std::sync::{Arc, Mutex};
 
+use futures::stream::TryStreamExt;
+use futures::AsyncReadExt;
 use http::{request, response, Request, Response};
 use hyper::Body;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use wasmer_runtime::{func, imports, instantiate, DynFunc, Value};
 
 pub enum HandlerName {
@@ -15,22 +18,22 @@ pub enum HandlerName {
 
 #[derive(Debug, Clone)]
 pub enum Plugin {
-    WASM(Vec<u8>),
+    WASM(Arc<Vec<u8>>),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RequestHeader {
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestHeader<'a> {
     pub method: String,
     pub uri: String,
     pub version: String,
-    pub header_map: HashMap<String, Vec<Vec<u8>>>,
+    pub header_map: HashMap<&'a str, Vec<&'a [u8]>>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ResponseHeader {
+#[derive(Debug, Clone, Serialize)]
+pub struct ResponseHeader<'a> {
     pub status_code: u16,
     pub version: String,
-    pub header_map: HashMap<String, Vec<Vec<u8>>>,
+    pub header_map: HashMap<&'a str, Vec<&'a [u8]>>,
 }
 
 impl Display for HandlerName {
@@ -43,24 +46,55 @@ impl Display for HandlerName {
 }
 
 impl Plugin {
-    pub fn handle_request(&self, request: &mut Request<Body>) -> anyhow::Result<()> {
-        // self.handle_raw(HandlerName::Request, header, origin_body);
-        Ok(())
+    async fn read_body(header_map: &http::HeaderMap, body: Body) -> anyhow::Result<Vec<u8>> {
+        let size_hint = header_map
+            .get(http::header::CONTENT_LENGTH)
+            .and_then(|value| std::str::from_utf8(value.as_bytes()).ok()?.parse().ok());
+        let mut body_data = match size_hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new(),
+        };
+        body.map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .into_async_read()
+            .read_to_end(&mut body_data)
+            .await?;
+        Ok(body_data)
     }
 
-    pub fn handle_response(&self, request: &mut Response<Body>) -> anyhow::Result<()> {
-        // self.handle_raw(HandlerName::Response, header, origin_body);
-        Ok(())
+    pub async fn handle_request(&self, request: Request<Body>) -> anyhow::Result<Request<Body>> {
+        let (parts, body) = request.into_parts();
+        let header: RequestHeader = (&parts).into();
+        let header_data = serde_json::to_vec(&header)?;
+        let body_data = Self::read_body(&parts.headers, body).await?;
+        let plugin = self.clone();
+        let new_body = tokio::task::spawn_blocking(move || {
+            plugin.handle_raw(HandlerName::Request, header_data, body_data)
+        })
+        .await??;
+        Ok(Request::from_parts(parts, new_body.into()))
+    }
+
+    pub async fn handle_response(&self, request: Response<Body>) -> anyhow::Result<Response<Body>> {
+        let (parts, body) = request.into_parts();
+        let header: ResponseHeader = (&parts).into();
+        let header_data = serde_json::to_vec(&header)?;
+        let body_data = Self::read_body(&parts.headers, body).await?;
+        let plugin = self.clone();
+        let new_body = tokio::task::spawn_blocking(move || {
+            plugin.handle_raw(HandlerName::Response, header_data, body_data)
+        })
+        .await??;
+        Ok(Response::from_parts(parts, new_body.into()))
     }
 
     fn handle_raw(
-        &self,
+        self,
         hander_name: HandlerName,
-        header: &[u8],
+        header: Vec<u8>,
         origin_body: Vec<u8>,
     ) -> anyhow::Result<Vec<u8>> {
         match self {
-            Plugin::WASM(data) => Self::handle_wasm(hander_name, data, header, origin_body),
+            Plugin::WASM(data) => Self::handle_wasm(hander_name, &data, &header, origin_body),
         }
     }
 
@@ -132,14 +166,37 @@ impl Plugin {
     }
 }
 
-impl From<request::Parts> for RequestHeader {
-    fn from(parts: request::Parts) -> Self {
-        unimplemented!()
+fn make_header_map(raw: &http::HeaderMap<http::HeaderValue>) -> HashMap<&'_ str, Vec<&'_ [u8]>> {
+    let mut map = HashMap::<&str, Vec<&[u8]>>::new();
+    for (name, value) in raw.into_iter() {
+        let key = name.as_str();
+        match map.get_mut(key) {
+            Some(v) => v.push(value.as_bytes()),
+            None => {
+                map.insert(key, vec![value.as_bytes()]);
+            }
+        }
+    }
+    map
+}
+
+impl<'a> From<&'a request::Parts> for RequestHeader<'a> {
+    fn from(parts: &'a request::Parts) -> Self {
+        Self {
+            method: parts.method.to_string(),
+            uri: parts.uri.to_string(),
+            version: format!("{:?}", parts.version),
+            header_map: make_header_map(&parts.headers),
+        }
     }
 }
 
-impl From<response::Parts> for ResponseHeader {
-    fn from(parts: response::Parts) -> Self {
-        unimplemented!()
+impl<'a> From<&'a response::Parts> for ResponseHeader<'a> {
+    fn from(parts: &'a response::Parts) -> Self {
+        Self {
+            status_code: parts.status.as_u16(),
+            version: format!("{:?}", parts.version),
+            header_map: make_header_map(&parts.headers),
+        }
     }
 }

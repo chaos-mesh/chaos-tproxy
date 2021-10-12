@@ -151,6 +151,9 @@ impl HttpService {
         for rule in request_rules {
             debug!("{} : request matched, rule({:?})", log_key, rule);
             request = apply_request_action(request, &rule.actions).await?;
+            for plugin in rule.plugins.iter() {
+                request = plugin.handle_request(request).await?
+            }
         }
 
         let uri = request.uri().clone();
@@ -201,6 +204,9 @@ impl HttpService {
         for rule in response_rules {
             debug!("{} : response matched", log_key);
             response = apply_response_action(response, &rule.actions).await?;
+            for plugin in rule.plugins.iter() {
+                response = plugin.handle_response(response).await?
+            }
         }
         Ok(response)
     }

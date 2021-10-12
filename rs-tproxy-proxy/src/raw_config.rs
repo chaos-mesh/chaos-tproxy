@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Error};
@@ -194,7 +195,7 @@ impl From<RawTarget> for Target {
 impl From<RawPlugin> for Plugin {
     fn from(plugin: RawPlugin) -> Self {
         match plugin {
-            RawPlugin::WASM(data) => Plugin::WASM(data),
+            RawPlugin::WASM(data) => Plugin::WASM(Arc::new(data)),
         }
     }
 }
