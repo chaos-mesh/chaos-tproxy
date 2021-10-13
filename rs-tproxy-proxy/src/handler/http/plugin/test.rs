@@ -1,10 +1,12 @@
 use std::io;
+use std::sync::Arc;
 
 use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
 use http::Response;
 use hyper::Body;
 use serde::Deserialize;
+use wasmer_runtime::compile;
 
 use super::Plugin;
 
@@ -49,12 +51,14 @@ async fn test_plugin() -> anyhow::Result<()> {
         .map_err(|err| anyhow::anyhow!("{}", err))?;
     let body = "Hello World";
     let content_type = "plain/text";
-    let plugin = Plugin::WASM(PLUGIN.into());
+    let plugin = Plugin::WASM(Arc::new(compile(PLUGIN)?));
     let resp = Response::builder()
         .status(200)
         .header("content-type", content_type)
         .body(Body::from(body))?;
+    let start = std::time::SystemTime::now();
     let new_resp = plugin.handle_response(resp).await?;
+    log::info!("elapsed: {}ms", start.elapsed()?.as_millis());
     let mut body_data = Vec::new();
     new_resp
         .into_body()

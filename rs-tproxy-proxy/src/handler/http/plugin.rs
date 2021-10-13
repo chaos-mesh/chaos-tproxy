@@ -1,15 +1,14 @@
 use std::cell::Cell;
-use std::fmt::{self, Display};
+use std::fmt::{self, Debug, Display};
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use bytes::Bytes;
 use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
 use http::{Request, Response};
 use hyper::Body;
 use rs_tproxy_plugin::{RequestHeader, ResponseHeader};
-use wasmer_runtime::{func, imports, instantiate, DynFunc, Value};
+use wasmer_runtime::{func, imports, DynFunc, Module, Value};
 
 mod logger;
 mod print;
@@ -19,9 +18,9 @@ pub enum HandlerName {
     Response,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Plugin {
-    WASM(Bytes),
+    WASM(Arc<Module>),
 }
 
 impl Display for HandlerName {
@@ -82,13 +81,13 @@ impl Plugin {
         origin_body: Vec<u8>,
     ) -> anyhow::Result<Vec<u8>> {
         match self {
-            Plugin::WASM(data) => Self::handle_wasm(hander_name, &data, &header, origin_body),
+            Plugin::WASM(module) => Self::handle_wasm(hander_name, module, &header, origin_body),
         }
     }
 
     fn handle_wasm(
         hander_name: HandlerName,
-        wasm: &[u8],
+        wasm: Arc<Module>,
         header: &[u8],
         origin_body: Vec<u8>,
     ) -> anyhow::Result<Vec<u8>> {
@@ -109,8 +108,9 @@ impl Plugin {
             },
         };
 
-        let mut instance =
-            instantiate(wasm, &import_object).map_err(|err| anyhow::anyhow!("{}", err))?;
+        let mut instance = wasm
+            .instantiate(&import_object)
+            .map_err(|err| anyhow::anyhow!("{}", err))?;
 
         if instance
             .exports
@@ -155,6 +155,14 @@ impl Plugin {
                 .iter()
                 .map(Cell::get)
                 .collect::<Vec<_>>()),
+        }
+    }
+}
+
+impl Debug for Plugin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Plugin::WASM(module) => f.write_fmt(format_args!("wasm module: {:?}", module.info())),
         }
     }
 }

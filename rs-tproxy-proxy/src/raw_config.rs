@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Error};
 use http::header::{HeaderMap, HeaderName};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use wasmer_runtime::compile;
 use wildmatch::WildMatch;
 
 use crate::handler::http::action::{
@@ -200,7 +202,7 @@ impl TryFrom<RawPlugin> for Plugin {
 
     fn try_from(plugin: RawPlugin) -> Result<Self, Self::Error> {
         match plugin {
-            RawPlugin::WASM(data) => Ok(Plugin::WASM(base64::decode(&data)?.into())),
+            RawPlugin::WASM(data) => Ok(Plugin::WASM(Arc::new(compile(&base64::decode(&data)?)?))),
         }
     }
 }
