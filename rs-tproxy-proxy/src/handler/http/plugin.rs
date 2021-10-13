@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -7,10 +6,13 @@ use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
-use http::{request, response, Request, Response};
+use http::{Request, Response};
 use hyper::Body;
-use serde::Serialize;
-use wasmer_runtime::{func, imports, instantiate, Array, Ctx, DynFunc, Value, WasmPtr};
+use rs_tproxy_plugin::header::{RequestHeader, ResponseHeader};
+use wasmer_runtime::{func, imports, instantiate, DynFunc, Value};
+
+mod logger;
+mod print;
 
 pub enum HandlerName {
     Request,
@@ -20,21 +22,6 @@ pub enum HandlerName {
 #[derive(Debug, Clone)]
 pub enum Plugin {
     WASM(Bytes),
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct RequestHeader<'a> {
-    pub method: String,
-    pub uri: String,
-    pub version: String,
-    pub header_map: HashMap<&'a str, Vec<&'a [u8]>>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ResponseHeader<'a> {
-    pub status_code: u16,
-    pub version: String,
-    pub header_map: HashMap<&'a str, Vec<&'a [u8]>>,
 }
 
 impl Display for HandlerName {
@@ -114,7 +101,10 @@ impl Plugin {
         let import_object = imports! {
             "env" => {
                 "write_body" => func!(write_body),
-                "print" => func!(Self::print),
+                "print" => func!(print::print),
+                "log_enabled" => func!(logger::log_enabled),
+                "log_log" => func!(logger::log_log),
+                "log_flush" => func!(logger::log_flush),
             },
         };
 
@@ -166,55 +156,10 @@ impl Plugin {
                 .collect::<Vec<_>>()),
         }
     }
-
-    fn print(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32) {
-        let memory = ctx.memory(0);
-
-        // Use helper method on `WasmPtr` to read a utf8 string
-        let string = ptr.get_utf8_string(memory, len).unwrap();
-
-        // Print it!
-        println!("{}", string);
-    }
-}
-
-fn make_header_map(raw: &http::HeaderMap<http::HeaderValue>) -> HashMap<&'_ str, Vec<&'_ [u8]>> {
-    let mut map = HashMap::<&str, Vec<&[u8]>>::new();
-    for (name, value) in raw.into_iter() {
-        let key = name.as_str();
-        match map.get_mut(key) {
-            Some(v) => v.push(value.as_bytes()),
-            None => {
-                map.insert(key, vec![value.as_bytes()]);
-            }
-        }
-    }
-    map
-}
-
-impl<'a> From<&'a request::Parts> for RequestHeader<'a> {
-    fn from(parts: &'a request::Parts) -> Self {
-        Self {
-            method: parts.method.to_string(),
-            uri: parts.uri.to_string(),
-            version: format!("{:?}", parts.version),
-            header_map: make_header_map(&parts.headers),
-        }
-    }
-}
-
-impl<'a> From<&'a response::Parts> for ResponseHeader<'a> {
-    fn from(parts: &'a response::Parts) -> Self {
-        Self {
-            status_code: parts.status.as_u16(),
-            version: format!("{:?}", parts.version),
-            header_map: make_header_map(&parts.headers),
-        }
-    }
 }
 
 #[cfg(test)]
 mod test;
 
 #[cfg(test)]
-mod plugins;
+mod basic_plugin;

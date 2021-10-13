@@ -6,6 +6,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rs-tproxy-plugin = { path = "../rs-tproxy-plugin" }
+
 anyhow = "1.0"
 clap = "2.33.3"
 futures = "0.3.10"
@@ -36,3 +38,4 @@ tempfile = "3.2.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 base64 = "0.13.0"
 wasmer-runtime = "0.17"
+log = "0.4"

@@ -6,7 +6,7 @@ use http::Response;
 use hyper::Body;
 use serde::Deserialize;
 
-use super::plugins::BASIC_PLUGIN;
+use super::basic_plugin::PLUGIN;
 use super::Plugin;
 
 #[derive(Debug, Deserialize)]
@@ -18,9 +18,15 @@ struct Content {
 
 #[tokio::test]
 async fn test_plugin() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::level_filters::LevelFilter::WARN)
+        .with_writer(std::io::stderr)
+        .try_init()
+        .map_err(|err| anyhow::anyhow!("{}", err))?;
+
     let body = "Hello World";
     let content_type = "plain/text";
-    let plugin = Plugin::WASM(base64::decode(BASIC_PLUGIN)?.into());
+    let plugin = Plugin::WASM(PLUGIN.into());
     let resp = Response::builder()
         .status(200)
         .header("content-type", content_type)

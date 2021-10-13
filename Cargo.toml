@@ -11,7 +11,7 @@ name = "rs-tproxy"
 path = "rs-tproxy-controller/src/main.rs"
 
 [workspace]
-members = ["rs-tproxy-controller", "rs-tproxy-proxy", "rs-tproxy-plugin", "tests"]
+members = ["rs-tproxy-controller", "rs-tproxy-proxy", "rs-tproxy-plugin", "examples/plugin-example", "tests"]
 
 [dependencies]
 anyhow = "1.0"
