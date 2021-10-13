@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Error};
@@ -36,7 +35,7 @@ pub struct RawRule {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-#[serde(tag = "type", content = "value")]
+#[serde(tag = "type", content = "content")]
 pub enum RawPlugin {
     WASM(String), // WASM in base64
 }
@@ -201,7 +200,7 @@ impl TryFrom<RawPlugin> for Plugin {
 
     fn try_from(plugin: RawPlugin) -> Result<Self, Self::Error> {
         match plugin {
-            RawPlugin::WASM(data) => Ok(Plugin::WASM(Arc::new(base64::decode(&data)?))),
+            RawPlugin::WASM(data) => Ok(Plugin::WASM(base64::decode(&data)?.into())),
         }
     }
 }

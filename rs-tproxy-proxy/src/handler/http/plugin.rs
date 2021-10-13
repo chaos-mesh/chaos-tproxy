@@ -4,6 +4,7 @@ use std::fmt::{self, Display};
 use std::io;
 use std::sync::{Arc, Mutex};
 
+use bytes::Bytes;
 use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
 use http::{request, response, Request, Response};
@@ -18,7 +19,7 @@ pub enum HandlerName {
 
 #[derive(Debug, Clone)]
 pub enum Plugin {
-    WASM(Arc<Vec<u8>>),
+    WASM(Bytes),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -200,3 +201,9 @@ impl<'a> From<&'a response::Parts> for ResponseHeader<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test;
+
+#[cfg(test)]
+mod plugins;
