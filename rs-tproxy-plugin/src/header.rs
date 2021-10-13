@@ -10,7 +10,7 @@ pub struct RequestHeader<'a> {
     pub version: String,
 
     #[serde(borrow)]
-    pub header_map: HashMap<&'a str, Vec<&'a [u8]>>,
+    pub header_map: HashMap<&'a str, Vec<Vec<u8>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct ResponseHeader<'a> {
     pub version: String,
 
     #[serde(borrow)]
-    pub header_map: HashMap<&'a str, Vec<&'a [u8]>>,
+    pub header_map: HashMap<&'a str, Vec<Vec<u8>>>,
 }
 
 impl RequestHeader<'_> {
@@ -30,7 +30,7 @@ impl RequestHeader<'_> {
             .version(parse_version(&self.version)?);
         for (k, list) in self.header_map.iter() {
             for v in list {
-                req_builder = req_builder.header(*k, *v)
+                req_builder = req_builder.header(*k, v.as_slice())
             }
         }
         Ok(req_builder.body(body)?)
@@ -44,7 +44,7 @@ impl ResponseHeader<'_> {
             .version(parse_version(&self.version)?);
         for (k, list) in self.header_map.iter() {
             for v in list {
-                resp_builder = resp_builder.header(*k, *v)
+                resp_builder = resp_builder.header(*k, v.as_slice())
             }
         }
         Ok(resp_builder.body(body)?)
@@ -72,14 +72,14 @@ impl<'a> From<&'a response::Parts> for ResponseHeader<'a> {
     }
 }
 
-fn make_header_map(raw: &http::HeaderMap<http::HeaderValue>) -> HashMap<&'_ str, Vec<&'_ [u8]>> {
-    let mut map = HashMap::<&str, Vec<&[u8]>>::new();
+fn make_header_map(raw: &http::HeaderMap<http::HeaderValue>) -> HashMap<&'_ str, Vec<Vec<u8>>> {
+    let mut map = HashMap::<&str, Vec<Vec<u8>>>::new();
     for (name, value) in raw.into_iter() {
         let key = name.as_str();
         match map.get_mut(key) {
-            Some(v) => v.push(value.as_bytes()),
+            Some(v) => v.push(value.as_bytes().to_owned()),
             None => {
-                map.insert(key, vec![value.as_bytes()]);
+                map.insert(key, vec![value.as_bytes().to_owned()]);
             }
         }
     }

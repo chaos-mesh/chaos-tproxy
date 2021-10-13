@@ -160,6 +160,3 @@ impl Plugin {
 
 #[cfg(test)]
 mod test;
-
-#[cfg(test)]
-mod basic_plugin;

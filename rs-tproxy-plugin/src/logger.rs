@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use log::{Log, SetLoggerError};
+use log::{LevelFilter, Log, SetLoggerError};
 use serde::{Deserialize, Serialize};
 
 mod buildin {
@@ -28,10 +28,12 @@ pub struct Record<'a> {
 }
 
 static LOGGER: &dyn Log = &Logger();
-struct Logger();
+pub struct Logger();
 
 pub fn setup_logger() -> Result<(), SetLoggerError> {
-    log::set_logger(LOGGER)
+    log::set_logger(LOGGER)?;
+    log::set_max_level(LevelFilter::Trace);
+    Ok(())
 }
 
 impl Log for Logger {
@@ -43,9 +45,11 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
-        let re: Record = record.into();
-        let data = serde_json::to_vec(&re).unwrap();
-        unsafe { buildin::log_log(data.as_ptr(), data.len() as u32) }
+        if self.enabled(record.metadata()) {
+            let re: Record = record.into();
+            let data = serde_json::to_vec(&re).unwrap();
+            unsafe { buildin::log_log(data.as_ptr(), data.len() as u32) }
+        }
     }
 
     /// Flushes any buffered records.

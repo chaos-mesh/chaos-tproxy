@@ -6,8 +6,36 @@ use http::Response;
 use hyper::Body;
 use serde::Deserialize;
 
-use super::basic_plugin::PLUGIN;
 use super::Plugin;
+
+///
+/// ## wasm plugin in base64
+///
+/// ```rust
+/// use rs_tproxy_plugin::logger::setup_logger;
+/// use rs_tproxy_plugin::{read_response, write_body};
+///
+/// #[no_mangle]
+/// pub extern "C" fn handle_response(ptr: i64, header_len: i64, body_len: i64) {
+///     setup_logger().unwrap();
+///     let resp = read_response(ptr, header_len, body_len).unwrap();
+///     let content_type = resp
+///         .headers()
+///         .get("content-type")
+///         .unwrap()
+///         .to_str()
+///         .unwrap();
+///     let new_body = serde_json::to_vec(&serde_json::json!({
+///         "type": content_type,
+///         "content": *resp.body(),
+///     }))
+///     .unwrap();
+///     write_body(new_body);
+/// }
+/// ```
+///
+const PLUGIN: &[u8] =
+    include_bytes!("../../../../../target/wasm32-unknown-unknown/debug/plugin_example.wasm");
 
 #[derive(Debug, Deserialize)]
 struct Content {
@@ -19,11 +47,10 @@ struct Content {
 #[tokio::test]
 async fn test_plugin() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::level_filters::LevelFilter::WARN)
+        .with_max_level(tracing::level_filters::LevelFilter::INFO)
         .with_writer(std::io::stderr)
         .try_init()
         .map_err(|err| anyhow::anyhow!("{}", err))?;
-
     let body = "Hello World";
     let content_type = "plain/text";
     let plugin = Plugin::WASM(PLUGIN.into());
