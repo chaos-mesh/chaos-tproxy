@@ -8,7 +8,7 @@ use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
 use http::{Request, Response};
 use hyper::Body;
-use rs_tproxy_plugin::header::{RequestHeader, ResponseHeader};
+use rs_tproxy_plugin::{RequestHeader, ResponseHeader};
 use wasmer_runtime::{func, imports, instantiate, DynFunc, Value};
 
 mod logger;
@@ -101,7 +101,8 @@ impl Plugin {
         let import_object = imports! {
             "env" => {
                 "write_body" => func!(write_body),
-                "print" => func!(print::print),
+                "println" => func!(print::println),
+                "eprintln" => func!(print::eprintln),
                 "log_enabled" => func!(logger::log_enabled),
                 "log_log" => func!(logger::log_log),
                 "log_flush" => func!(logger::log_flush),

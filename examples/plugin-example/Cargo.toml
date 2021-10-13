@@ -13,3 +13,5 @@ rs-tproxy-plugin = { path = "../../rs-tproxy-plugin" }
 
 serde_json = "1.0"
 log = "0.4"
+anyhow = "1.0"
+http = "0.2"

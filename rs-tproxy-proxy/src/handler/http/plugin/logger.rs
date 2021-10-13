@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::convert::TryInto;
 
 use log::logger;
-use rs_tproxy_plugin::logger::{Metadata, Record};
+use rs_tproxy_plugin::{Metadata, Record};
 use wasmer_runtime::{Array, Ctx, WasmPtr};
 
 fn read_data(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32) -> Option<Vec<u8>> {

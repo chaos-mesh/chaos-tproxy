@@ -1,22 +1,17 @@
 use log::info;
-use rs_tproxy_plugin::logger::setup_logger;
-use rs_tproxy_plugin::{read_response, write_body};
+use rs_tproxy_plugin::register_response_handler;
 
-#[no_mangle]
-pub extern "C" fn handle_response(ptr: i64, header_len: i64, body_len: i64) {
-    setup_logger().unwrap();
-    info!("success to setup logger");
-    let resp = read_response(ptr, header_len, body_len).unwrap();
+fn response_handler(resp: http::Response<&[u8]>) -> anyhow::Result<Vec<u8>> {
     let content_type = resp
         .headers()
         .get("content-type")
-        .unwrap()
-        .to_str()
-        .unwrap();
-    let new_body = serde_json::to_vec(&serde_json::json!({
+        .ok_or(anyhow::anyhow!("content-type not found"))?
+        .to_str()?;
+    info!("get content-type: {}", content_type);
+    Ok(serde_json::to_vec(&serde_json::json!({
         "type": content_type,
         "content": *resp.body(),
-    }))
-    .unwrap();
-    write_body(new_body);
+    }))?)
 }
+
+register_response_handler!(response_handler);
