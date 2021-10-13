@@ -13,23 +13,21 @@ use super::Plugin;
 ///
 /// ```rust
 /// use log::info;
-/// use rs_tproxy_plugin::call_response_handler;
+/// use rs_tproxy_plugin::register_response_handler;
 ///
-/// #[no_mangle]
-/// pub extern "C" fn handle_response(ptr: i64, header_len: i64, body_len: i64) {
-///     call_response_handler(ptr, header_len, body_len, |resp| {
-///         let content_type = resp
-///             .headers()
-///             .get("content-type")
-///             .ok_or(anyhow::anyhow!("content-type not found"))?
-///             .to_str()?;
-///         info!("get content-type: {}", content_type);
-///         Ok(serde_json::to_vec(&serde_json::json!({
-///             "type": content_type,
-///             "content": *resp.body(),
-///         }))?)
-///     })
-/// }
+/// register_response_handler!(|resp| {
+///     let content_type = resp
+///         .headers()
+///         .get("content-type")
+///         .ok_or(anyhow::anyhow!("content-type not found"))?
+///         .to_str()?;
+///     info!("get content-type: {}", content_type);
+///     Ok(serde_json::to_vec(&serde_json::json!({
+///         "type": content_type,
+///         "content": *resp.body(),
+///     }))?)
+/// });
+///
 /// ```
 ///
 const PLUGIN: &[u8] =
