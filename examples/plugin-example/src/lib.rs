@@ -1,7 +1,7 @@
 use log::info;
 use rs_tproxy_plugin::register_response_handler;
 
-fn response_handler(resp: http::Response<&[u8]>) -> anyhow::Result<Vec<u8>> {
+register_response_handler!(|resp| {
     let content_type = resp
         .headers()
         .get("content-type")
@@ -12,6 +12,4 @@ fn response_handler(resp: http::Response<&[u8]>) -> anyhow::Result<Vec<u8>> {
         "type": content_type,
         "content": *resp.body(),
     }))?)
-}
-
-register_response_handler!(response_handler);
+});

@@ -13,6 +13,12 @@ macro_rules! register_request_handler {
             $crate::call_request_handler(ptr, header_len, body_len, $func_name)
         }
     };
+    (|$($arg:ident)*| $body:block) => {
+        #[no_mangle]
+        pub extern "C" fn handle_request(ptr: i64, header_len: i64, body_len: i64) {
+            $crate::call_request_handler(ptr, header_len, body_len, |$($arg)*| $body)
+        }
+    };
 }
 
 #[macro_export]
@@ -21,6 +27,12 @@ macro_rules! register_response_handler {
         #[no_mangle]
         pub extern "C" fn handle_response(ptr: i64, header_len: i64, body_len: i64) {
             $crate::call_response_handler(ptr, header_len, body_len, $func_name)
+        }
+    };
+    (|$($arg:ident)*| $body:block) => {
+        #[no_mangle]
+        pub extern "C" fn handle_response(ptr: i64, header_len: i64, body_len: i64) {
+            $crate::call_response_handler(ptr, header_len, body_len, |$($arg)*| $body)
         }
     };
 }
