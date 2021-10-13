@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 extern "C" {
     fn write_body(ptr: *const u8, len: usize);
+    fn print(ptr: *const u8, len: usize);
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -25,8 +26,7 @@ pub struct ResponseHeader {
 pub extern "C" fn handle_response(ptr: i64, header_len: i64, body_len: i64) {
     unsafe {
         let header = std::slice::from_raw_parts(ptr as _, header_len as _);
-        let body: &[u8] =
-            std::slice::from_raw_parts((ptr + header_len) as _, (ptr + header_len + body_len) as _);
+        let body: &[u8] = std::slice::from_raw_parts((ptr + header_len) as _, body_len as _);
         let resp_header: ResponseHeader = serde_json::from_slice(header).unwrap();
         let content_type =
             std::str::from_utf8(&resp_header.header_map.get("content-type").unwrap()[0]).unwrap();

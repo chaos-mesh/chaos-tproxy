@@ -10,7 +10,7 @@ use futures::AsyncReadExt;
 use http::{request, response, Request, Response};
 use hyper::Body;
 use serde::Serialize;
-use wasmer_runtime::{func, imports, instantiate, DynFunc, Value};
+use wasmer_runtime::{func, imports, instantiate, Array, Ctx, DynFunc, Value, WasmPtr};
 
 pub enum HandlerName {
     Request,
@@ -114,6 +114,7 @@ impl Plugin {
         let import_object = imports! {
             "env" => {
                 "write_body" => func!(write_body),
+                "print" => func!(Self::print),
             },
         };
 
@@ -164,6 +165,16 @@ impl Plugin {
                 .map(Cell::get)
                 .collect::<Vec<_>>()),
         }
+    }
+
+    fn print(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32) {
+        let memory = ctx.memory(0);
+
+        // Use helper method on `WasmPtr` to read a utf8 string
+        let string = ptr.get_utf8_string(memory, len).unwrap();
+
+        // Print it!
+        println!("{}", string);
     }
 }
 
