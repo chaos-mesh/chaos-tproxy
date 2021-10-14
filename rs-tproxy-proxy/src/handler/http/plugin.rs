@@ -49,7 +49,7 @@ impl Plugin {
     }
 
     pub async fn handle_request(&self, request: Request<Body>) -> anyhow::Result<Request<Body>> {
-        let (parts, body) = request.into_parts();
+        let (mut parts, body) = request.into_parts();
         let header: RequestHeader = (&parts).into();
         let header_data = serde_json::to_vec(&header)?;
         let body_data = Self::read_body(&parts.headers, body).await?;
@@ -58,11 +58,12 @@ impl Plugin {
             plugin.handle_raw(HandlerName::Request, header_data, body_data)
         })
         .await??;
+        parts.headers.remove(http::header::CONTENT_LENGTH);
         Ok(Request::from_parts(parts, new_body.into()))
     }
 
     pub async fn handle_response(&self, request: Response<Body>) -> anyhow::Result<Response<Body>> {
-        let (parts, body) = request.into_parts();
+        let (mut parts, body) = request.into_parts();
         let header: ResponseHeader = (&parts).into();
         let header_data = serde_json::to_vec(&header)?;
         let body_data = Self::read_body(&parts.headers, body).await?;
@@ -71,6 +72,7 @@ impl Plugin {
             plugin.handle_raw(HandlerName::Response, header_data, body_data)
         })
         .await??;
+        parts.headers.remove(http::header::CONTENT_LENGTH);
         Ok(Response::from_parts(parts, new_body.into()))
     }
 

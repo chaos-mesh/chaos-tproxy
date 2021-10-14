@@ -135,6 +135,7 @@ impl HttpService {
         }
     }
 
+    #[tracing::instrument]
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         debug!("proxy is handling http request");
         let request_rules: Vec<_> = self
