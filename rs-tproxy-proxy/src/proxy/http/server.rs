@@ -38,14 +38,14 @@ impl HttpServer {
     pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
         let listener = TcpListener::bind(addr)?;
-        tracing::info!(target : "Proxy", "Listening");
+        tracing::info!("proxy listening");
         select! {
             _ = async {
                 loop {
                     let stream = listener.accept().await?;
                     let addr_remote = stream.peer_addr()?;
                     let addr_local = stream.local_addr()?;
-                    tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}", addr_remote, addr_local);
+                    tracing::debug!("accept streaming: remote={:?}, local={:?}", addr_remote, addr_local);
                     let config = Arc::new(self.config.clone());
                     let service = HttpService::new(addr_remote, addr_local, config);
                     tokio::spawn(async move {
@@ -136,8 +136,7 @@ impl HttpService {
     }
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
-        debug!("{} : Proxy is handling http request", log_key);
+        debug!("proxy is handling http request");
         let request_rules: Vec<_> = self
             .config
             .rules
@@ -149,7 +148,7 @@ impl HttpService {
             .collect();
 
         for rule in request_rules {
-            debug!("{} : request matched, rule({:?})", log_key, rule);
+            debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
             for plugin in rule.plugins.iter() {
                 request = plugin.handle_request(request).await?
@@ -177,7 +176,7 @@ impl HttpService {
         let mut response = match client.request(request).await {
             Ok(resp) => resp,
             Err(err) => {
-                error!("{} : fail to forward request: {}", log_key, err);
+                error!("fail to forward request: {}", err);
                 Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .body(Body::empty())?
@@ -202,7 +201,7 @@ impl HttpService {
             .collect();
 
         for rule in response_rules {
-            debug!("{} : response matched", log_key);
+            debug!("response matched");
             response = apply_response_action(response, &rule.actions).await?;
             for plugin in rule.plugins.iter() {
                 response = plugin.handle_response(response).await?

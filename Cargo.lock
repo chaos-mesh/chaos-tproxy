@@ -1547,6 +1547,7 @@ dependencies = [
  "iptables",
  "json-patch",
  "libc",
+ "log 0.4.14",
  "paw",
  "pnet 0.28.0",
  "rs-tproxy-proxy",

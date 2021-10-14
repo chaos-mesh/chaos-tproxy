@@ -15,7 +15,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
     }
 
     pub fn bind(&self) -> anyhow::Result<UnixListener> {
-        tracing::info!(target : "Uds listener try binding", "{:?}", &self.path);
+        tracing::info!("uds listener try binding {:?}", &self.path);
         let listener = UnixListener::bind(self.path.clone())?;
         Ok(listener)
     }
@@ -26,7 +26,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
     }
 
     pub async fn listen(&self, listener: UnixListener) -> anyhow::Result<()> {
-        tracing::info!(target : "Uds listener listening on", "{:?}", &self.path);
+        tracing::info!("uds listener listening on {:?}", &self.path);
         loop {
             match (&listener).accept().await {
                 Ok((mut stream, addr)) => {
@@ -34,21 +34,18 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
                     tokio::spawn(async move {
                         return match stream.write_all(buf.as_slice()).await {
                             Ok(_) => {
-                                tracing::info!(target : "Uds server" ,"Config successfully transferred.");
+                                tracing::info!("uds server Config successfully transferred.");
                                 Ok(())
                             }
                             Err(e) => {
-                                tracing::error!(
-                                    "error : write_all raw config to {:?} failed",
-                                    addr
-                                );
+                                tracing::error!("write_all raw config to {:?} failed", addr);
                                 Err(anyhow::anyhow!("{}", e))
                             }
                         };
                     });
                 }
                 Err(e) => {
-                    tracing::error!("error : accept connection failed");
+                    tracing::error!("accept connection failed");
                     return Err(anyhow::anyhow!("{}", e));
                 }
             }

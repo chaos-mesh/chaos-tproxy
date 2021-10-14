@@ -8,6 +8,7 @@ use tokio::process::Command;
 use tokio::select;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::task::JoinHandle;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::proxy::net::bridge::NetEnv;
@@ -52,8 +53,9 @@ impl Proxy {
         }
     }
 
+    #[instrument(skip(self, config))]
     pub async fn exec(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
-        tracing::info!(target : "transferring proxy raw config ", "{:?}" ,&config);
+        tracing::info!("transferring proxy raw config {:?}", &config);
         let uds_server = UdsDataServer::new(config.clone(), self.opt.ipc_path.clone());
         let listener = uds_server.bind()?;
 
@@ -76,7 +78,7 @@ impl Proxy {
             Ok(path) => path,
         };
 
-        tracing::info!(target: "Network device name", "{}", self.net_env.device.clone());
+        tracing::info!("network device name {}", self.net_env.device.clone());
         match config.interface {
             None => {}
             Some(interface) => {
@@ -105,10 +107,10 @@ impl Proxy {
 
         let rx = self.rx.take().unwrap();
         self.task = Some(tokio::spawn(async move {
-            tracing::info!(target : "Proxy executor", "Starting proxy.");
+            tracing::info!("starting proxy");
             let mut process = match proxy.stdin(Stdio::piped()).spawn() {
                 Ok(process) => {
-                    tracing::info!(target : "Proxy executor", "Proxy is running.");
+                    tracing::info!("proxy is running");
                     process
                 }
                 Err(e) => {
@@ -118,7 +120,7 @@ impl Proxy {
             select! {
                 _ = process.wait() => {}
                 _ = rx => {
-                    tracing::info!(target : "Proxy executor","killing sub process");
+                    tracing::info!("killing sub process");
                     let id = process.id().unwrap() as i32;
                     unsafe {
                         libc::kill(id, libc::SIGINT);

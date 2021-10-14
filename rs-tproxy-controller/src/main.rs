@@ -15,7 +15,10 @@ pub mod raw_config;
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args_checked()?;
     tracing_subscriber::fmt()
-        .with_max_level(opt.get_level_filter())
+        .with_env_filter(tracing_subscriber::EnvFilter::new(format!(
+            "rs_tproxy={}",
+            opt.get_level()
+        )))
         .with_writer(std::io::stderr)
         .try_init()
         .map_err(|err| anyhow!("{}", err))?;
