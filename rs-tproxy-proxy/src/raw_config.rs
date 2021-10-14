@@ -33,7 +33,7 @@ pub struct RawRule {
     pub target: RawTarget,
     pub selector: RawSelector,
     pub actions: RawActions,
-    pub plugins: Vec<RawPlugin>,
+    pub plugins: Option<Vec<RawPlugin>>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -181,6 +181,7 @@ impl TryFrom<RawRule> for Rule {
             actions: rule.actions.try_into()?,
             plugins: rule
                 .plugins
+                .unwrap_or_default()
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, Self::Error>>()?,

@@ -36,7 +36,7 @@ WORKDIR /tproxy-build
 
 RUN --mount=type=cache,target=/tproxy-build/target \
     --mount=type=cache,target=/root/.cargo/registry \
-    cargo build --release --all --target $TARGET
+    cargo build --release --bin rs-tproxy --target $TARGET
 
 RUN --mount=type=cache,target=/tproxy-build/target \
-    cp /tproxy-build/target/$TARGET/release/tproxy /tproxy
+    cp /tproxy-build/target/$TARGET/release/rs-tproxy /tproxy

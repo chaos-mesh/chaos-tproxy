@@ -10,4 +10,5 @@ lint:
 	cargo clippy --all-targets -- -D warnings
 clean:
 	cargo clean
-
+image:
+	DOCKER_BUILDKIT=1 docker build --build-arg HTTP_PROXY=${HTTP_PROXY} --build-arg HTTPS_PROXY=${HTTPS_PROXY} . -t chaos-mesh/tproxy

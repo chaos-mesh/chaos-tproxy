@@ -23,7 +23,7 @@ impl UdsDataClient {
             Ok(_) => {
                 tracing::debug!("Read data successfully.");
 
-                match bincode::deserialize(buf.as_slice()) {
+                match serde_json::from_slice(buf.as_slice()) {
                     Ok(o) => {
                         tracing::debug!("Deserialize data successfully.");
                         Ok(o)
