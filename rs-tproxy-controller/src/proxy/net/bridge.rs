@@ -1,4 +1,3 @@
-use std::net::Ipv4Addr;
 use std::process::Command;
 
 use anyhow::{anyhow, Result};
@@ -90,9 +89,6 @@ impl NetEnv {
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self.ip.parse().unwrap();
         let net_ip32 = net.ip().to_string() + "/32";
-        let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
-            + "/"
-            + &net.prefix().to_string();
         let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
         let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
@@ -139,21 +135,6 @@ impl NetEnv {
                     &self.bridge2,
                     "proto",
                     "kernel",
-                ],
-            ),
-            ip_netns(
-                &self.netns,
-                vec![
-                    "ip",
-                    "route",
-                    "add",
-                    &net_domain,
-                    "dev",
-                    &self.bridge2,
-                    "proto",
-                    "kernel",
-                    "scope",
-                    "link",
                 ],
             ),
             ip_netns(&self.netns, vec!["sysctl", "-w", "net.ipv4.ip_forward=1"]),
