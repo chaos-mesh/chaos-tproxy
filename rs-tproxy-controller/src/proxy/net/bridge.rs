@@ -141,21 +141,6 @@ impl NetEnv {
                     "kernel",
                 ],
             ),
-            ip_netns(
-                &self.netns,
-                vec![
-                    "ip",
-                    "route",
-                    "add",
-                    &net_domain,
-                    "dev",
-                    &self.bridge2,
-                    "proto",
-                    "kernel",
-                    "scope",
-                    "link",
-                ],
-            ),
             ip_netns(&self.netns, vec!["sysctl", "-w", "net.ipv4.ip_forward=1"]),
             ip_netns(
                 &self.netns,
