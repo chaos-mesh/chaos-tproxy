@@ -83,7 +83,7 @@ pub fn read_request<'a>(
     let header = unsafe { std::slice::from_raw_parts(ptr as _, header_len as _) };
     let body: &[u8] = unsafe { std::slice::from_raw_parts((ptr + header_len) as _, body_len as _) };
     let req_header: RequestHeader = serde_json::from_slice(header)?;
-    Ok(req_header.build(body)?)
+    req_header.build(body)
 }
 
 pub fn read_response<'a>(
@@ -94,7 +94,7 @@ pub fn read_response<'a>(
     let header = unsafe { std::slice::from_raw_parts(ptr as _, header_len as _) };
     let body: &[u8] = unsafe { std::slice::from_raw_parts((ptr + header_len) as _, body_len as _) };
     let resp_header: ResponseHeader = serde_json::from_slice(header)?;
-    Ok(resp_header.build(body)?)
+    resp_header.build(body)
 }
 
 mod buildin {

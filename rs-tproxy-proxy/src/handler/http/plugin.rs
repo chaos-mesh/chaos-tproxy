@@ -26,8 +26,8 @@ pub enum Plugin {
 impl Display for HandlerName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &HandlerName::Request => f.write_str("handle_request"),
-            &HandlerName::Response => f.write_str("handle_response"),
+            HandlerName::Request => f.write_str("handle_request"),
+            HandlerName::Response => f.write_str("handle_response"),
         }
     }
 }
@@ -127,7 +127,7 @@ impl Plugin {
         for (byte, cell) in header
             .iter()
             .cloned()
-            .zip(memory.view()[0 as usize..(header.len()) as usize].iter())
+            .zip(memory.view()[0..(header.len()) as usize].iter())
         {
             cell.set(byte);
         }

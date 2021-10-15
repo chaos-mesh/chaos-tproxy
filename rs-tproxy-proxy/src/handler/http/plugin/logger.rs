@@ -7,12 +7,7 @@ use wasmer_runtime::{Array, Ctx, WasmPtr};
 
 fn read_data(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32) -> Option<Vec<u8>> {
     let memory = ctx.memory(0);
-    Some(
-        ptr.deref(memory, 0, len)?
-            .into_iter()
-            .map(Cell::get)
-            .collect(),
-    )
+    Some(ptr.deref(memory, 0, len)?.iter().map(Cell::get).collect())
 }
 
 pub fn log_enabled(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32) -> i32 {
