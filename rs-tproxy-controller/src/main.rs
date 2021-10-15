@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use anyhow::anyhow;
 use rs_tproxy_proxy::proxy_main;
 use rs_tproxy_proxy::signal::Signals;
@@ -13,7 +15,13 @@ pub mod raw_config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args_checked()?;
+    let opt = match Opt::from_args_checked() {
+        Err(e) => {
+            println!("{}", e.to_string());
+            exit(1)
+        }
+        Ok(o) => o,
+    };
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new(format!(
             "rs_tproxy={}",
