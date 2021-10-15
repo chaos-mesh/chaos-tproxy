@@ -14,6 +14,7 @@ pub mod proxy;
 pub mod raw_config;
 pub mod signal;
 pub mod uds_client;
+pub mod uds_server;
 
 pub async fn proxy_main(path: PathBuf) -> anyhow::Result<()> {
     tracing::info!("proxy get uds path {:?}", path);
