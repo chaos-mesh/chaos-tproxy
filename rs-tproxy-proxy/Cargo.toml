@@ -13,18 +13,26 @@ clap = "2.33.3"
 futures = "0.3.10"
 http = "0.2.3"
 humantime-serde = "1.0"
-hyper = {git = "https://github.com/Andrewmatilde/hyper.git", features = ["runtime", "client", "server", "http1", "http2", "stream", "error_return"]}
+hyper = { git = "https://github.com/Andrewmatilde/hyper.git", features = [
+    "runtime",
+    "client",
+    "server",
+    "http1",
+    "http2",
+    "stream",
+    "error_return",
+] }
 iptables = "0.4"
-libc = {version = "0.2.81", features = ["std"]}
+libc = { version = "0.2.81", features = ["std"] }
 paw = "1.0"
-serde = {version = "1.0", features = ["derive"]}
+serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0.123"
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_yaml = "0.8"
 socket2 = "0.3"
-structopt = {version = "0.3", features = ["paw"]}
-tokio = {version = "1.4", features = ["full"]}
+structopt = { version = "0.3", features = ["paw"] }
+tokio = { version = "1.4", features = ["full"] }
 wildmatch = "2.1"
 tracing = "0.1"
 tracing-futures = "0.2"
@@ -39,3 +47,5 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 base64 = "0.13.0"
 wasmer-runtime = "0.17"
 log = "0.4"
+md5 = "0.7"
+derive_more = "0.99"

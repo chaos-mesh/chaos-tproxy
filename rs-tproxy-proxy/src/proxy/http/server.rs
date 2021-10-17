@@ -13,10 +13,9 @@ use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use tokio::select;
-use tokio::sync::oneshot::Receiver;
 use tracing::{debug, error};
 
+use crate::controller::PluginMap;
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
 use crate::handler::http::selector::{select_request, select_response};
@@ -28,41 +27,40 @@ use crate::proxy::tcp::transparent_socket::TransparentSocket;
 #[derive(Debug)]
 pub struct HttpServer {
     config: Config,
+    plugin_map: PluginMap,
 }
 
 impl HttpServer {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn new(config: Config, plugin_map: PluginMap) -> Self {
+        Self { config, plugin_map }
     }
 
-    pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
+    pub async fn serve(&self) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
         let listener = TcpListener::bind(addr)?;
         tracing::info!("proxy listening");
-        select! {
-            _ = async {
-                loop {
-                    let stream = listener.accept().await?;
-                    let addr_remote = stream.peer_addr()?;
-                    let addr_local = stream.local_addr()?;
-                    tracing::debug!("accept streaming: remote={:?}, local={:?}", addr_remote, addr_local);
-                    let config = Arc::new(self.config.clone());
-                    let service = HttpService::new(addr_remote, addr_local, config);
-                    tokio::spawn(async move {
-                        match serve_http_with_error_return(stream, &service).await{
-                            Ok(_)=>{}
-                            Err(e) => {tracing::error!("{}",e);}
-                        };
-                    });
+        loop {
+            let stream = listener.accept().await?;
+            let addr_remote = stream.peer_addr()?;
+            let addr_local = stream.local_addr()?;
+            tracing::debug!(
+                "accept streaming: remote={:?}, local={:?}",
+                addr_remote,
+                addr_local
+            );
+            let service = HttpService::new(
+                addr_remote,
+                addr_local,
+                self.config.clone(),
+                self.plugin_map.clone(),
+            );
+            tokio::spawn(async move {
+                match serve_http_with_error_return(stream, &service).await {
+                    Err(err) => tracing::error!("{}", err),
+                    _ => (),
                 }
-                #[allow(unreachable_code)]
-                Ok::<_, anyhow::Error>(())
-            } => {},
-            _ = rx => {
-                return Ok(());
-            }
-        };
-        Ok(())
+            });
+        }
     }
 }
 
@@ -70,11 +68,6 @@ pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
-    let log_key = format!(
-        "{{ peer={},local={} }}",
-        stream.peer_addr()?,
-        stream.local_addr()?
-    );
     loop {
         let (r, parts) = Http::new()
             .error_return(true)
@@ -89,15 +82,15 @@ pub async fn serve_http_with_error_return(
             },
             Err(e) => {
                 return if e.is_parse() {
-                    tracing::debug!("{}:Turn into tcp transfer.", log_key);
+                    tracing::debug!("turn into tcp transfer");
                     match parts {
                         Some(mut part) => {
                             let addr_target = part.io.local_addr()?;
                             let addr_local = part.io.peer_addr()?;
                             let socket = TransparentSocket::bind(addr_local)?;
-                            tracing::debug!("{}:Bind local addrs.", log_key);
+                            tracing::debug!("bind local addrs.");
                             let mut client_stream = socket.connect(addr_target).await?;
-                            tracing::debug!("{}:Connected target addrs.", log_key);
+                            tracing::debug!("connected target addrs.");
                             client_stream
                                 .write_all(part.read_buf.as_ref())
                                 .await
@@ -109,7 +102,7 @@ pub async fn serve_http_with_error_return(
                     }
                 } else {
                     if !e.to_string().contains("error shutting down connection") {
-                        tracing::info!("{}:fail to serve http: {}", log_key, e);
+                        tracing::info!("fail to serve http: {}", e);
                     }
                     Ok(())
                 }
@@ -124,14 +117,21 @@ pub struct HttpService {
     remote: SocketAddr,
     target: SocketAddr,
     config: Arc<Config>,
+    plugin_map: Arc<PluginMap>,
 }
 
 impl HttpService {
-    fn new(addr_remote: SocketAddr, addr_target: SocketAddr, config: Arc<Config>) -> Self {
+    fn new(
+        addr_remote: SocketAddr,
+        addr_target: SocketAddr,
+        config: Config,
+        plugin_map: PluginMap,
+    ) -> Self {
         Self {
             remote: addr_remote,
             target: addr_target,
-            config,
+            config: Arc::new(config),
+            plugin_map: Arc::new(plugin_map),
         }
     }
 
@@ -151,8 +151,12 @@ impl HttpService {
         for rule in request_rules {
             debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
-            for plugin in rule.plugins.iter() {
-                request = plugin.handle_request(request).await?
+            for name in rule.plugins.iter() {
+                request = self
+                    .plugin_map
+                    .must_get(name)?
+                    .handle_request(request)
+                    .await?;
             }
         }
 
@@ -204,8 +208,12 @@ impl HttpService {
         for rule in response_rules {
             debug!("response matched");
             response = apply_response_action(response, &rule.actions).await?;
-            for plugin in rule.plugins.iter() {
-                response = plugin.handle_response(response).await?
+            for name in rule.plugins.iter() {
+                response = self
+                    .plugin_map
+                    .must_get(name)?
+                    .handle_response(response)
+                    .await?
             }
         }
         Ok(response)

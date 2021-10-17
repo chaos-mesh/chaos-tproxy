@@ -7,8 +7,9 @@ use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
 use http::{Request, Response};
 use hyper::Body;
+use md5::{compute, Digest};
 use rs_tproxy_plugin::{RequestHeader, ResponseHeader};
-use wasmer_runtime::{func, imports, DynFunc, Module, Value};
+use wasmer_runtime::{compile, func, imports, DynFunc, Module, Value};
 
 mod logger;
 mod print;
@@ -20,7 +21,7 @@ pub enum HandlerName {
 
 #[derive(Clone)]
 pub enum Plugin {
-    WASM(Arc<Module>),
+    WASM { module: Arc<Module>, hash: Digest },
 }
 
 impl Display for HandlerName {
@@ -33,6 +34,23 @@ impl Display for HandlerName {
 }
 
 impl Plugin {
+    pub fn hash(&self) -> &Digest {
+        match self {
+            Plugin::WASM { module: _, hash } => hash,
+        }
+    }
+
+    pub fn wasm(wasm: &[u8]) -> anyhow::Result<Self> {
+        Ok(Self::WASM {
+            module: Arc::new(compile(wasm)?),
+            hash: compute(wasm),
+        })
+    }
+
+    pub fn is_change(&self, plugin: &[u8]) -> bool {
+        self.hash() != &compute(plugin)
+    }
+
     async fn read_body(header_map: &http::HeaderMap, body: Body) -> anyhow::Result<Vec<u8>> {
         let size_hint = header_map
             .get(http::header::CONTENT_LENGTH)
@@ -83,7 +101,9 @@ impl Plugin {
         origin_body: Vec<u8>,
     ) -> anyhow::Result<Vec<u8>> {
         match self {
-            Plugin::WASM(module) => Self::handle_wasm(hander_name, module, &header, origin_body),
+            Plugin::WASM { module, hash: _ } => {
+                Self::handle_wasm(hander_name, module, &header, origin_body)
+            }
         }
     }
 
@@ -164,7 +184,9 @@ impl Plugin {
 impl Debug for Plugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Plugin::WASM(module) => f.write_fmt(format_args!("wasm module: {:?}", module.info())),
+            Plugin::WASM { module, hash } => {
+                f.write_fmt(format_args!("wasm module({:?}): {:?}", hash, module.info()))
+            }
         }
     }
 }

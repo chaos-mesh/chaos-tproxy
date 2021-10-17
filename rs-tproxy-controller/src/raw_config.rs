@@ -8,6 +8,7 @@ pub struct RawConfig {
     pub safe_mode: Option<bool>,
     pub interface: Option<String>,
     pub rules: Option<Vec<RawRule>>,
+    pub plugin_path: Option<String>,
 
     // Useless options now. Keep these options for upward compatible.
     pub listen_port: Option<u16>,

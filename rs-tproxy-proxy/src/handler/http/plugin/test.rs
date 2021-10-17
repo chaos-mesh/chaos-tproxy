@@ -1,12 +1,10 @@
 use std::io;
-use std::sync::Arc;
 
 use futures::stream::TryStreamExt;
 use futures::AsyncReadExt;
 use http::Response;
 use hyper::Body;
 use serde::Deserialize;
-use wasmer_runtime::compile;
 
 use super::Plugin;
 
@@ -51,7 +49,7 @@ async fn test_plugin() -> anyhow::Result<()> {
         .map_err(|err| anyhow::anyhow!("{}", err))?;
     let body = "Hello World";
     let content_type = "plain/text";
-    let plugin = Plugin::WASM(Arc::new(compile(PLUGIN)?));
+    let plugin = Plugin::wasm(PLUGIN)?;
     let resp = Response::builder()
         .status(200)
         .header("content-type", content_type)
