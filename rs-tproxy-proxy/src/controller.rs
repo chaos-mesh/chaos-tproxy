@@ -77,7 +77,7 @@ impl ProxyGuard {
     fn start(config: Config, plugin_map: PluginMap) -> Self {
         let proxy = HttpServer::new(config, plugin_map.clone());
         Self {
-            plugin_map: plugin_map,
+            plugin_map,
             task: Some(Task::start(async move {
                 tracing::info!("proxy starting");
                 proxy.serve().await
@@ -141,9 +141,8 @@ impl CtrlService {
             let (stream, addr) = listener.accept().await?;
             tracing::debug!("accept streaming: addr={:?}", addr);
             tokio::spawn(async move {
-                match Http::new().serve_connection(stream, service).await {
-                    Err(err) => tracing::error!("{}", err),
-                    _ => (),
+                if let Err(err) = Http::new().serve_connection(stream, service).await {
+                    tracing::error!("{}", err);
                 }
             });
         }

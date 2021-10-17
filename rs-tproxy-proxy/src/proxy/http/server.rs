@@ -55,9 +55,8 @@ impl HttpServer {
                 self.plugin_map.clone(),
             );
             tokio::spawn(async move {
-                match serve_http_with_error_return(stream, &service).await {
-                    Err(err) => tracing::error!("{}", err),
-                    _ => (),
+                if let Err(err) = serve_http_with_error_return(stream, &service).await {
+                    tracing::error!("{}", err);
                 }
             });
         }
