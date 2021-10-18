@@ -1584,6 +1584,7 @@ dependencies = [
  "log 0.4.14",
  "paw",
  "pnet 0.28.0",
+ "rs-tproxy-controller",
  "rs-tproxy-proxy",
  "serde",
  "serde_derive",

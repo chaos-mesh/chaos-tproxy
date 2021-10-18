@@ -3,9 +3,9 @@ build:
 fmt:
 	cargo fmt
 run: 
-	RUST_LOG=trace ./target/debug/tproxy $(config)
+	./target/debug/tproxy -vvv $(config)
 test: build
-	cargo test -p rs-tproxy-proxy -p rs-tproxy-plugin -p rs-tproxy-controller 
+	cargo test -p rs-tproxy -p rs-tproxy-proxy -p rs-tproxy-plugin -p rs-tproxy-controller 
 lint:
 	cargo clippy --all-targets -- -D warnings
 clean:

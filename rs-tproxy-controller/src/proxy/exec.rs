@@ -1,19 +1,16 @@
 use std::env;
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 
-use anyhow::Error;
 use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use rs_tproxy_proxy::task::Task;
 use tokio::process::Command;
-use tokio::select;
-use tokio::sync::oneshot::{channel, Receiver, Sender};
-use tokio::task::JoinHandle;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::proxy::net::bridge::NetEnv;
-use crate::proxy::net::set_net::set_net;
-use crate::proxy::uds_server::UdsDataServer;
+use super::controller::send_config;
+use super::net::bridge::NetEnv;
+use super::net::set_net::set_net;
 
 #[derive(Debug, Clone)]
 pub struct ProxyOpt {
@@ -31,9 +28,8 @@ impl ProxyOpt {
 pub struct Proxy {
     pub opt: ProxyOpt,
     pub net_env: NetEnv,
-    pub sender: Option<Sender<()>>,
-    pub rx: Option<Receiver<()>>,
-    pub task: Option<JoinHandle<Result<(), Error>>>,
+    pub proxy_ports: Option<String>,
+    pub task: Option<Task<ExitStatus>>,
 }
 
 impl Proxy {
@@ -43,30 +39,17 @@ impl Proxy {
             .with_extension("sock");
 
         let opt = ProxyOpt::new(uds_path, verbose);
-        let (sender, rx) = channel();
         Self {
             opt,
             net_env: NetEnv::new(),
-            sender: Some(sender),
-            rx: Some(rx),
+            proxy_ports: None,
             task: None,
         }
     }
 
     #[instrument(skip(self, config))]
-    pub async fn exec(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
+    pub async fn start(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
         tracing::info!("transferring proxy raw config {:?}", &config);
-        let uds_server = UdsDataServer::new(config.clone(), self.opt.ipc_path.clone());
-        let listener = uds_server.bind()?;
-
-        let server = uds_server;
-        tokio::spawn(async move {
-            let _ = server
-                .listen(listener)
-                .await
-                .map_err(|e| tracing::error!("{:?}", e));
-        });
-
         let opt = self.opt.clone();
         let exe_path = match std::env::current_exe() {
             Err(e) => {
@@ -81,13 +64,13 @@ impl Proxy {
         tracing::info!("network device name {}", self.net_env.device.clone());
         match config.interface {
             None => {}
-            Some(interface) => {
-                self.net_env.set_ip_with_interface_name(&interface)?;
+            Some(ref interface) => {
+                self.net_env.set_ip_with_interface_name(interface)?;
             }
         }
         set_net(
             &self.net_env,
-            config.proxy_ports,
+            config.proxy_ports.as_ref(),
             config.listen_port,
             config.safe_mode,
         )?;
@@ -100,64 +83,44 @@ impl Proxy {
             .arg(exe_path)
             .arg(format!(
                 "-{}",
-                String::from_utf8(vec![b'v'; self.opt.verbose as usize]).unwrap()
+                String::from_utf8(vec![b'v'; self.opt.verbose as usize])?
             ))
             .arg("--proxy")
-            .arg(format!("--ipc-path={}", opt.ipc_path.to_str().unwrap()));
+            .arg(format!("--ipc-path={}", opt.ipc_path.to_string_lossy()));
+        tracing::info!("starting proxy");
+        let mut process = match proxy.stdin(Stdio::piped()).spawn() {
+            Ok(process) => {
+                tracing::info!("proxy is running");
+                process
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!("failed to start sub proxy: {}", e));
+            }
+        };
 
-        let rx = self.rx.take().unwrap();
-        self.task = Some(tokio::spawn(async move {
-            tracing::info!("starting proxy");
-            let mut process = match proxy.stdin(Stdio::piped()).spawn() {
-                Ok(process) => {
-                    tracing::info!("proxy is running");
-                    process
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!("failed to exec sub proxy : {:?}", e));
-                }
-            };
-            select! {
-                _ = process.wait() => {}
-                _ = rx => {
-                    tracing::info!("killing sub process");
-                    let id = process.id().unwrap() as i32;
-                    unsafe {
-                        libc::kill(id, libc::SIGINT);
-                    }
-                }
-            };
-            Ok(())
-        }));
+        send_config(&self.opt.ipc_path, &config).await?;
+        self.task = Some(Task::start(async move { Ok(process.wait().await?) }));
+        self.proxy_ports = config.proxy_ports;
         Ok(())
     }
 
     pub async fn stop(&mut self) -> anyhow::Result<()> {
+        let _ = self.net_env.clear_bridge();
         if let Some(task) = self.task.take() {
-            if let Some(sender) = self.sender.take() {
-                let _ = sender.send(());
-            };
-            let _ = self.net_env.clear_bridge();
-            let _ = task.await?;
+            if let Some(status) = task.stop().await? {
+                status.exit_ok()?;
+            }
         }
         Ok(())
     }
 
     pub async fn reload(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
-        self.stop().await?;
-        if self.task.is_none() {
-            let mut new = Self::new(self.opt.verbose);
-            self.opt = new.opt;
-            self.sender = new.sender.take();
-            self.rx = new.rx.take();
+        if self.proxy_ports == config.proxy_ports {
+            send_config(&self.opt.ipc_path, &config).await?;
+        } else {
+            self.stop().await?;
+            self.start(config).await?;
         }
-
-        return match self.exec(config).await {
-            Err(e) => {
-                self.net_env.clear_bridge()?;
-                Err(e)
-            }
-            Ok(_) => Ok(()),
-        };
+        Ok(())
     }
 }

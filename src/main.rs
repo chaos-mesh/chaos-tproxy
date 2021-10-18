@@ -1,17 +1,12 @@
 use std::process::exit;
 
 use anyhow::anyhow;
+use rs_tproxy_controller::cmd::command_line::{get_config_from_opt, Opt};
+use rs_tproxy_controller::cmd::interactive::handler::ConfigServer;
+use rs_tproxy_controller::proxy::exec::Proxy;
 use rs_tproxy_proxy::proxy_main;
 use rs_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
-
-use crate::cmd::command_line::{get_config_from_opt, Opt};
-use crate::cmd::interactive::handler::ConfigServer;
-use crate::proxy::exec::Proxy;
-
-pub mod cmd;
-pub mod proxy;
-pub mod raw_config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
