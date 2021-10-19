@@ -4,6 +4,10 @@ Transparent HTTP proxy for [Abort|Delay|Append|Replace] packet.
 Based on linux iptables-extension : TPROXY.
 
 ## Installation
+### Kernel Modules
+
+Check the installed kernel modules by `lsmod`, modules `ebtables`, `ebtable_broute` and `iptable_mangle` are required to make rs-tproxy work.
+
 ### Install ebtables-legacy
 Rs-tproxy relies on the legacy version of ebtables since the ebtables-nft have some problem on brouting transfer.
 So on different linux distribution we need to install ebtables-legacy or create a symbolic link.
@@ -22,6 +26,13 @@ yum reinstall iptables-ebtables
 ```
 apt install -y ebtables
 ```
+
+- additions for container:
+
+```
+update-alternatives --set iptables /usr/sbin/iptables-legacy
+```
+
 ### Install rs-tproxy
 
 Download rs-tproxy in release.
