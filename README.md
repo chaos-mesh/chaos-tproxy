@@ -25,8 +25,14 @@ yum reinstall iptables-ebtables
 #### On Debian or Ubuntu :
 ```
 apt install -y ebtables
+```
+
+- additions for container:
+
+```
 update-alternatives --set iptables /usr/sbin/iptables-legacy
 ```
+
 ### Install rs-tproxy
 
 Download rs-tproxy in release.
