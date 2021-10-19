@@ -100,9 +100,11 @@ impl PluginMap {
     }
 
     async fn load_plugins(&mut self, plugin_path: &str) -> Result<()> {
-        if !metadata(plugin_path).await?.is_dir() {
-            return Ok(());
+        match metadata(plugin_path).await {
+            Ok(meta) if meta.is_dir() => (),
+            _ => return Ok(()),
         }
+
         debug!("ready to load plugins in path({})", plugin_path);
         let mut dir = read_dir(&plugin_path).await?;
         while let Some(entry) = dir.next_entry().await? {

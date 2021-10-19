@@ -13,6 +13,7 @@ async fn test_controller() -> anyhow::Result<()> {
         .with_extension("sock");
     let data = RawConfig::default();
     tokio::spawn(proxy_main(uds_path.clone()));
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    send_config(uds_path, &data).await
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    send_config(uds_path, &data).await?;
+    Ok(())
 }
