@@ -5,7 +5,7 @@ edition = "2018"
 
 [[test]]
 name = "integration"
-path = "./integrations/mod.rs"
+path = "integrations/mod.rs"
 
 [dependencies]
 anyhow = "1.0"
@@ -13,18 +13,26 @@ clap = "2.33.3"
 futures = "0.3.10"
 http = "0.2.3"
 humantime-serde = "1.0"
-hyper = {git = "https://github.com/Andrewmatilde/hyper.git", features = ["runtime", "client", "server", "http1", "http2", "stream", "error_return"]}
+hyper = { git = "https://github.com/Andrewmatilde/hyper.git", features = [
+    "runtime",
+    "client",
+    "server",
+    "http1",
+    "http2",
+    "stream",
+    "error_return",
+] }
 iptables = "0.4"
-libc = {version = "0.2.81", features = ["std"]}
+libc = { version = "0.2.81", features = ["std"] }
 paw = "1.0"
-serde = {version = "1.0", features = ["derive"]}
+serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0.123"
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_yaml = "0.8"
 socket2 = "0.3"
-structopt = {version = "0.3", features = ["paw"]}
-tokio = {version = "1.4", features = ["full"]}
+structopt = { version = "0.3", features = ["paw"] }
+tokio = { version = "1.4", features = ["full"] }
 wildmatch = "2.1"
 tracing = "0.1"
 tracing-futures = "0.2"
@@ -36,9 +44,12 @@ cfg-if = "1.0.0"
 bincode = "1.3.3"
 tempfile = "3.2.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
-futures-util = { version = "0.3.7", default-features = false, features = ["alloc", "sink"] }
-rs-tproxy-proxy = {path = "../rs-tproxy-proxy"}
-rs-tproxy-controller = {path = "../rs-tproxy-controller"}
+futures-util = { version = "0.3.7", default-features = false, features = [
+    "alloc",
+    "sink",
+] }
+rs-tproxy-proxy = { path = "../rs-tproxy-proxy" }
+rs-tproxy-controller = { path = "../rs-tproxy-controller" }
 pnet = "0.28.0"
 default-net = "0.2.0"
-system_gateway = {git="https://github.com/aruntomar/system_gateway"}
+system_gateway = { git = "https://github.com/aruntomar/system_gateway" }
