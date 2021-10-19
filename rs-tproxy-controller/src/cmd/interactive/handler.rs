@@ -96,7 +96,7 @@ impl ConfigService {
         raw_config.try_into()
     }
 
-    #[instrument]
+    #[instrument(skip(proxy))]
     async fn handle(proxy: &mut Proxy, request: Request<Body>) -> anyhow::Result<Response<Body>> {
         if request.method() != Method::PUT {
             return Ok(Response::builder()

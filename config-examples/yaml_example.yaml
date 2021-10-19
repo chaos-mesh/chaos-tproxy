@@ -1,7 +1,5 @@
-listen_port: 58080 # optional
-proxy_ports: [80, 443, 8080] # proxy will do nothing if empty
-proxy_mark: 1 # optional
-ignore_mark: 255 # optional
+proxy_ports: [80, 443, 8080] # proxy for all ports bigger than 1024 if empty
+plugin_path: /     # the directory path to load plugin files (xxx.wasm), `/etc/rs-tproxy/plugins` by default
 rules:
   - target: Request
     selector:
@@ -12,7 +10,6 @@ rules:
       delay: 10s
       replace:
         body:
-          update_content_length: false # true by default
           contents:
             type: TEXT
             value: '{"name": "Chaos Mesh", "message": "Hello!"}'
@@ -24,10 +21,11 @@ rules:
         - [foo, bar]
         - [foo, other]
         body:
-          update_content_length: false # true by default
           contents:
             type: JSON
             value: '{"message": "Hi!"}'
+      plugins:
+        - xxx # plugin name, load from file `<plugin_path>/xxx.wasm`
 
   - target: Response
     selector:

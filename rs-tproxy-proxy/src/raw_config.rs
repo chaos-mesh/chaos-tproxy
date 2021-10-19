@@ -16,6 +16,8 @@ use crate::handler::http::rule::{Rule, Target};
 use crate::handler::http::selector::Selector;
 use crate::proxy::http::config::Config;
 
+pub const DEFAULT_PLUGIN_PATH: &str = "/etc/rs-tproxy/plugins";
+
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawConfig {
     pub proxy_ports: Option<String>,
@@ -23,6 +25,7 @@ pub struct RawConfig {
     pub safe_mode: bool,
     pub interface: Option<String>,
     pub rules: Vec<RawRule>,
+    pub plugin_path: Option<String>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -30,6 +33,7 @@ pub struct RawRule {
     pub target: RawTarget,
     pub selector: RawSelector,
     pub actions: RawActions,
+    pub plugins: Option<Vec<String>>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -152,6 +156,9 @@ impl TryFrom<RawConfig> for Config {
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             proxy_port: raw.listen_port,
+            plugin_path: raw
+                .plugin_path
+                .unwrap_or_else(|| DEFAULT_PLUGIN_PATH.to_owned()),
             rules: raw
                 .rules
                 .into_iter()
@@ -169,6 +176,7 @@ impl TryFrom<RawRule> for Rule {
             target: rule.target.into(),
             selector: rule.selector.try_into()?,
             actions: rule.actions.try_into()?,
+            plugins: rule.plugins.unwrap_or_default(),
         })
     }
 }

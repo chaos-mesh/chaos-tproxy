@@ -2,9 +2,9 @@ use std::convert::TryInto;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use log::Level;
 use structopt::StructOpt;
 use tokio::fs::read_to_string;
-use tracing_subscriber::filter::LevelFilter;
 
 use crate::proxy::config::Config;
 use crate::raw_config::RawConfig;
@@ -36,12 +36,12 @@ pub struct Opt {
 }
 
 impl Opt {
-    pub fn get_level_filter(&self) -> LevelFilter {
+    pub fn get_level(&self) -> Level {
         match self.verbose {
-            0 => LevelFilter::ERROR,
-            1 => LevelFilter::INFO,
-            2 => LevelFilter::DEBUG,
-            _ => LevelFilter::TRACE,
+            0 => Level::Error,
+            1 => Level::Info,
+            2 => Level::Debug,
+            _ => Level::Trace,
         }
     }
 

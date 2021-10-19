@@ -1,0 +1,20 @@
+cargo-features = ["per-package-target"]
+
+[package]
+name = "plugin-example"
+version = "0.1.0"
+edition = "2018"
+forced-target = "wasm32-unknown-unknown"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rs-tproxy-plugin = { path = "../../rs-tproxy-plugin" }
+
+serde_json = "1.0"
+log = "0.4"
+anyhow = "1.0"
+http = "0.2"

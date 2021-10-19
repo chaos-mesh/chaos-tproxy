@@ -6,7 +6,7 @@ use crate::proxy::net::iptables::{set_iptables, set_iptables_safe};
 #[cfg(target_os = "linux")]
 pub fn set_net(
     net_env: &NetEnv,
-    proxy_ports: Option<String>,
+    proxy_ports: Option<&String>,
     listen_port: u16,
     safe: bool,
 ) -> anyhow::Result<()> {
@@ -16,7 +16,7 @@ pub fn set_net(
     let device_interface = get_interface(net_env.veth4.clone()).unwrap();
     let device_mac = device_interface.mac.unwrap().to_string();
 
-    if let Some(ref proxy_ports) = proxy_ports {
+    if let Some(proxy_ports) = proxy_ports {
         execute_all(set_iptables(net_env, Some(proxy_ports), &port, &device_mac))?;
     } else {
         execute_all(set_iptables(net_env, None, &port, &device_mac))?;

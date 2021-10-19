@@ -2,6 +2,7 @@ use std::process::Command;
 
 use anyhow::{anyhow, Result};
 use default_net;
+use log::debug;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use uuid::Uuid;
@@ -189,6 +190,7 @@ impl NetEnv {
             bash_c(&remove_store),
             clear_ebtables(),
         ];
+        debug!("clear bridge, scripts: {:?}", cmdvv);
         execute_all_with_log_error(cmdvv)?;
         Ok(())
     }

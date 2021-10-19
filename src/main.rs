@@ -1,17 +1,12 @@
 use std::process::exit;
 
 use anyhow::anyhow;
+use rs_tproxy_controller::cmd::command_line::{get_config_from_opt, Opt};
+use rs_tproxy_controller::cmd::interactive::handler::ConfigServer;
+use rs_tproxy_controller::proxy::exec::Proxy;
 use rs_tproxy_proxy::proxy_main;
 use rs_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
-
-use crate::cmd::command_line::{get_config_from_opt, Opt};
-use crate::cmd::interactive::handler::ConfigServer;
-use crate::proxy::exec::Proxy;
-
-pub mod cmd;
-pub mod proxy;
-pub mod raw_config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,7 +18,10 @@ async fn main() -> anyhow::Result<()> {
         Ok(o) => o,
     };
     tracing_subscriber::fmt()
-        .with_max_level(opt.get_level_filter())
+        .with_env_filter(tracing_subscriber::EnvFilter::new(format!(
+            "rs_tproxy={}",
+            opt.get_level()
+        )))
         .with_writer(std::io::stderr)
         .try_init()
         .map_err(|err| anyhow!("{}", err))?;
