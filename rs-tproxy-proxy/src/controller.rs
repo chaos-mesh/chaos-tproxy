@@ -16,7 +16,7 @@ use hyper::Body;
 use tokio::fs::{metadata, read, read_dir};
 use tokio::net::UnixListener;
 use tokio::sync::Mutex;
-use tracing::instrument;
+use tracing::{debug, instrument, trace};
 
 use super::handler::http::plugin::Plugin;
 use super::proxy::http::config::Config;
@@ -103,10 +103,17 @@ impl PluginMap {
         if !metadata(plugin_path).await?.is_dir() {
             return Ok(());
         }
-        while let Some(entry) = read_dir(&plugin_path).await?.next_entry().await? {
+        debug!("ready to load plugins in path({})", plugin_path);
+        let mut dir = read_dir(&plugin_path).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            trace!("read entry: {:?}", entry);
             if !entry.file_type().await?.is_dir()
                 && entry.file_name().to_string_lossy().ends_with(WASM_EXT)
             {
+                debug!(
+                    "ready to load plugin file({})",
+                    entry.file_name().to_string_lossy()
+                );
                 let module = read(entry.path()).await?;
                 let name = entry
                     .file_name()
@@ -115,10 +122,12 @@ impl PluginMap {
                     .to_owned();
                 match self.get_mut(&name) {
                     None => {
+                        debug!("ready to load new plugin({})", name);
                         self.insert(name, Plugin::wasm(&module)?);
                     }
                     Some(plugin) => {
                         if plugin.is_change(&module) {
+                            debug!("ready to update plugin({})", name);
                             *plugin = Plugin::wasm(&module)?;
                         }
                     }
@@ -177,15 +186,16 @@ impl CtrlService {
             }
             Ok(c) => c,
         };
-
+        debug!("read config: {:?}", config);
         let mut proxy = self.0.lock().await;
         let mut plugin_map = match proxy.take() {
             Some(proxy) => proxy.stop().await?,
             None => Default::default(),
         };
+        debug!("ready to load plugins: current({:?})", plugin_map);
         plugin_map.load_plugins(&config.plugin_path).await?;
+        debug!("plugins loaded: current({:?})", plugin_map);
         *proxy = Some(ProxyGuard::start(config, plugin_map));
-
         Ok(Response::builder()
             .status(StatusCode::OK)
             .body(Body::empty())?)

@@ -184,9 +184,11 @@ impl Plugin {
 impl Debug for Plugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Plugin::WASM { module, hash } => {
-                f.write_fmt(format_args!("wasm module({:?}): {:?}", hash, module.info()))
-            }
+            Plugin::WASM { module, hash } => f.write_fmt(format_args!(
+                "wasm module({:?}): {:?}",
+                hash,
+                module.info().exports
+            )),
         }
     }
 }

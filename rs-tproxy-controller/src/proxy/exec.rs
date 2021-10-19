@@ -98,6 +98,7 @@ impl Proxy {
             }
         };
 
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         send_config(&self.opt.ipc_path, &config).await?;
         self.task = Some(Task::start(async move { Ok(process.wait().await?) }));
         self.proxy_ports = config.proxy_ports;
@@ -115,7 +116,9 @@ impl Proxy {
     }
 
     pub async fn reload(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
-        if self.proxy_ports == config.proxy_ports {
+        if self.task.is_none() {
+            self.start(config).await?;
+        } else if self.proxy_ports == config.proxy_ports {
             send_config(&self.opt.ipc_path, &config).await?;
         } else {
             self.stop().await?;

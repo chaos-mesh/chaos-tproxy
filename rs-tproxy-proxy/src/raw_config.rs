@@ -12,7 +12,6 @@ use crate::handler::http::action::{
     Actions, PatchAction, PatchBodyAction, PatchBodyActionContents, ReplaceAction,
     ReplaceBodyAction,
 };
-use crate::handler::http::plugin::Plugin;
 use crate::handler::http::rule::{Rule, Target};
 use crate::handler::http::selector::Selector;
 use crate::proxy::http::config::Config;
@@ -35,12 +34,6 @@ pub struct RawRule {
     pub selector: RawSelector,
     pub actions: RawActions,
     pub plugins: Option<Vec<String>>,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-#[serde(tag = "type", content = "content")]
-pub enum RawPlugin {
-    WASM(String), // WASM in base64
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -193,16 +186,6 @@ impl From<RawTarget> for Target {
         match target {
             RawTarget::Request => Target::Request,
             RawTarget::Response => Target::Response,
-        }
-    }
-}
-
-impl TryFrom<RawPlugin> for Plugin {
-    type Error = Error;
-
-    fn try_from(plugin: RawPlugin) -> Result<Self, Self::Error> {
-        match plugin {
-            RawPlugin::WASM(data) => Ok(Plugin::wasm(&base64::decode(&data)?)?),
         }
     }
 }

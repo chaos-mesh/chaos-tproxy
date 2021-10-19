@@ -13,6 +13,7 @@ use hyper::{Body, Uri};
 use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::UnixStream;
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 struct UnixConnect(PathBuf);
@@ -35,12 +36,14 @@ impl Service<Uri> for UnixConnect {
 }
 
 pub async fn send_config(path: impl Into<PathBuf>, config: &ProxyRawConfig) -> Result<()> {
-    let client = Client::builder().build(UnixConnect(path.into()));
+    let p = path.into();
+    let client = Client::builder().build(UnixConnect(p));
     let request = Request::builder()
-        .uri("/")
+        .uri("http://ignore/")
         .method(Method::PUT)
         .body(Body::from(serde_json::to_vec(config)?))?;
     let resp = client.request(request).await?;
+    debug!("config({:?}) is sent", config);
     if !resp.status().is_success() {
         return Err(anyhow::anyhow!(
             "fail to send config: status({})",
