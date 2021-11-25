@@ -113,7 +113,9 @@ impl ConfigService {
             Ok(c) => c,
         };
 
-        proxy.reload(config.proxy_config).await?;
+        if config.proxy_config.proxy_ports.is_some() {
+            proxy.reload(config.proxy_config).await?;
+        }
 
         Ok(Response::builder()
             .status(StatusCode::OK)

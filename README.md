@@ -83,7 +83,7 @@ Support json and yaml config.
 Example of config could be found in `./config-examples`
 ## Yaml config file example
 ```yaml
-proxy_ports: [80] # option u16 vec ; proxy all tcp packet if not provided 
+proxy_ports: [80] # option u16 vec ; Do nothing if not provided 
 interface: eth33 # option string
 rules: # option rule vec
   - target: Request # Request or Response. 

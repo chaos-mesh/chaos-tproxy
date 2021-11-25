@@ -35,7 +35,9 @@ async fn main() -> anyhow::Result<()> {
     if opt.input.is_some() {
         let cfg = get_config_from_opt(&opt).await?;
         let mut proxy = Proxy::new(opt.verbose);
-        proxy.reload(cfg.proxy_config).await?;
+        if cfg.proxy_config.proxy_ports.is_some() {
+            proxy.reload(cfg.proxy_config).await?;
+        }
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         proxy.stop().await?;
