@@ -143,6 +143,9 @@ impl Proxy {
 
     pub async fn reload(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
         self.stop().await?;
+        if config.proxy_ports.is_none() {
+            return Ok(());
+        }
         if self.task.is_none() {
             let mut new = Self::new(self.opt.verbose);
             self.opt = new.opt;
