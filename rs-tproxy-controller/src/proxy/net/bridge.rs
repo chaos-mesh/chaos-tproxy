@@ -86,7 +86,7 @@ impl NetEnv {
                 return Err(anyhow!(e));
             }
         };
-        let save = format!("ip route save table main > {}", &self.ip_route_store);
+        let save = format!("ip route save table all > {}", &self.ip_route_store);
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self.ip.parse().unwrap();
         let net_ip32 = net.ip().to_string() + "/32";
