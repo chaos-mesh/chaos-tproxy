@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::net::Ipv4Addr;
 
 use anyhow::{anyhow, Result};
 use default_net;
@@ -38,7 +39,7 @@ impl NetEnv {
                 break key;
             }
         };
-        let ip_route_store = Uuid::new_v4().to_string();
+        let ip_route_store = "ip_route_store".to_string() + &Uuid::new_v4().to_string();
         let device = get_default_interface().unwrap();
         let netns = prefix.clone() + "ns";
         let bridge1 = prefix.clone() + "b1";
@@ -177,17 +178,31 @@ impl NetEnv {
     }
 
     pub fn clear_bridge(&self) -> Result<()> {
-        let restore = format!("ip route restore < {}", &self.ip_route_store);
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
+
+        let net: Ipv4Network = self.ip.parse().unwrap();
+        let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
+            + "/"
+            + &net.prefix().to_string();
+        let del_default_route = format!("ip route del {} dev {} proto kernel scope link src {}", &net_domain, &self.device, &net.ip().to_string());
+
         let cmdvv = vec![
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            bash_c(&restore),
-            bash_c(&remove_store),
+            bash_c(&del_default_route),
             clear_ebtables(),
+        ];
+        execute_all_with_log_error(cmdvv)?;
+
+        let ip_routes= restore_all_ip_routes(&self.ip_route_store)?;
+        let iproute_cmds: Vec<Vec<&str>> = ip_routes.iter().map(|s| bash_c(&**s)).collect();
+        execute_all_with_log_error(iproute_cmds)?;
+
+        let cmdvv = vec![
+            bash_c(&remove_store),
         ];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
@@ -352,4 +367,23 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
         }
     }
     Err(anyhow!("no valid interface"))
+}
+
+pub fn restore_all_ip_routes(path : &str) -> Result<Vec<String>> {
+    let cmd_string = format!("ip route showdump < {}", path);
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
+        .arg(cmd_string);
+    let stdo = cmd.output()?.stdout;
+    let out = String::from_utf8_lossy(stdo.as_slice());
+
+    let mut ip_routes: Vec<_> = out.split('\n').collect();
+    ip_routes.reverse();
+    let mut route_cmds: Vec<String> = Vec::new();
+    for ip_route in ip_routes {
+        if !ip_route.is_empty() {
+            route_cmds.push(format!("{} {}", "ip route add", ip_route));
+        }
+    }
+    Ok(route_cmds)
 }
