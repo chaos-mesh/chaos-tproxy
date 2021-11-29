@@ -180,12 +180,8 @@ impl NetEnv {
     pub fn clear_bridge(&self) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
-
-        let net: Ipv4Network = self.ip.parse().unwrap();
-        let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
-            + "/"
-            + &net.prefix().to_string();
-        let del_default_route = format!("ip route del {} dev {} proto kernel scope link src {}", &net_domain, &self.device, &net.ip().to_string());
+        
+        let flush_main_route = format!("ip route flush table main");
         let ip_route_show = "ip route show";
 
         let cmdvv = vec![
@@ -193,7 +189,7 @@ impl NetEnv {
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            bash_c(&del_default_route),
+            bash_c(&flush_main_route),
             clear_ebtables(),
             bash_c(ip_route_show),
         ];
