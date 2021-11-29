@@ -346,7 +346,11 @@ pub fn execute(cmdv: Vec<&str>) -> Result<()> {
     for s in iter {
         cmd.arg(*s);
     }
-    os_err(cmd.output().unwrap().stderr)
+    let out = cmd.output().unwrap();
+    if !out.stdout.is_empty() {
+        tracing::debug!("stdout : {}", String::from_utf8_lossy(&out.stdout));
+    }
+    os_err(out.stderr)
 }
 
 pub fn get_interface(name: String) -> Result<NetworkInterface> {
