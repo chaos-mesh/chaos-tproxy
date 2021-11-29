@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::net::Ipv4Addr;
 
 use anyhow::{anyhow, Result};
 use default_net;
@@ -115,6 +114,7 @@ impl NetEnv {
             ip_address("del", &self.ip, &self.device),
             ip_address("add", &self.ip, &self.veth4),
             arp_set(&gateway_ip, &gateway_mac, &self.veth1),
+            arp_set(&gateway_ip, &gateway_mac, &self.veth4),
             ip_netns(&self.netns, arp_set(&gateway_ip, &gateway_mac, &self.veth2)),
             ip_netns(
                 &self.netns,
@@ -174,15 +174,27 @@ impl NetEnv {
             ),
         ];
         execute_all(cmdvv)?;
+        let interfaces = pnet::datalink::interfaces();
+        let index = interfaces
+            .iter()
+            .position(|p| &(p.name) == &self.veth4)
+            .unwrap();
+        let _ = execute(ip_netns(
+            &self.netns,
+            arp_set(
+                &net.ip().to_string(),
+                &interfaces[index].mac.unwrap().to_string(),
+                &self.bridge2,
+            ),
+        ))?;
         Ok(())
     }
 
     pub fn clear_bridge(&self) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
-        
+
         let flush_main_route = format!("ip route flush table main");
-        let ip_route_show = "ip route show";
 
         let cmdvv = vec![
             ip_netns_del(&self.netns),
@@ -191,17 +203,14 @@ impl NetEnv {
             bash_c(restore_dns),
             bash_c(&flush_main_route),
             clear_ebtables(),
-            bash_c(ip_route_show),
         ];
         execute_all_with_log_error(cmdvv)?;
 
-        let ip_routes= restore_all_ip_routes(&self.ip_route_store)?;
+        let ip_routes = restore_all_ip_routes(&self.ip_route_store)?;
         let iproute_cmds: Vec<Vec<&str>> = ip_routes.iter().map(|s| bash_c(&**s)).collect();
         execute_all_with_log_error(iproute_cmds)?;
 
-        let cmdvv = vec![
-            bash_c(&remove_store),
-        ];
+        let cmdvv = vec![bash_c(&remove_store)];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
     }
@@ -371,11 +380,10 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
     Err(anyhow!("no valid interface"))
 }
 
-pub fn restore_all_ip_routes(path : &str) -> Result<Vec<String>> {
+pub fn restore_all_ip_routes(path: &str) -> Result<Vec<String>> {
     let cmd_string = format!("ip route showdump < {}", path);
     let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(cmd_string);
+    cmd.arg("-c").arg(cmd_string);
     let stdo = cmd.output()?.stdout;
     let out = String::from_utf8_lossy(stdo.as_slice());
 
