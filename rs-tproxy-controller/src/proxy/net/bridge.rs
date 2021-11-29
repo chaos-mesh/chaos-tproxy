@@ -186,6 +186,7 @@ impl NetEnv {
             + "/"
             + &net.prefix().to_string();
         let del_default_route = format!("ip route del {} dev {} proto kernel scope link src {}", &net_domain, &self.device, &net.ip().to_string());
+        let ip_route_show = "ip route show";
 
         let cmdvv = vec![
             ip_netns_del(&self.netns),
@@ -194,6 +195,7 @@ impl NetEnv {
             bash_c(restore_dns),
             bash_c(&del_default_route),
             clear_ebtables(),
+            bash_c(ip_route_show),
         ];
         execute_all_with_log_error(cmdvv)?;
 
