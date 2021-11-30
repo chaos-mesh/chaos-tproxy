@@ -177,7 +177,7 @@ impl NetEnv {
         let interfaces = pnet::datalink::interfaces();
         let index = interfaces
             .iter()
-            .position(|p| &(p.name) == &self.veth4)
+            .position(|p| p.name == self.veth4)
             .unwrap();
         let _ = execute(ip_netns(
             &self.netns,
@@ -194,14 +194,14 @@ impl NetEnv {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
 
-        let flush_main_route = format!("ip route flush table main");
+        let flush_main_route = "ip route flush table main";
 
         let cmdvv = vec![
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            bash_c(&flush_main_route),
+            bash_c(flush_main_route),
             clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
