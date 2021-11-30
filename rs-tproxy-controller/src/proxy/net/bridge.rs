@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
@@ -87,7 +87,10 @@ impl NetEnv {
         };
         let save = format!("ip route save table all > {}", &self.ip_route_store);
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
-        let net: Ipv4Network = self.ip.parse().unwrap();
+        let net: Ipv4Network = self
+            .ip
+            .parse()
+            .context(format!("ip {} parsed error", self.ip))?;
         let net_ip32 = net.ip().to_string() + "/32";
         let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
@@ -175,17 +178,16 @@ impl NetEnv {
         ];
         execute_all(cmdvv)?;
         let interfaces = pnet::datalink::interfaces();
-        let index = interfaces
+        let veth4_mac = interfaces
             .iter()
-            .position(|p| p.name == self.veth4)
-            .unwrap();
+            .find(|p| p.name == self.veth4)
+            .context(format!("interface {} not found", self.veth4.clone()))?
+            .mac
+            .context(format!("mac {} not found", self.veth4.clone()))?
+            .to_string();
         let _ = execute(ip_netns(
             &self.netns,
-            arp_set(
-                &net.ip().to_string(),
-                &interfaces[index].mac.unwrap().to_string(),
-                &self.bridge2,
-            ),
+            arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
         ))?;
         Ok(())
     }
@@ -353,7 +355,9 @@ pub fn execute(cmdv: Vec<&str>) -> Result<()> {
     for s in iter {
         cmd.arg(*s);
     }
-    let out = cmd.output().unwrap();
+    let out = cmd
+        .output()
+        .context(format!("cmd output meet error : {:?}", cmdv))?;
     if !out.stdout.is_empty() {
         tracing::debug!("stdout : {}", String::from_utf8_lossy(&out.stdout));
     }
