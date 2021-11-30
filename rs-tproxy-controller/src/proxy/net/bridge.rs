@@ -1,7 +1,6 @@
 use std::process::Command;
-use std::net::Ipv4Addr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
@@ -88,7 +87,10 @@ impl NetEnv {
         };
         let save = format!("ip route save table all > {}", &self.ip_route_store);
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
-        let net: Ipv4Network = self.ip.parse().unwrap();
+        let net: Ipv4Network = self
+            .ip
+            .parse()
+            .context(format!("ip {} parsed error", self.ip))?;
         let net_ip32 = net.ip().to_string() + "/32";
         let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
@@ -115,6 +117,7 @@ impl NetEnv {
             ip_address("del", &self.ip, &self.device),
             ip_address("add", &self.ip, &self.veth4),
             arp_set(&gateway_ip, &gateway_mac, &self.veth1),
+            arp_set(&gateway_ip, &gateway_mac, &self.veth4),
             ip_netns(&self.netns, arp_set(&gateway_ip, &gateway_mac, &self.veth2)),
             ip_netns(
                 &self.netns,
@@ -174,6 +177,18 @@ impl NetEnv {
             ),
         ];
         execute_all(cmdvv)?;
+        let interfaces = pnet::datalink::interfaces();
+        let veth4_mac = interfaces
+            .iter()
+            .find(|p| p.name == self.veth4)
+            .context(format!("interface {} not found", self.veth4.clone()))?
+            .mac
+            .context(format!("mac {} not found", self.veth4.clone()))?
+            .to_string();
+        let _ = execute(ip_netns(
+            &self.netns,
+            arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
+        ))?;
         Ok(())
     }
 
@@ -181,29 +196,23 @@ impl NetEnv {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
         let remove_store = format!("rm -f {}", &self.ip_route_store);
 
-        let net: Ipv4Network = self.ip.parse().unwrap();
-        let net_domain = Ipv4Addr::from(u32::from(net.ip()) & u32::from(net.mask())).to_string()
-            + "/"
-            + &net.prefix().to_string();
-        let del_default_route = format!("ip route del {} dev {} proto kernel scope link src {}", &net_domain, &self.device, &net.ip().to_string());
+        let flush_main_route = "ip route flush table main";
 
         let cmdvv = vec![
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            bash_c(&del_default_route),
+            bash_c(flush_main_route),
             clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
 
-        let ip_routes= restore_all_ip_routes(&self.ip_route_store)?;
+        let ip_routes = restore_all_ip_routes(&self.ip_route_store)?;
         let iproute_cmds: Vec<Vec<&str>> = ip_routes.iter().map(|s| bash_c(&**s)).collect();
         execute_all_with_log_error(iproute_cmds)?;
 
-        let cmdvv = vec![
-            bash_c(&remove_store),
-        ];
+        let cmdvv = vec![bash_c(&remove_store)];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
     }
@@ -346,7 +355,13 @@ pub fn execute(cmdv: Vec<&str>) -> Result<()> {
     for s in iter {
         cmd.arg(*s);
     }
-    os_err(cmd.output().unwrap().stderr)
+    let out = cmd
+        .output()
+        .context(format!("cmd output meet error : {:?}", cmdv))?;
+    if !out.stdout.is_empty() {
+        tracing::debug!("stdout : {}", String::from_utf8_lossy(&out.stdout));
+    }
+    os_err(out.stderr)
 }
 
 pub fn get_interface(name: String) -> Result<NetworkInterface> {
@@ -369,11 +384,10 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
     Err(anyhow!("no valid interface"))
 }
 
-pub fn restore_all_ip_routes(path : &str) -> Result<Vec<String>> {
+pub fn restore_all_ip_routes(path: &str) -> Result<Vec<String>> {
     let cmd_string = format!("ip route showdump < {}", path);
     let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(cmd_string);
+    cmd.arg("-c").arg(cmd_string);
     let stdo = cmd.output()?.stdout;
     let out = String::from_utf8_lossy(stdo.as_slice());
 
