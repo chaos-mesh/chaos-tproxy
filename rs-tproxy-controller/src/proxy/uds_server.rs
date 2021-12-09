@@ -30,7 +30,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
         loop {
             match (&listener).accept().await {
                 Ok((mut stream, addr)) => {
-                    let buf = bincode::serialize(&self.data)?;
+                    let buf = serde_json::to_vec(&self.data)?;
                     tokio::spawn(async move {
                         return match stream.write_all(buf.as_slice()).await {
                             Ok(_) => {

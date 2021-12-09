@@ -99,7 +99,7 @@ pub async fn apply_request_action(
         append_queries(request.uri_mut(), patch.queries.as_ref())?;
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
-            let mut data = read_value(&mut request.body_mut()).await?;
+            let mut data = read_value(request.body_mut()).await?;
             json_patch::merge(&mut data, value);
             let merged = serde_json::to_vec(&data)?;
             *request.body_mut() = merged.into();
@@ -216,7 +216,7 @@ pub async fn apply_response_action(
     if let Some(patch) = &actions.patch {
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
-            let mut data = read_value(&mut response.body_mut()).await?;
+            let mut data = read_value(response.body_mut()).await?;
             json_patch::merge(&mut data, value);
             let merged = serde_json::to_vec(&data)?;
             *response.body_mut() = merged.into();
