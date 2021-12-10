@@ -1,9 +1,13 @@
 use std::process::Command;
+use std::time::SystemTime;
 
 use anyhow::{anyhow, Context, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
+use rand::distributions::Alphanumeric;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use uuid::Uuid;
 
 use crate::proxy::net::iptables::clear_ebtables;
@@ -29,7 +33,14 @@ impl NetEnv {
     pub fn new() -> Self {
         let interfaces = pnet::datalink::interfaces();
         let prefix = loop {
-            let key = Uuid::new_v4().to_string()[0..13].to_string();
+            let d = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("Duration since UNIX_EPOCH failed");
+            let key: String = StdRng::seed_from_u64(d.as_secs())
+                .sample_iter(&Alphanumeric)
+                .take(13)
+                .map(char::from)
+                .collect();
             // For avoid there are any interface named start with key.
             if interfaces
                 .iter()
