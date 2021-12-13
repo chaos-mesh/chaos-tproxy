@@ -148,6 +148,7 @@ impl Proxy {
         }
         if self.task.is_none() {
             let mut new = Self::new(self.opt.verbose);
+            self.net_env = new.net_env;
             self.opt = new.opt;
             self.sender = new.sender.take();
             self.rx = new.rx.take();
