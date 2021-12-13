@@ -37,7 +37,6 @@ tracing-futures = "0.2"
 tracing-subscriber = "0.2"
 json-patch = "0.2.6"
 async-trait = "0.1.50"
-rand = "0.8.4"
 bytes = "1.0.1"
 rs-tproxy-proxy = {path = "./rs-tproxy-proxy"}
 uuid = { version = "0.8", features = ["serde", "v4"] }
