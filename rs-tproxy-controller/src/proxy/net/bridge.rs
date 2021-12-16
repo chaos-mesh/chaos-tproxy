@@ -214,6 +214,27 @@ impl NetEnv {
 
         let cmdvv = vec![bash_c(&remove_store)];
         execute_all_with_log_error(cmdvv)?;
+
+        let gateway_ip = match try_get_default_gateway_ip() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("try_get_default_gateway_ip :{}", e);
+                return Ok(());
+            }
+        };
+        let gateway_mac = match default_net::get_default_gateway_mac(gateway_ip.clone()) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("get_default_gateway_mac :{}", e);
+                return Ok(());
+            }
+        };
+        let cmdvv = vec![arp_set(
+            gateway_ip.as_str(),
+            gateway_mac.as_str(),
+            self.device.as_str(),
+        )];
+        execute_all_with_log_error(cmdvv)?;
         Ok(())
     }
 }
