@@ -412,7 +412,7 @@ pub fn restore_all_ip_routes(path: &str) -> Result<Vec<String>> {
     let stdo = cmd.output()?.stdout;
     let out = String::from_utf8_lossy(stdo.as_slice());
 
-    let mut ip_routes: Vec<_> = out.split('\n').collect();
+    let ip_routes: Vec<_> = out.split('\n').collect();
     let mut route_cmds: Vec<String> = Vec::new();
     for ip_route in ip_routes {
         if !ip_route.is_empty() {
