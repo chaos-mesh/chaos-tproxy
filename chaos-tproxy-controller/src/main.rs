@@ -17,7 +17,7 @@ pub mod raw_config;
 async fn main() -> anyhow::Result<()> {
     let opt = match Opt::from_args_checked() {
         Err(e) => {
-            println!("{}", e.to_string());
+            println!("{}", e);
             exit(1)
         }
         Ok(o) => o,
