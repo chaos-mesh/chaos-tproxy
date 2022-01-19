@@ -1,4 +1,4 @@
-use rs_tproxy_proxy::raw_config::RawRule;
+use chaos_tproxy_proxy::raw_config::RawRule;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]

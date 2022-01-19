@@ -1,8 +1,8 @@
 use std::process::exit;
 
 use anyhow::anyhow;
-use rs_tproxy_proxy::proxy_main;
-use rs_tproxy_proxy::signal::Signals;
+use chaos_tproxy_proxy::proxy_main;
+use chaos_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
 
 use crate::cmd::command_line::{get_config_from_opt, Opt};

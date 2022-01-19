@@ -1,4 +1,4 @@
-# rs-tproxy
+# chaos-tproxy
 
 Transparent HTTP proxy for [Abort|Delay|Append|Replace] packet.
 Based on linux iptables-extension : TPROXY.
@@ -6,7 +6,7 @@ Based on linux iptables-extension : TPROXY.
 ## Installation
 ### Kernel Modules
 
-Check the installed kernel modules by `lsmod`, modules `ebtables`, `ebtable_broute` and `iptable_mangle` are required to make rs-tproxy work.
+Check the installed kernel modules by `lsmod`, modules `ebtables`, `ebtable_broute` and `iptable_mangle` are required to make chaos-tproxy work.
 
 ### Install ebtables-legacy
 Rs-tproxy relies on the legacy version of ebtables since the ebtables-nft have some problem on brouting transfer.
@@ -33,13 +33,13 @@ apt install -y ebtables
 update-alternatives --set iptables /usr/sbin/iptables-legacy
 ```
 
-### Install rs-tproxy
+### Install chaos-tproxy
 
-Download rs-tproxy in release.
+Download chaos-tproxy in release.
 
 ### Tips for ubuntu user:
 The DNS will be broken if you are using the dnsmasq server on 127.0.0.1:53.
-Please change the default dns server to 8.8.8.8 or other global dns server by editting `/etc/resolv.conf` before using `rs-tproxy`.
+Please change the default dns server to 8.8.8.8 or other global dns server by editting `/etc/resolv.conf` before using `chaos-tproxy`.
 
 ## Quick start
 
@@ -53,18 +53,18 @@ rules:
     actions:
       delay: 5s
 EOF
-rs-tproxy ./example.yaml -v
+chaos-tproxy ./example.yaml -v
 ```
 ## Usage example: 
 
 ```
->rs-tproxy -h
+>chaos-tproxy -h
 
 proxy 0.1.1
 The option of proxy.
 
 USAGE:
-    rs-tproxy [FLAGS] [OPTIONS] [FILE]
+    chaos-tproxy [FLAGS] [OPTIONS] [FILE]
 
 FLAGS:
     -h, --help           Prints help information
@@ -136,7 +136,7 @@ make run config=<path>
 ```
 or 
 ```
-rs-tproxy -v <configfilename>
+chaos-tproxy -v <configfilename>
 ```
 
 
@@ -147,7 +147,7 @@ You can apply config by HTTP over stdio if interactive mode is enabled.
 - apply
 
 ```bash
-> rs-tproxy -i
+> chaos-tproxy -i
 PUT / HTTP/1.1
 Content-Length: 129
 
