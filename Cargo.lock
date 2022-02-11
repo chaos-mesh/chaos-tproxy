@@ -109,6 +109,118 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "chaos-tproxy"
+version = "0.4.5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64",
+ "bincode",
+ "bytes",
+ "chaos-tproxy-proxy",
+ "clap",
+ "default-net",
+ "futures",
+ "http",
+ "humantime-serde",
+ "hyper 0.14.9",
+ "iptables",
+ "json-patch",
+ "libc",
+ "paw",
+ "pnet 0.28.0",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_yaml",
+ "socket2 0.3.19",
+ "structopt",
+ "system_gateway",
+ "test-case",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+ "tracing-subscriber",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
+name = "chaos-tproxy-controller"
+version = "0.4.5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bincode",
+ "bytes",
+ "cfg-if",
+ "chaos-tproxy-proxy",
+ "clap",
+ "default-net",
+ "futures",
+ "futures-util",
+ "http",
+ "humantime-serde",
+ "hyper 0.14.11",
+ "iptables",
+ "json-patch",
+ "libc",
+ "paw",
+ "pnet 0.28.0",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_yaml",
+ "socket2 0.3.19",
+ "structopt",
+ "system_gateway",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+ "tracing-subscriber",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
+name = "chaos-tproxy-proxy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64",
+ "bincode",
+ "bytes",
+ "cfg-if",
+ "clap",
+ "futures",
+ "http",
+ "humantime-serde",
+ "hyper 0.14.9",
+ "iptables",
+ "json-patch",
+ "libc",
+ "paw",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_yaml",
+ "socket2 0.3.19",
+ "structopt",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+ "tracing-subscriber",
+ "uuid",
+ "wildmatch",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1162,118 +1274,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rs-tproxy"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "bincode",
- "bytes",
- "clap",
- "default-net",
- "futures",
- "http",
- "humantime-serde",
- "hyper 0.14.9",
- "iptables",
- "json-patch",
- "libc",
- "paw",
- "pnet 0.28.0",
- "rs-tproxy-proxy",
- "serde",
- "serde_derive",
- "serde_json",
- "serde_urlencoded",
- "serde_yaml",
- "socket2 0.3.19",
- "structopt",
- "system_gateway",
- "test-case",
- "tokio",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
- "uuid",
- "wildmatch",
-]
-
-[[package]]
-name = "rs-tproxy-controller"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bincode",
- "bytes",
- "cfg-if",
- "clap",
- "default-net",
- "futures",
- "futures-util",
- "http",
- "humantime-serde",
- "hyper 0.14.11",
- "iptables",
- "json-patch",
- "libc",
- "paw",
- "pnet 0.28.0",
- "rs-tproxy-proxy",
- "serde",
- "serde_derive",
- "serde_json",
- "serde_urlencoded",
- "serde_yaml",
- "socket2 0.3.19",
- "structopt",
- "system_gateway",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
- "uuid",
- "wildmatch",
-]
-
-[[package]]
-name = "rs-tproxy-proxy"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "bincode",
- "bytes",
- "cfg-if",
- "clap",
- "futures",
- "http",
- "humantime-serde",
- "hyper 0.14.9",
- "iptables",
- "json-patch",
- "libc",
- "paw",
- "serde",
- "serde_derive",
- "serde_json",
- "serde_urlencoded",
- "serde_yaml",
- "socket2 0.3.19",
- "structopt",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
- "uuid",
- "wildmatch",
-]
-
-[[package]]
 name = "rustc-serialize"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1539,6 +1539,8 @@ dependencies = [
  "bincode",
  "bytes",
  "cfg-if",
+ "chaos-tproxy-controller",
+ "chaos-tproxy-proxy",
  "clap",
  "default-net",
  "futures",
@@ -1551,8 +1553,6 @@ dependencies = [
  "libc",
  "paw",
  "pnet 0.28.0",
- "rs-tproxy-controller",
- "rs-tproxy-proxy",
  "serde",
  "serde_derive",
  "serde_json",

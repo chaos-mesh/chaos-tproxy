@@ -1,5 +1,5 @@
 [package]
-name = "rs-tproxy-proxy"
+name = "chaos-tproxy-proxy"
 version = "0.1.0"
 edition = "2018"
 

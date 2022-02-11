@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::Error;
-use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 use tokio::process::Command;
 use tokio::select;
 use tokio::sync::oneshot::{channel, Receiver, Sender};

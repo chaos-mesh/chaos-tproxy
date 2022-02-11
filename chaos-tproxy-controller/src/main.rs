@@ -1,8 +1,8 @@
 use std::process::exit;
 
 use anyhow::anyhow;
-use rs_tproxy_proxy::proxy_main;
-use rs_tproxy_proxy::signal::Signals;
+use chaos_tproxy_proxy::proxy_main;
+use chaos_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
 
 use crate::cmd::command_line::{get_config_from_opt, Opt};
@@ -17,7 +17,7 @@ pub mod raw_config;
 async fn main() -> anyhow::Result<()> {
     let opt = match Opt::from_args_checked() {
         Err(e) => {
-            println!("{}", e.to_string());
+            println!("{}", e);
             exit(1)
         }
         Ok(o) => o,

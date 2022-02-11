@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 use anyhow::{anyhow, Error};
-use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 
 use crate::raw_config::RawConfig;
 
@@ -59,7 +59,7 @@ pub(crate) fn get_free_port(ports: Option<Vec<u16>>) -> anyhow::Result<u16> {
 mod tests {
     use std::convert::TryInto;
 
-    use rs_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+    use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 
     use crate::proxy::config::{get_free_port, Config};
     use crate::raw_config::RawConfig;

@@ -11,7 +11,7 @@ use crate::raw_config::RawConfig;
 
 //todo: name & about. (need discussion)
 #[derive(Debug, StructOpt)]
-#[structopt(name = "proxy", about = "The option of proxy.")]
+#[structopt(name = "chaos-tproxy", about = "The option of chaos-tproxy")]
 pub struct Opt {
     /// path of config file, required if interactive and daemon mode is disabled
     #[structopt(name = "FILE", parse(from_os_str))]
