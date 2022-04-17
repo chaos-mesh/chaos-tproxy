@@ -28,7 +28,7 @@ serde_urlencoded = "0.7"
 serde_yaml = "0.8"
 socket2 = "0.3"
 structopt = {version = "0.3", features = ["paw"]}
-tokio = {version = "1.4", features = ["full"]}
+tokio = {version = "1.17.0", features = ["full"]}
 wildmatch = "2.1"
 tracing = "0.1"
 tracing-futures = "0.2"
@@ -44,4 +44,6 @@ futures-util = { version = "0.3.7", default-features = false, features = ["alloc
 chaos-tproxy-proxy = {path = "../chaos-tproxy-proxy"}
 pnet = "0.28.0"
 default-net = "0.2.0"
+rtnetlink = "0.9.1"
+iproute2-rs = {git="https://github.com/chaos-mesh/iproute2-rs.git"}
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}

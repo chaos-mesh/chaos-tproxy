@@ -4,17 +4,16 @@ use anyhow::{anyhow, Context, Result};
 use default_net;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
+use rtnetlink::packet::RouteMessage;
 use uuid::Uuid;
 
-use crate::proxy::net::iptables::clear_ebtables;
+use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
     pub netns: String,
     pub device: String,
     pub ip: String,
-
-    ip_route_store: String,
 
     bridge1: String,
     bridge2: String,
@@ -23,6 +22,8 @@ pub struct NetEnv {
     veth2: String,
     veth3: String,
     pub veth4: String,
+
+    save_routes: Vec<RouteMessage>,
 }
 
 impl NetEnv {
@@ -38,7 +39,6 @@ impl NetEnv {
                 break key;
             }
         };
-        let ip_route_store = "ip_route_store".to_string() + &Uuid::new_v4().to_string();
         let device = get_default_interface().unwrap();
         let netns = prefix.clone() + "ns";
         let bridge1 = prefix.clone() + "b1";
@@ -48,17 +48,22 @@ impl NetEnv {
         let veth3 = "veth1".to_string();
         let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
+
+        let mut routes = get_routes_noblock().unwrap();
+
+        routes.reverse();
+
         Self {
             netns,
             device: device.name,
             ip,
-            ip_route_store,
             bridge1,
             bridge2,
             veth1,
             veth2,
             veth3,
             veth4,
+            save_routes: routes,
         }
     }
 
@@ -85,7 +90,7 @@ impl NetEnv {
                 return Err(anyhow!(e));
             }
         };
-        let save = format!("ip route save table all > {}", &self.ip_route_store);
+
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self
             .ip
@@ -96,7 +101,6 @@ impl NetEnv {
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
         let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
         let cmdvv = vec![
-            bash_c(&save),
             bash_c(save_dns),
             ip_netns_add(&self.netns),
             ip_link_add_bridge(&self.bridge1),
@@ -194,26 +198,29 @@ impl NetEnv {
 
     pub fn clear_bridge(&self) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
-        let remove_store = format!("rm -f {}", &self.ip_route_store);
-
-        let flush_main_route = "ip route flush table main";
 
         let cmdvv = vec![
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            bash_c(flush_main_route),
-            clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
 
-        let ip_routes = restore_all_ip_routes(&self.ip_route_store)?;
-        let iproute_cmds: Vec<Vec<&str>> = ip_routes.iter().map(|s| bash_c(&**s)).collect();
-        execute_all_with_log_error(iproute_cmds)?;
+        let routes = get_routes_noblock()
+            .unwrap_or_else(|e| {
+                tracing::error!("clear routes get_routes_noblock with error{}",e);
+                vec![]
+            });
 
-        let cmdvv = vec![bash_c(&remove_store)];
-        execute_all_with_log_error(cmdvv)?;
+        del_routes_noblock(routes)
+            .unwrap_or_else(|e| {
+                tracing::error!("clear routes del_routes_noblock with error{}",e);
+            });
+
+        load_routes(self.save_routes.clone()).unwrap_or_else(|e| {
+            tracing::error!("clear routes load_routes with error{}",e);
+        });
 
         let gateway_ip = match try_get_default_gateway_ip() {
             Ok(s) => s,
