@@ -60,6 +60,7 @@ pub fn load_routes(msgs : Vec<RouteMessage>) -> Result<()> {
 mod test {
     use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
+    #[ignore]
     #[test]
     fn test_get_del_routes() {
         let mut routes = get_routes_noblock().unwrap();
