@@ -28,7 +28,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
     pub async fn listen(&self, listener: UnixListener) -> anyhow::Result<()> {
         tracing::info!(target : "Uds listener listening on", "{:?}", &self.path);
         loop {
-            match (&listener).accept().await {
+            match (listener).accept().await {
                 Ok((mut stream, addr)) => {
                     let buf = serde_json::to_vec(&self.data)?;
                     tokio::spawn(async move {

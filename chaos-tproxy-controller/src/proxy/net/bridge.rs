@@ -2,6 +2,7 @@ use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
 use default_net;
+use default_net::Gateway;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use rtnetlink::packet::RouteMessage;
@@ -79,17 +80,13 @@ impl NetEnv {
     }
 
     pub fn setenv_bridge(&self) -> Result<()> {
-        let gateway_ip = match try_get_default_gateway_ip() {
-            Ok(s) => s,
-            Err(e) => return Err(e),
-        };
-        let gateway_mac = match default_net::get_default_gateway_mac(gateway_ip.clone()) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("{}", e);
-                return Err(anyhow!(e));
-            }
-        };
+        let Gateway{
+            mac_addr : gateway_mac,
+            ip_addr : gateway_ip,
+        } = try_get_default_gateway()?;
+
+        let gateway_ip = gateway_ip.to_string();
+        let gateway_mac = gateway_mac.to_string();
 
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self
@@ -222,23 +219,17 @@ impl NetEnv {
             tracing::error!("clear routes load_routes with error{}",e);
         });
 
-        let gateway_ip = match try_get_default_gateway_ip() {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("try_get_default_gateway_ip :{}", e);
-                return Ok(());
-            }
-        };
-        let gateway_mac = match default_net::get_default_gateway_mac(gateway_ip.clone()) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("get_default_gateway_mac :{}", e);
-                return Ok(());
-            }
-        };
+        let Gateway{
+            mac_addr : gateway_mac,
+            ip_addr : gateway_ip,
+        } = try_get_default_gateway()?;
+
+        let gateway_ip = gateway_ip.to_string();
+        let gateway_mac = gateway_mac.to_string();
+
         let cmdvv = vec![arp_set(
-            gateway_ip.as_str(),
-            gateway_mac.as_str(),
+            &gateway_ip,
+            &gateway_mac,
             self.device.as_str(),
         )];
         execute_all_with_log_error(cmdvv)?;
@@ -329,23 +320,16 @@ pub fn ip_route_add<'a>(target: &'a str, gateway_ip: &'a str, device: &'a str) -
     ]
 }
 
-pub fn try_get_default_gateway_ip() -> Result<String> {
-    match system_gateway::gateway() {
-        Ok(ip) => return Ok(ip),
-        Err(e) => {
-            tracing::error!("{}", e);
-            let mut count = 5;
-            while count > 0 {
-                let gataway_ip = default_net::get_default_gateway_ip();
-                match gataway_ip {
-                    Ok(ip) => return Ok(ip),
-                    Err(e) => tracing::error!("{}", e),
-                }
-                count -= 1;
-            }
+pub fn try_get_default_gateway() -> Result<Gateway> {
+    let mut count = 5;
+    while count > 0 {
+        match default_net::get_default_gateway() {
+            Ok(gateway) => return Ok(gateway),
+            Err(e) => tracing::error!("{}", e),
         }
-    };
-    Err(anyhow!("tried 5 times but icmp target 8.8.8.8"))
+        count -= 1;
+    }
+    Err(anyhow!("tried 5 times but not get gateway"))
 }
 
 pub fn get_ipv4(device: &NetworkInterface) -> Option<String> {
