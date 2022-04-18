@@ -4,13 +4,13 @@ use crate::proxy::net::bridge::{bash_c, execute, execute_all, get_interface, Net
 use crate::proxy::net::iptables::{set_iptables, set_iptables_safe};
 
 #[cfg(target_os = "linux")]
-pub fn set_net(
+pub async fn set_net(
     net_env: &NetEnv,
     proxy_ports: Option<String>,
     listen_port: u16,
     safe: bool,
 ) -> anyhow::Result<()> {
-    net_env.setenv_bridge()?;
+    net_env.setenv_bridge().await?;
     let port = listen_port.to_string();
     let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
     let device_interface = get_interface(net_env.veth4.clone()).unwrap();

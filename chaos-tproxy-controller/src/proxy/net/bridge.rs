@@ -28,7 +28,7 @@ pub struct NetEnv {
 }
 
 impl NetEnv {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let interfaces = pnet::datalink::interfaces();
         let prefix = loop {
             let key = Uuid::new_v4().to_string()[0..13].to_string();
@@ -50,7 +50,7 @@ impl NetEnv {
         let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
 
-        let mut routes = get_routes_noblock().unwrap();
+        let mut routes = get_routes_noblock().await.unwrap();
 
         routes.reverse();
 
@@ -79,10 +79,10 @@ impl NetEnv {
         return Err(anyhow!("interface : {} not found", interface));
     }
 
-    pub fn setenv_bridge(&self) -> Result<()> {
-        let Gateway{
-            mac_addr : gateway_mac,
-            ip_addr : gateway_ip,
+    pub async fn setenv_bridge(&self) -> Result<()> {
+        let Gateway {
+            mac_addr: gateway_mac,
+            ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
 
         let gateway_ip = gateway_ip.to_string();
@@ -115,7 +115,12 @@ impl NetEnv {
             ip_netns(&self.netns, ip_link_set_master(&self.veth2, &self.bridge2)),
             ip_netns(&self.netns, ip_link_set_master(&self.veth3, &self.bridge2)),
             ip_netns(&self.netns, ip_link_set_up("lo")),
-            ip_address("del", &self.ip, &self.device),
+        ];
+        execute_all(cmdvv)?;
+
+        execute_all_with_log_error(vec![ip_address("del", &self.ip, &self.device)])?;
+
+        let cmdvv = vec![
             ip_address("add", &self.ip, &self.veth4),
             arp_set(&gateway_ip, &gateway_mac, &self.veth1),
             arp_set(&gateway_ip, &gateway_mac, &self.veth4),
@@ -193,7 +198,7 @@ impl NetEnv {
         Ok(())
     }
 
-    pub fn clear_bridge(&self) -> Result<()> {
+    pub async fn clear_bridge(&self) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
 
         let cmdvv = vec![
@@ -204,42 +209,32 @@ impl NetEnv {
         ];
         execute_all_with_log_error(cmdvv)?;
 
-        let routes = get_routes_noblock()
-            .unwrap_or_else(|e| {
-                tracing::error!("clear routes get_routes_noblock with error{}",e);
-                vec![]
-            });
-
-        del_routes_noblock(routes)
-            .unwrap_or_else(|e| {
-                tracing::error!("clear routes del_routes_noblock with error{}",e);
-            });
-
-        load_routes(self.save_routes.clone()).unwrap_or_else(|e| {
-            tracing::error!("clear routes load_routes with error{}",e);
+        let routes = get_routes_noblock().await.unwrap_or_else(|e| {
+            tracing::error!("clear routes get_routes_noblock with error{}", e);
+            vec![]
         });
 
-        let Gateway{
-            mac_addr : gateway_mac,
-            ip_addr : gateway_ip,
+        del_routes_noblock(routes).await.unwrap_or_else(|e| {
+            tracing::error!("clear routes del_routes_noblock with error{}", e);
+        });
+
+        load_routes(self.save_routes.clone())
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("clear routes load_routes with error{}", e);
+            });
+
+        let Gateway {
+            mac_addr: gateway_mac,
+            ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
 
         let gateway_ip = gateway_ip.to_string();
         let gateway_mac = gateway_mac.to_string();
 
-        let cmdvv = vec![arp_set(
-            &gateway_ip,
-            &gateway_mac,
-            self.device.as_str(),
-        )];
+        let cmdvv = vec![arp_set(&gateway_ip, &gateway_mac, self.device.as_str())];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
-    }
-}
-
-impl Default for NetEnv {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
