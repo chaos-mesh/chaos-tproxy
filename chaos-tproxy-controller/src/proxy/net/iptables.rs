@@ -4,6 +4,7 @@ pub fn set_iptables<'a>(
     net_env: &'a NetEnv,
     proxy_ports: Option<&'a str>,
     listen_port: &'a str,
+    device_mac: &'a str,
 ) -> Vec<Vec<&'a str>> {
     let cmdv = match proxy_ports {
         Some(proxy_ports) => ip_netns(
@@ -112,10 +113,25 @@ pub fn set_iptables<'a>(
                 "DROP",
             ],
         ),
+        vec![
+            "ebtables",
+            "-t",
+            "nat",
+            "-A",
+            "PREROUTING",
+            "-i",
+            &net_env.device,
+            "-j",
+            "dnat",
+            "--to-dst",
+            device_mac,
+            "--dnat-target",
+            "ACCEPT",
+        ],
     ]
 }
 
-pub fn set_iptables_safe(net_env: &NetEnv) -> Vec<Vec<&str>> {
+pub fn set_iptables_safe<'a>(net_env: &'a NetEnv, device_mac: &'a str) -> Vec<Vec<&'a str>> {
     vec![
         ip_netns(
             &net_env.netns,
@@ -189,6 +205,21 @@ pub fn set_iptables_safe(net_env: &NetEnv) -> Vec<Vec<&str>> {
                 "ACCEPT",
             ],
         ),
+        vec![
+            "ebtables",
+            "-t",
+            "nat",
+            "-A",
+            "PREROUTING",
+            "-i",
+            &net_env.device,
+            "-j",
+            "dnat",
+            "--to-dst",
+            device_mac,
+            "--dnat-target",
+            "ACCEPT",
+        ],
     ]
 }
 
