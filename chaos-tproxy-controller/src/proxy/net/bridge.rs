@@ -8,6 +8,7 @@ use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use rtnetlink::packet::route::Nla;
 use rtnetlink::packet::RouteMessage;
 use uuid::Uuid;
+use crate::proxy::net::iptables::clear_ebtables;
 
 use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
@@ -232,6 +233,7 @@ impl NetEnv {
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
+            clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
 
