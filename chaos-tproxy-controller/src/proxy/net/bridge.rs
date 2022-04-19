@@ -130,6 +130,7 @@ impl NetEnv {
                 &self.netns,
                 arp_set(&gateway_ip, &gateway_mac, &self.bridge2),
             ),
+            ip_route_add("default", &gateway_ip, &self.veth4),
             ip_netns(
                 &self.netns,
                 ip_route_add("default", &gateway_ip, &self.bridge2),
@@ -196,7 +197,6 @@ impl NetEnv {
                 &self.netns,
                 arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
             ),
-            arp_set(&gateway_ip, &gateway_mac, &self.veth4),
         ])?;
 
         let all_routes = get_routes_noblock().await?;
@@ -221,9 +221,6 @@ impl NetEnv {
             })
             .collect();
         del_routes_noblock(kernel_routes).await?;
-
-        execute(ip_route_add("default", &gateway_ip, &self.veth4))?;
-
         Ok(())
     }
 
