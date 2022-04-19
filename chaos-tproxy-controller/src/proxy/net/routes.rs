@@ -18,14 +18,15 @@ pub async fn get_routes_noblock() -> Result<Vec<RouteMessage>> {
 pub async fn del_routes_noblock(msgs: Vec<RouteMessage>) -> Result<()> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
-    let results = join_all(msgs.into_iter()
-        .map(|msg| del_routes(&handle, msg))).await;
-    match results.into_iter()
+    let results = join_all(msgs.into_iter().map(|msg| del_routes(&handle, msg))).await;
+    match results
+        .into_iter()
         .filter(|result| result.is_err())
         .map(|r| r.unwrap_err())
-        .reduce(|accum, item| anyhow!("{} \n {}",accum,item)){
+        .reduce(|accum, item| anyhow!("{} \n {}", accum, item))
+    {
         Some(e) => Err(e),
-        None => Ok(())
+        None => Ok(()),
     }
 }
 

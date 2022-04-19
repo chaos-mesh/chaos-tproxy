@@ -5,6 +5,7 @@ use default_net;
 use default_net::Gateway;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
+use rtnetlink::packet::route::Nla;
 use rtnetlink::packet::RouteMessage;
 use uuid::Uuid;
 
@@ -129,7 +130,6 @@ impl NetEnv {
                 &self.netns,
                 arp_set(&gateway_ip, &gateway_mac, &self.bridge2),
             ),
-            ip_route_add("default", &gateway_ip, &self.veth4),
             ip_netns(
                 &self.netns,
                 ip_route_add("default", &gateway_ip, &self.bridge2),
@@ -191,10 +191,39 @@ impl NetEnv {
             .mac
             .context(format!("mac {} not found", self.veth4.clone()))?
             .to_string();
-        let _ = execute(ip_netns(
-            &self.netns,
-            arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
-        ))?;
+        let _ = execute_all(vec![
+            ip_netns(
+                &self.netns,
+                arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
+            ),
+            arp_set(&gateway_ip, &gateway_mac, &self.veth4),
+        ])?;
+
+        let all_routes = get_routes_noblock().await?;
+
+        let kernel_routes: Vec<RouteMessage> = all_routes
+            .into_iter()
+            .filter(|msg| {
+                msg.header.table != 255
+                    && msg.nlas.iter().any(|n| match n {
+                        Nla::PrefSource(addr) => {
+                            let digits: Vec<String> = addr
+                                .clone()
+                                .into_iter()
+                                .map(|digit| digit.to_string())
+                                .collect();
+                            let addr_string = digits.join(".");
+                            self.ip.contains(&addr_string)
+                        }
+                        _ => false,
+                    })
+                    && msg.nlas.iter().all(|n| !matches!(n, Nla::Gateway(_)))
+            })
+            .collect();
+        del_routes_noblock(kernel_routes).await?;
+
+        execute(ip_route_add("default", &gateway_ip, &self.veth4))?;
+
         Ok(())
     }
 
@@ -389,22 +418,4 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
         }
     }
     Err(anyhow!("no valid interface"))
-}
-
-pub fn restore_all_ip_routes(path: &str) -> Result<Vec<String>> {
-    let cmd_string = format!("ip route showdump < {}", path);
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(cmd_string);
-    let stdo = cmd.output()?.stdout;
-    let out = String::from_utf8_lossy(stdo.as_slice());
-
-    let mut ip_routes: Vec<_> = out.split('\n').collect();
-    ip_routes.reverse();
-    let mut route_cmds: Vec<String> = Vec::new();
-    for ip_route in ip_routes {
-        if !ip_route.is_empty() {
-            route_cmds.push(format!("{} {}", "ip route add", ip_route));
-        }
-    }
-    Ok(route_cmds)
 }
