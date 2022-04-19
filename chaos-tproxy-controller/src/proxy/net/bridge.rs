@@ -210,18 +210,18 @@ impl NetEnv {
         execute_all_with_log_error(cmdvv)?;
 
         let routes = get_routes_noblock().await.unwrap_or_else(|e| {
-            tracing::error!("clear routes get_routes_noblock with error{}", e);
+            tracing::error!("clear routes get_routes_noblock with error {}", e);
             vec![]
         });
 
         del_routes_noblock(routes).await.unwrap_or_else(|e| {
-            tracing::error!("clear routes del_routes_noblock with error{}", e);
+            tracing::error!("clear routes del_routes_noblock with error {}", e);
         });
 
         load_routes(self.save_routes.clone())
             .await
             .unwrap_or_else(|e| {
-                tracing::error!("clear routes load_routes with error{}", e);
+                tracing::error!("clear routes load_routes with error {}", e);
             });
 
         let Gateway {

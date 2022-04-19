@@ -46,6 +46,7 @@ system_gateway = {git="https://github.com/aruntomar/system_gateway"}
 base64 = "0.13.0"
 rtnetlink = "0.9.1"
 iproute2-rs = {git="https://github.com/chaos-mesh/iproute2-rs.git"}
+futures-util = "0.3"
 
 [dev-dependencies]
 test-case = "1.2"

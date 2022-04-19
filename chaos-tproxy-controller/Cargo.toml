@@ -39,7 +39,7 @@ cfg-if = "1.0.0"
 bincode = "1.3.3"
 tempfile = "3.2.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
-futures-util = { version = "0.3.7", default-features = false, features = ["alloc", "sink"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc", "sink"] }
 chaos-tproxy-proxy = {path = "../chaos-tproxy-proxy"}
 pnet = "0.28.0"
 default-net = "0.9.0"

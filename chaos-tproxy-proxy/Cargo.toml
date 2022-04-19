@@ -35,3 +35,4 @@ tempfile = "3.2.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 base64 = "0.13.0"
 rtnetlink = "0.9.1"
+futures-util = "0.3"
