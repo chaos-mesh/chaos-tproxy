@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use anyhow::{anyhow, Error};
@@ -21,8 +22,14 @@ pub struct RawConfig {
     pub proxy_ports: Option<String>,
     pub listen_port: u16,
     pub safe_mode: bool,
-    pub interface: Option<String>,
     pub rules: Vec<RawRule>,
+    pub role: Option<Role>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub enum Role {
+    Client(Ipv4Addr),
+    Server(Ipv4Addr),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -157,6 +164,7 @@ impl TryFrom<RawConfig> for Config {
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<Vec<_>, Self::Error>>()?,
+            role: raw.role,
         })
     }
 }
