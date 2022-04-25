@@ -1,7 +1,11 @@
+use std::net::Ipv4Addr;
+
 use http::header::HeaderMap;
 use http::{Method, Request, Response, StatusCode, Uri};
 use hyper::Body;
 use wildmatch::WildMatch;
+
+use crate::raw_config::Role;
 
 #[derive(Debug, Clone)]
 pub struct Selector {
@@ -11,6 +15,13 @@ pub struct Selector {
     pub code: Option<StatusCode>,
     pub request_headers: Option<HeaderMap>,
     pub response_headers: Option<HeaderMap>,
+}
+
+pub fn select_role(src_ip: &Ipv4Addr, dst_ip: &Ipv4Addr, role: &Role) -> bool {
+    match role {
+        Role::Client(ipv4) => ipv4 == src_ip,
+        Role::Server(ipv4) => ipv4 == dst_ip,
+    }
 }
 
 pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -> bool {

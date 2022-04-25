@@ -1,7 +1,7 @@
+use chaos_tproxy_proxy::handler::http::action::{apply_request_action, Actions, ReplaceAction};
 use http::header::CONTENT_LENGTH;
 use http::HeaderMap;
 use hyper::{Body, Client, Method, Request};
-use chaos_tproxy_proxy::handler::http::action::{apply_request_action, Actions, ReplaceAction};
 
 #[tokio::test]
 #[ignore]

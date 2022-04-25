@@ -77,12 +77,6 @@ impl Proxy {
         };
 
         tracing::info!(target: "Network device name", "{}", self.net_env.device.clone());
-        match config.interface {
-            None => {}
-            Some(interface) => {
-                self.net_env.set_ip_with_interface_name(&interface)?;
-            }
-        }
         set_net(
             &self.net_env,
             config.proxy_ports,
