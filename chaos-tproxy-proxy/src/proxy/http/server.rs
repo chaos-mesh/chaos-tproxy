@@ -144,7 +144,7 @@ impl HttpService {
             IpAddr::V4(ipv4) => ipv4,
             _ => return false,
         };
-        let target_v4 = match self.remote.ip() {
+        let target_v4 = match self.target.ip() {
             IpAddr::V4(ipv4) => ipv4,
             _ => return false,
         };
