@@ -42,3 +42,4 @@ chaos-tproxy-controller = {path = "../chaos-tproxy-controller"}
 pnet = "0.28.0"
 default-net = "0.2.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
+tokio-native-tls = "0.3.0"

@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::server::conn::Http;
@@ -15,6 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
+use tokio_native_tls::TlsAcceptor;
 use tracing::{debug, error};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
@@ -63,6 +64,36 @@ impl HttpServer {
             }
         };
         Ok(())
+    }
+}
+
+pub async fn serve_https(
+    stream: TcpStream,
+    service: &HttpService,
+    acceptor: &TlsAcceptor,
+) -> Result<()> {
+    let log_key = format!(
+        "{{ peer={},local={} }}",
+        stream.peer_addr()?,
+        stream.local_addr()?
+    );
+    let mut tls_stream = acceptor.accept(stream).await?;
+    loop {
+        let (r, parts) = Http::new()
+            .serve_connection_with_parts(tls_stream, service.clone())
+            .await;
+        let part_stream = match r {
+            Ok(()) => match parts {
+                Some(part) => part.io,
+                None => {
+                    return Ok(());
+                }
+            },
+            Err(e) => {
+                return Err(anyhow!("{}: stream block with error: {}", log_key, e));
+            }
+        };
+        tls_stream = part_stream;
     }
 }
 
