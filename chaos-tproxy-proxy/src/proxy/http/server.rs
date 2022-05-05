@@ -265,7 +265,7 @@ impl HttpService {
                 .https_only()
                 .enable_http1()
                 .enable_http2()
-                .wrap_connector(HttpConnector::new(self.remote));
+                .wrap_connector(HttpConnector::new(self.target, self.remote));
 
             let client: client::Client<_, hyper::Body> = client::Client::builder().build(https);
             match client.request(request).await {
@@ -278,7 +278,8 @@ impl HttpService {
                 }
             }
         } else {
-            let client = Client::builder().build(HttpConnector::new(self.remote));
+            let client = Client::builder()
+                .build(HttpConnector::new(self.target, self.remote));
             match client.request(request).await {
                 Ok(resp) => resp,
                 Err(err) => {
