@@ -7,7 +7,7 @@ use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Result};
 use derivative::Derivative;
-use http::uri::{Scheme, Uri};
+use http::uri::{PathAndQuery, Scheme, Uri};
 use http::StatusCode;
 use hyper::server::conn::Http;
 use hyper::service::Service;
@@ -239,7 +239,12 @@ impl HttpService {
             Ok(o) => Some(o),
             Err(_) => None,
         };
-        if parts.path_and_query.is_some() && parts.authority.is_some() && parts.scheme.is_none() {
+        if parts.path_and_query.is_none() {
+            parts.path_and_query = Some(PathAndQuery::from_static("/"))
+        }
+        if self.tls_client_config.is_some() {
+            parts.scheme = Some(Scheme::HTTPS);
+        } else {
             parts.scheme = Some(Scheme::HTTP);
         }
 
@@ -247,8 +252,6 @@ impl HttpService {
 
         let mut response =
             if let Some(tls_client_config) = &self.tls_client_config {
-
-
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config((**tls_client_config).clone())
                 .https_only()
