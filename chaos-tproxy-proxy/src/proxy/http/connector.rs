@@ -1,14 +1,18 @@
+use std::convert::TryFrom;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Error, Result};
+use derivative::Derivative;
 use http::Uri;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::service::Service;
+use rustls::ServerName;
 use tokio::net::TcpStream;
-use tokio_native_tls::{TlsConnector, TlsStream};
+use tokio_rustls::client::TlsStream;
+use tokio_rustls::TlsConnector;
 use tracing::{instrument, trace};
 
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
@@ -54,11 +58,14 @@ impl Service<Uri> for HttpConnector {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug)]
+#[derive(Clone)]
 pub struct HttpsConnector {
     resolver: GaiResolver,
     socket: TransparentSocket,
 
+    #[derivative(Debug = "ignore")]
     tls_conn: TlsConnector,
 }
 
@@ -75,10 +82,12 @@ impl HttpsConnector {
         let addr = resolve(&mut self.resolver, &dist).await?;
         trace!("resolved addr({})", dist);
         let stream = self.socket.conn(addr).await?;
-        Ok(self
-            .tls_conn
-            .connect(dist.host().unwrap_or(&addr.to_string()), stream)
-            .await?)
+        let addr_string = addr.to_string();
+        let domain = dist.host().unwrap_or(&addr_string);
+        trace!("domain name: {}", domain);
+        let server_name = ServerName::try_from(domain)?;
+        trace!("server_name: {:?}", server_name);
+        Ok(self.tls_conn.connect(server_name, stream).await?)
     }
 }
 

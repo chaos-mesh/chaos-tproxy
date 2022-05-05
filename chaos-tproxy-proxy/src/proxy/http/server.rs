@@ -6,27 +6,28 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Result};
+use derivative::Derivative;
 use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::{Body, Client, Request, Response};
+use rustls::ClientConfig;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
-use tokio_native_tls::TlsAcceptor;
+use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
 use crate::handler::http::selector::{select_request, select_response};
-use crate::proxy::http::config::Config;
+use crate::proxy::http::config::{Config, HTTPConfig};
 use crate::proxy::http::connector::HttpConnector;
 use crate::proxy::tcp::listener::TcpListener;
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
 
-#[derive(Debug)]
 pub struct HttpServer {
     config: Config,
 }
@@ -37,9 +38,42 @@ impl HttpServer {
     }
 
     pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
+        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
         let listener = TcpListener::bind(addr)?;
         tracing::info!(target : "Proxy", "Listening");
+        let http_config = Arc::new(self.config.http_config.clone());
+        if let Some(tls_config) = &self.config.tls_config {
+            let tls_client_config = Arc::new(tls_config.tls_client_config.clone());
+            let tls_server_config = Arc::new(tls_config.tls_server_config.clone());
+            select! {
+                _ = async {
+                    loop {
+                            let stream = listener.accept().await?;
+                            let addr_remote = stream.peer_addr()?;
+                            let addr_local = stream.local_addr()?;
+                            tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}",
+                            addr_remote, addr_local);
+                            let service = HttpService::new(addr_remote,
+                            addr_local,
+                            http_config.clone(),
+                            Some(tls_client_config.clone()));
+                            let acceptor = TlsAcceptor::from(tls_server_config.clone());
+                            tokio::spawn(async move {
+                            match serve_https(stream, &service, acceptor).await{
+                                Ok(_)=>{}
+                                Err(e) => {tracing::error!("{}",e);}
+                            };
+                        });
+                    }
+                    #[allow(unreachable_code)]
+                    Ok::<_, anyhow::Error>(())
+                } => {},
+                _ = rx => {
+                    return Ok(());
+                }
+            };
+            return Ok(());
+        }
         select! {
             _ = async {
                 loop {
@@ -47,8 +81,7 @@ impl HttpServer {
                     let addr_remote = stream.peer_addr()?;
                     let addr_local = stream.local_addr()?;
                     tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}", addr_remote, addr_local);
-                    let config = Arc::new(self.config.clone());
-                    let service = HttpService::new(addr_remote, addr_local, config);
+                    let service = HttpService::new(addr_remote, addr_local, http_config.clone(), None);
                     tokio::spawn(async move {
                         match serve_http_with_error_return(stream, &service).await{
                             Ok(_)=>{}
@@ -70,7 +103,7 @@ impl HttpServer {
 pub async fn serve_https(
     stream: TcpStream,
     service: &HttpService,
-    acceptor: &TlsAcceptor,
+    acceptor: TlsAcceptor,
 ) -> Result<()> {
     let log_key = format!(
         "{{ peer={},local={} }}",
@@ -150,19 +183,30 @@ pub async fn serve_http_with_error_return(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug)]
+#[derive(Clone)]
 pub struct HttpService {
     remote: SocketAddr,
     target: SocketAddr,
-    config: Arc<Config>,
+    config: Arc<HTTPConfig>,
+
+    #[derivative(Debug = "ignore")]
+    tls_client_config: Option<Arc<ClientConfig>>,
 }
 
 impl HttpService {
-    fn new(addr_remote: SocketAddr, addr_target: SocketAddr, config: Arc<Config>) -> Self {
+    fn new(
+        addr_remote: SocketAddr,
+        addr_target: SocketAddr,
+        config: Arc<HTTPConfig>,
+        tls_client_config: Option<Arc<ClientConfig>>,
+    ) -> Self {
         Self {
             remote: addr_remote,
             target: addr_target,
             config,
+            tls_client_config,
         }
     }
 
