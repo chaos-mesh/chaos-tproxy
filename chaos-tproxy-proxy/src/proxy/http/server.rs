@@ -18,7 +18,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, error};
+use tracing::{debug, trace, error};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -231,8 +231,9 @@ impl HttpService {
         let uri = request.uri().clone();
         let method = request.method().clone();
         let headers = request.headers().clone();
-
+        trace!("URI: {}", request.uri());
         let mut parts = request.uri().clone().into_parts();
+
 
         parts.authority = match self.target.to_string().parse() {
             Ok(o) => Some(o),
@@ -244,7 +245,10 @@ impl HttpService {
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
-        let mut response = if let Some(tls_client_config) = &self.tls_client_config {
+        let mut response =
+            if let Some(tls_client_config) = &self.tls_client_config {
+
+
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config((**tls_client_config).clone())
                 .https_only()

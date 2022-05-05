@@ -197,7 +197,7 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
                 .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
 
         if keys.is_empty() {
-            return Err(anyhow!("empty key"))
+            return Err(anyhow!("empty key"));
         }
         let key = keys[0].clone();
 

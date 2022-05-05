@@ -9,7 +9,7 @@ edition = "2018"
 anyhow = "1.0"
 clap = "2.33.3"
 futures = "0.3.10"
-http = "0.2.3"
+http = "0.2.7"
 humantime-serde = "1.0"
 hyper = {git = "https://github.com/Andrewmatilde/hyper.git", features = ["runtime", "client", "server", "http1", "http2", "stream", "error_return"]}
 iptables = "0.4"
