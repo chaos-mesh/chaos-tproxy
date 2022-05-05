@@ -191,10 +191,15 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
         let certs = certs(&mut BufReader::new(File::open(raw.cert_file)?))
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))
             .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
-        let mut keys: Vec<PrivateKey> =
+        let keys: Vec<PrivateKey> =
             rsa_private_keys(&mut BufReader::new(File::open(raw.key_file)?))
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))
                 .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+
+        if keys.is_empty() {
+            return Err(anyhow!("empty key"))
+        }
+        let key = keys[0].clone();
 
         let mut root_cert_store = rustls::RootCertStore::empty();
         if let Some(cafile) = &raw.ca_file {
@@ -229,7 +234,7 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
             tls_server_config: rustls::ServerConfig::builder()
                 .with_safe_defaults()
                 .with_no_client_auth()
-                .with_single_cert(certs, keys.remove(0))
+                .with_single_cert(certs, key)
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?,
         };
         Ok(tls_config)
