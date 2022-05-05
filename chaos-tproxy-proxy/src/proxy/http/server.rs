@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
@@ -7,6 +8,7 @@ use std::task::{Context, Poll};
 
 use anyhow::{anyhow, Result};
 use derivative::Derivative;
+use http::header::HOST;
 use http::uri::{PathAndQuery, Scheme, Uri};
 use http::StatusCode;
 use hyper::server::conn::Http;
@@ -18,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, trace, error};
+use tracing::{debug, error, trace};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -234,11 +236,18 @@ impl HttpService {
         trace!("URI: {}", request.uri());
         let mut parts = request.uri().clone().into_parts();
 
-
-        parts.authority = match self.target.to_string().parse() {
-            Ok(o) => Some(o),
-            Err(_) => None,
+        parts.authority = match request
+            .headers()
+            .iter()
+            .find(|(header_name, _)| **header_name == HOST)
+        {
+            None => match self.target.to_string().parse() {
+                Ok(o) => Some(o),
+                Err(_) => None,
+            },
+            Some((_, value)) => Some(value.as_bytes().try_into()?),
         };
+        trace!("authority: {:?}", parts.authority);
         if parts.path_and_query.is_none() {
             parts.path_and_query = Some(PathAndQuery::from_static("/"))
         }
@@ -250,8 +259,7 @@ impl HttpService {
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
-        let mut response =
-            if let Some(tls_client_config) = &self.tls_client_config {
+        let mut response = if let Some(tls_client_config) = &self.tls_client_config {
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config((**tls_client_config).clone())
                 .https_only()
@@ -322,4 +330,21 @@ impl Service<Request<Body>> for HttpService {
     fn call(&mut self, request: Request<Body>) -> Self::Future {
         Box::pin(self.clone().handle(request))
     }
+}
+
+#[test]
+fn test_req() {
+    let mut req = http::request::Request::new("hello world");
+    (*req.headers_mut()).insert("Host", "earth".parse().unwrap());
+    let mut parts = Uri::default().into_parts();
+
+    parts.authority = match req
+        .headers()
+        .iter()
+        .find(|(header_name, _)| **header_name == HOST)
+    {
+        None => None,
+        Some((_, value)) => Some(value.as_bytes().try_into().unwrap()),
+    };
+    dbg!(parts.authority);
 }
