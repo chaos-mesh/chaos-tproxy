@@ -11,7 +11,7 @@ use http::uri::{Scheme, Uri};
 use http::StatusCode;
 use hyper::server::conn::Http;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Response};
+use hyper::{client, Body, Client, Request, Response};
 use rustls::ClientConfig;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -244,15 +244,34 @@ impl HttpService {
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
-        let client = Client::builder().build(HttpConnector::new(self.remote));
+        let mut response = if let Some(tls_client_config) = &self.tls_client_config {
+            let https = hyper_rustls::HttpsConnectorBuilder::new()
+                .with_tls_config((**tls_client_config).clone())
+                .https_only()
+                .enable_http1()
+                .enable_http2()
+                .wrap_connector(HttpConnector::new(self.remote));
 
-        let mut response = match client.request(request).await {
-            Ok(resp) => resp,
-            Err(err) => {
-                error!("{} : fail to forward request: {}", log_key, err);
-                Response::builder()
-                    .status(StatusCode::BAD_GATEWAY)
-                    .body(Body::empty())?
+            let client: client::Client<_, hyper::Body> = client::Client::builder().build(https);
+            match client.request(request).await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    error!("{} : fail to forward request: {}", log_key, err);
+                    Response::builder()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .body(Body::empty())?
+                }
+            }
+        } else {
+            let client = Client::builder().build(HttpConnector::new(self.remote));
+            match client.request(request).await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    error!("{} : fail to forward request: {}", log_key, err);
+                    Response::builder()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .body(Body::empty())?
+                }
             }
         };
 

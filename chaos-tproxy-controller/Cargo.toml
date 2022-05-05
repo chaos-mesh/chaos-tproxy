@@ -17,7 +17,7 @@ clap = "2.33.3"
 futures = "0.3.10"
 http = "0.2.3"
 humantime-serde = "1.0"
-hyper = {version = "0.14.4", features = ["runtime", "client", "server", "http1", "http2", "stream"]}
+hyper = {git = "https://github.com/Andrewmatilde/hyper.git", features = ["runtime", "client", "server", "http1", "http2", "stream", "error_return"]}
 iptables = "0.4"
 libc = {version = "0.2.81", features = ["std"]}
 paw = "1.0"
@@ -50,3 +50,4 @@ rustls = "0.20.4"
 derivative = "2.2.0"
 rustls-pemfile = "1.0.0"
 webpki-roots = "0.22"
+hyper-rustls = { git = "https://github.com/Andrewmatilde/hyper-rustls.git", features = ["http2"] }
