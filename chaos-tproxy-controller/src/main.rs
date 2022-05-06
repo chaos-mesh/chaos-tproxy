@@ -51,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         config_server.stop().await?;
-        sleep(Duration::new(5, 0));
+        sleep(Duration::new(5, 0)).await;
         exit(0);
     }
     Ok(())
