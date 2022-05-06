@@ -1,11 +1,9 @@
 use std::process::exit;
-use std::time::Duration;
 
 use anyhow::anyhow;
 use chaos_tproxy_proxy::proxy_main;
 use chaos_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
-use tokio::time::sleep;
 
 use crate::cmd::command_line::{get_config_from_opt, Opt};
 use crate::cmd::interactive::handler::ConfigServer;
@@ -51,7 +49,6 @@ async fn main() -> anyhow::Result<()> {
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         config_server.stop().await?;
-        sleep(Duration::new(5, 0)).await;
         exit(0);
     }
     Ok(())
