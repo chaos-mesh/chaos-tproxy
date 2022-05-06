@@ -332,20 +332,3 @@ impl Service<Request<Body>> for HttpService {
         Box::pin(self.clone().handle(request))
     }
 }
-
-#[test]
-fn test_req() {
-    let mut req = http::request::Request::new("hello world");
-    (*req.headers_mut()).insert("Host", "earth".parse().unwrap());
-    let mut parts = Uri::default().into_parts();
-
-    parts.authority = match req
-        .headers()
-        .iter()
-        .find(|(header_name, _)| **header_name == HOST)
-    {
-        None => None,
-        Some((_, value)) => Some(value.as_bytes().try_into().unwrap()),
-    };
-    dbg!(parts.authority);
-}
