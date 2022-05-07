@@ -27,7 +27,7 @@ impl TryFrom<RawConfig> for Config {
                         .join(",")
                 }),
                 proxy_ips: raw.proxy_domains.map(|domains| {
-                    let ips_results: Vec<Result<Vec<Ipv4Addr>>> = domains
+                    let ips: Vec<Ipv4Addr> = domains
                         .into_iter()
                         .map(|domain| {
                             let (config, opt) = read_system_conf()?;
@@ -49,10 +49,7 @@ impl TryFrom<RawConfig> for Config {
                                 .collect();
                             Ok(ips)
                         })
-                        .collect();
-                    let ips: Vec<Ipv4Addr> = ips_results
-                        .into_iter()
-                        .filter_map(|r| {
+                        .filter_map(|r: Result<Vec<Ipv4Addr>>| {
                             r.map_err(|e| tracing::error!("resolve domain with error: {}", e))
                                 .ok()
                         })
