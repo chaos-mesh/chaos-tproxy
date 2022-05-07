@@ -49,6 +49,8 @@ async fn main() -> anyhow::Result<()> {
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         config_server.stop().await?;
+
+        // Currently we cannot graceful shutdown the config server.
         exit(0);
     }
     Ok(())
