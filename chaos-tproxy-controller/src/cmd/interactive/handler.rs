@@ -57,7 +57,6 @@ impl ConfigServer {
                     },
                     ret = &mut *conn_mut => if let Err(e) = ret {
                         tracing::error!("{}",e);
-                        return Err(anyhow::anyhow!("{}",e));
                     }
                 };
             }
