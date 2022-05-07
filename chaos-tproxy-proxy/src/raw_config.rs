@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use anyhow::{anyhow, Error};
@@ -19,6 +20,7 @@ use crate::proxy::http::config::Config;
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawConfig {
     pub proxy_ports: Option<String>,
+    pub proxy_ips: Option<Vec<Ipv4Addr>>,
     pub listen_port: u16,
     pub safe_mode: bool,
     pub interface: Option<String>,

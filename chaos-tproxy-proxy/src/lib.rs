@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::path::PathBuf;
+use std::process::exit;
 
 use tokio::signal::unix::SignalKind;
 use tokio::sync::oneshot::channel;
@@ -20,6 +21,7 @@ pub async fn proxy_main(path: PathBuf) -> anyhow::Result<()> {
     let client = UdsDataClient::new(path);
     let mut buf: Vec<u8> = vec![];
     let raw_config: RawConfig = client.read_into(&mut buf).await?;
+    dbg!(raw_config.proxy_ips);
     let config = raw_config.try_into()?;
     let (sender, rx) = channel();
 

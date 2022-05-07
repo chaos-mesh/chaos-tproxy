@@ -1,6 +1,9 @@
 use std::convert::TryFrom;
+use std::net::{IpAddr, Ipv4Addr};
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Result, Error};
+use trust_dns_resolver::Resolver;
+use trust_dns_resolver::system_conf::read_system_conf;
 use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 
 use crate::raw_config::RawConfig;
@@ -21,6 +24,26 @@ impl TryFrom<RawConfig> for Config {
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(",")
+                }),
+                proxy_ips: raw.proxy_domains.map(|domains| {
+                    let ips_results:Vec<Result<Vec<Ipv4Addr>>> = domains.iter()
+                        .map(|domain| {
+                            let (config,opt) = read_system_conf()?;
+                            let resolver = Resolver::new(config, opt)?;
+                            let rsp = resolver.lookup_ip(domain)?;
+                            let ips:Vec<Ipv4Addr> = rsp.iter().filter_map(|ip| {
+                                match ip {
+                                    IpAddr::V4(ipv4) => Some(ipv4),
+                                    IpAddr::V6(_) => None
+                                }
+                            }).collect();
+                            Ok(ips)
+                        }).collect();
+                    let ips: Vec<Ipv4Addr> = ips_results.into_iter().filter_map(|r|
+                        r.map_err(|e|tracing::error!("resolve domain with error: {}", e))
+                            .ok()
+                    ).flatten().collect();
+                    ips
                 }),
                 safe_mode: match &raw.safe_mode {
                     Some(b) => *b,
@@ -53,74 +76,4 @@ pub(crate) fn get_free_port(ports: Option<Vec<u16>>) -> anyhow::Result<u16> {
     Err(anyhow!(
         "never apply all ports in 1025-65535 to be proxy ports"
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use std::convert::TryInto;
-
-    use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
-
-    use crate::proxy::config::{get_free_port, Config};
-    use crate::raw_config::RawConfig;
-
-    #[test]
-    fn test_get_free_port() {
-        assert!(get_free_port(Some((u16::MIN..u16::MAX).collect())).is_err());
-    }
-
-    #[test]
-    fn test_try_into() {
-        let config: Config = RawConfig {
-            proxy_ports: None,
-            safe_mode: None,
-            interface: None,
-            rules: None,
-
-            listen_port: None,
-            proxy_mark: None,
-            ignore_mark: None,
-            route_table: None,
-        }
-        .try_into()
-        .unwrap();
-        assert_eq!(
-            config,
-            Config {
-                proxy_config: ProxyRawConfig {
-                    proxy_ports: None,
-                    listen_port: get_free_port(None).unwrap(),
-                    safe_mode: false,
-                    interface: None,
-                    rules: vec![]
-                }
-            }
-        );
-
-        let config: Config = RawConfig {
-            proxy_ports: Some(vec![1025u16, 1026u16]),
-            safe_mode: Some(true),
-            interface: Some("ens33".parse().unwrap()),
-            rules: None,
-
-            listen_port: None,
-            proxy_mark: None,
-            ignore_mark: None,
-            route_table: None,
-        }
-        .try_into()
-        .unwrap();
-        assert_eq!(
-            config,
-            Config {
-                proxy_config: ProxyRawConfig {
-                    proxy_ports: Some("1025,1026".parse().unwrap()),
-                    listen_port: 1027u16,
-                    safe_mode: true,
-                    interface: Some("ens33".parse().unwrap()),
-                    rules: vec![]
-                }
-            }
-        );
-    }
 }

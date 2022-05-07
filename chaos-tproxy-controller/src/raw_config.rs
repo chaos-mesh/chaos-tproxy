@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)] // To prevent typos.
 pub struct RawConfig {
     pub proxy_ports: Option<Vec<u16>>,
+    pub proxy_domains: Option<Vec<String>>,
     pub safe_mode: Option<bool>,
     pub interface: Option<String>,
     pub rules: Option<Vec<RawRule>>,
