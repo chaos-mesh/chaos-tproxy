@@ -45,3 +45,4 @@ chaos-tproxy-proxy = {path = "../chaos-tproxy-proxy"}
 pnet = "0.28.0"
 default-net = "0.2.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
+trust-dns-resolver = "0.21.2"
