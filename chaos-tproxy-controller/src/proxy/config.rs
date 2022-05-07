@@ -2,10 +2,10 @@ use std::convert::TryFrom;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::mpsc::channel;
 
-use anyhow::{anyhow, Result, Error};
-use trust_dns_resolver::Resolver;
-use trust_dns_resolver::system_conf::read_system_conf;
+use anyhow::{anyhow, Error, Result};
 use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use trust_dns_resolver::system_conf::read_system_conf;
+use trust_dns_resolver::Resolver;
 
 use crate::raw_config::RawConfig;
 
@@ -27,29 +27,37 @@ impl TryFrom<RawConfig> for Config {
                         .join(",")
                 }),
                 proxy_ips: raw.proxy_domains.map(|domains| {
-                    let ips_results:Vec<Result<Vec<Ipv4Addr>>> = domains.clone().into_iter()
+                    let ips_results: Vec<Result<Vec<Ipv4Addr>>> = domains
+                        .into_iter()
                         .map(|domain| {
-                            let (config,opt) = read_system_conf()?;
+                            let (config, opt) = read_system_conf()?;
                             let resolver = Resolver::new(config, opt)?;
 
                             let (sender, receiver) = channel();
-                            std::thread::spawn(move || {
-                                sender.send(resolver.lookup_ip(domain));
-                            }).join();
+                            let _ = std::thread::spawn(move || {
+                                let _ = sender.send(resolver.lookup_ip(domain));
+                            })
+                            .join();
 
                             let rsp = receiver.recv()??;
-                            let ips:Vec<Ipv4Addr> = rsp.iter().filter_map(|ip| {
-                                match ip {
+                            let ips: Vec<Ipv4Addr> = rsp
+                                .iter()
+                                .filter_map(|ip| match ip {
                                     IpAddr::V4(ipv4) => Some(ipv4),
-                                    IpAddr::V6(_) => None
-                                }
-                            }).collect();
+                                    IpAddr::V6(_) => None,
+                                })
+                                .collect();
                             Ok(ips)
-                        }).collect();
-                    let ips: Vec<Ipv4Addr> = ips_results.into_iter().filter_map(|r|
-                        r.map_err(|e|tracing::error!("resolve domain with error: {}", e))
-                            .ok()
-                    ).flatten().collect();
+                        })
+                        .collect();
+                    let ips: Vec<Ipv4Addr> = ips_results
+                        .into_iter()
+                        .filter_map(|r| {
+                            r.map_err(|e| tracing::error!("resolve domain with error: {}", e))
+                                .ok()
+                        })
+                        .flatten()
+                        .collect();
                     ips
                 }),
                 safe_mode: match &raw.safe_mode {
