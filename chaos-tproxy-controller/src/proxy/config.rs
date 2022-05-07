@@ -27,7 +27,7 @@ impl TryFrom<RawConfig> for Config {
                         .join(",")
                 }),
                 proxy_ips: raw.proxy_domains.map(|domains| {
-                    let ips_results:Vec<Result<Vec<Ipv4Addr>>> = domains.iter()
+                    let ips_results:Vec<Result<Vec<Ipv4Addr>>> = domains.clone().into_iter()
                         .map(|domain| {
                             let (config,opt) = read_system_conf()?;
                             let resolver = Resolver::new(config, opt)?;
