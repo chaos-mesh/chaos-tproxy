@@ -41,29 +41,24 @@ impl ConfigServer {
     }
 
     pub fn serve_interactive(&mut self) {
-        let rx = self.rx.take().unwrap();
+        let mut rx = self.rx.take().unwrap();
         let mut service = ConfigService(self.proxy.clone());
         self.task = Some(tokio::spawn(async move {
-            select! {
-                _ = rx => {
-                    tracing::trace!("catch signal in config server.");
-                    return Ok(());
-                },
-                _ = async {
-                    loop {
-                        let stream = StdStream::default();
-                        let conn = Http::new()
-                            .serve_connection(stream, &mut service);
-                        if let Err(e) = conn.await {
-                            tracing::error!("{}",e);
-                            return Err(anyhow::anyhow!("{}",e));
-                        }
+            let rx_mut = &mut rx;
+            loop {
+                let stream = StdStream::default();
+                let conn = Http::new().serve_connection(stream, &mut service);
+                select! {
+                    _ = &mut *rx_mut => {
+                        tracing::trace!("catch signal in config server.");
+                        return Ok(());
+                    },
+                    ret = conn => if let Err(e) = ret {
+                        tracing::error!("{}",e);
+                        return Err(anyhow::anyhow!("{}",e));
                     }
-                    #[allow(unreachable_code)]
-                    Ok::<_, anyhow::Error>(())
-                } => {}
-            };
-            Ok(())
+                };
+            }
         }));
     }
 
