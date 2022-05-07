@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::mpsc::channel;
 
 use anyhow::{anyhow, Result, Error};
 use trust_dns_resolver::Resolver;
@@ -30,7 +31,13 @@ impl TryFrom<RawConfig> for Config {
                         .map(|domain| {
                             let (config,opt) = read_system_conf()?;
                             let resolver = Resolver::new(config, opt)?;
-                            let rsp = resolver.lookup_ip(domain)?;
+
+                            let (sender, receiver) = channel();
+                            std::thread::spawn(move || {
+                                sender.send(resolver.lookup_ip(domain));
+                            }).join();
+
+                            let rsp = receiver.recv()??;
                             let ips:Vec<Ipv4Addr> = rsp.iter().filter_map(|ip| {
                                 match ip {
                                     IpAddr::V4(ipv4) => Some(ipv4),
