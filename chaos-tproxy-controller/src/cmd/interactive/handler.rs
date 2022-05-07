@@ -7,7 +7,7 @@ use std::task::{Context, Poll};
 use anyhow::Error;
 use futures::TryStreamExt;
 use http::{Method, Request, Response, StatusCode};
-use hyper::server::conn::Http;
+use hyper::server::conn::{Connection, Http};
 use hyper::service::Service;
 use hyper::Body;
 use tokio::select;
@@ -47,13 +47,15 @@ impl ConfigServer {
             let rx_mut = &mut rx;
             loop {
                 let stream = StdStream::default();
-                let conn = Http::new().serve_connection(stream, &mut service);
+                let mut conn = Http::new().serve_connection(stream, &mut service);
+                let conn_mut = &mut conn;
                 select! {
                     _ = &mut *rx_mut => {
                         tracing::trace!("catch signal in config server.");
+                        Connection::graceful_shutdown(Pin::new(conn_mut));
                         return Ok(());
                     },
-                    ret = conn => if let Err(e) = ret {
+                    ret = &mut *conn_mut => if let Err(e) = ret {
                         tracing::error!("{}",e);
                         return Err(anyhow::anyhow!("{}",e));
                     }
