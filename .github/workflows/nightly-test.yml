@@ -1,4 +1,4 @@
-name: Stable Test
+name: Nightly Test
 
 on:
   push:
