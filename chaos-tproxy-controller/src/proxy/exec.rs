@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::Error;
+use rtnetlink::{Handle, new_connection};
 use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 use tokio::process::Command;
 use tokio::select;
@@ -30,6 +31,7 @@ impl ProxyOpt {
 pub struct Proxy {
     pub opt: ProxyOpt,
     pub net_env: NetEnv,
+    pub rtnl_handle: Handle,
     pub sender: Option<Sender<()>>,
     pub rx: Option<Receiver<()>>,
     pub task: Option<JoinHandle<Result<(), Error>>>,
@@ -43,9 +45,13 @@ impl Proxy {
 
         let opt = ProxyOpt::new(uds_path, verbose);
         let (sender, rx) = channel();
+
+        let (conn, handle, _) = new_connection().unwrap();
+        tokio::spawn(conn);
         Self {
             opt,
-            net_env: NetEnv::new().await,
+            net_env: NetEnv::new(&handle).await,
+            rtnl_handle: handle,
             sender: Some(sender),
             rx: Some(rx),
             task: None,
@@ -84,6 +90,7 @@ impl Proxy {
             }
         }
         set_net(
+            &mut self.rtnl_handle,
             &self.net_env,
             config.proxy_ports,
             config.listen_port,
@@ -136,7 +143,7 @@ impl Proxy {
             if let Some(sender) = self.sender.take() {
                 let _ = sender.send(());
             };
-            let _ = self.net_env.clear_bridge().await;
+            let _ = self.net_env.clear_bridge(&mut self.rtnl_handle).await;
             let _ = task.await?;
         }
         Ok(())
@@ -157,7 +164,7 @@ impl Proxy {
 
         return match self.exec(config).await {
             Err(e) => {
-                self.net_env.clear_bridge().await?;
+                self.net_env.clear_bridge(&mut self.rtnl_handle).await?;
                 Err(e)
             }
             Ok(_) => Ok(()),

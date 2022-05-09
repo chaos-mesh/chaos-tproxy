@@ -5,6 +5,7 @@ use default_net;
 use default_net::Gateway;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
+use rtnetlink::Handle;
 use rtnetlink::packet::route::Nla;
 use rtnetlink::packet::RouteMessage;
 use uuid::Uuid;
@@ -30,7 +31,7 @@ pub struct NetEnv {
 }
 
 impl NetEnv {
-    pub async fn new() -> Self {
+    pub async fn new(handle:&Handle) -> Self {
         let interfaces = pnet::datalink::interfaces();
         let prefix = loop {
             let key = Uuid::new_v4().to_string()[0..13].to_string();
@@ -52,7 +53,7 @@ impl NetEnv {
         let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
 
-        let mut routes = get_routes_noblock().await.unwrap();
+        let mut routes = get_routes_noblock(handle).await.unwrap();
 
         routes.reverse();
 
@@ -81,7 +82,7 @@ impl NetEnv {
         return Err(anyhow!("interface : {} not found", interface));
     }
 
-    pub async fn setenv_bridge(&self) -> Result<()> {
+    pub async fn setenv_bridge(&self, handle: &mut Handle) -> Result<()> {
         let Gateway {
             mac_addr: gateway_mac,
             ip_addr: gateway_ip,
@@ -200,7 +201,7 @@ impl NetEnv {
             ),
         ])?;
 
-        let all_routes = get_routes_noblock().await?;
+        let all_routes = get_routes_noblock(handle).await?;
 
         let kernel_routes: Vec<RouteMessage> = all_routes
             .into_iter()
@@ -221,11 +222,11 @@ impl NetEnv {
                     && msg.nlas.iter().all(|n| !matches!(n, Nla::Gateway(_)))
             })
             .collect();
-        del_routes_noblock(kernel_routes).await?;
+        del_routes_noblock(handle, kernel_routes).await?;
         Ok(())
     }
 
-    pub async fn clear_bridge(&self) -> Result<()> {
+    pub async fn clear_bridge(&self, handle:&mut Handle) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
 
         let cmdvv = vec![
@@ -237,16 +238,16 @@ impl NetEnv {
         ];
         execute_all_with_log_error(cmdvv)?;
 
-        let routes = get_routes_noblock().await.unwrap_or_else(|e| {
+        let routes = get_routes_noblock(handle).await.unwrap_or_else(|e| {
             tracing::error!("clear routes get_routes_noblock with error {}", e);
             vec![]
         });
 
-        del_routes_noblock(routes).await.unwrap_or_else(|e| {
+        del_routes_noblock(handle, routes).await.unwrap_or_else(|e| {
             tracing::error!("clear routes del_routes_noblock with error {}", e);
         });
 
-        load_routes(self.save_routes.clone())
+        load_routes(handle, self.save_routes.clone())
             .await
             .unwrap_or_else(|e| {
                 tracing::error!("clear routes load_routes with error {}", e);
