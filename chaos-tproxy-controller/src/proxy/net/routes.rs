@@ -6,10 +6,8 @@ use rtnetlink::{new_connection, IpVersion};
 
 pub async fn get_routes_noblock() -> Result<Vec<RouteMessage>> {
     let (connection, handle, _) = new_connection().unwrap();
-    let spawn = tokio::spawn(connection);
+    tokio::spawn(connection);
     let routes = get_routes(&handle, IpVersion::V4).await?;
-
-    spawn.abort();
     Ok(routes
         .into_iter()
         .filter(|route| route.header.table != 255)
@@ -18,9 +16,8 @@ pub async fn get_routes_noblock() -> Result<Vec<RouteMessage>> {
 
 pub async fn del_routes_noblock(msgs: Vec<RouteMessage>) -> Result<()> {
     let (connection, handle, _) = new_connection().unwrap();
-    let spawn = tokio::spawn(connection);
+    tokio::spawn(connection);
     let results = join_all(msgs.into_iter().map(|msg| del_routes(&handle, msg))).await;
-    spawn.abort();
     match results
         .into_iter()
         .filter(|result| result.is_err())
@@ -34,7 +31,7 @@ pub async fn del_routes_noblock(msgs: Vec<RouteMessage>) -> Result<()> {
 
 pub async fn load_routes(msgs: Vec<RouteMessage>) -> Result<()> {
     let (connection, mut handle, _) = new_connection().unwrap();
-    let spawn = tokio::spawn(connection);
+    tokio::spawn(connection);
 
     for route in msgs {
         IPRoute {
@@ -47,7 +44,6 @@ pub async fn load_routes(msgs: Vec<RouteMessage>) -> Result<()> {
             tracing::error!("can not recover ROUTE MSG: {:?}, error: {}", route, e)
         });
     }
-    spawn.abort();
     Ok(())
 }
 
