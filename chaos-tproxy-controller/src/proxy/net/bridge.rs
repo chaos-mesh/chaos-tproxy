@@ -194,7 +194,7 @@ impl NetEnv {
             .mac
             .context(format!("mac {} not found", self.veth4.clone()))?
             .to_string();
-        let _ = execute_all(vec![
+        execute_all(vec![
             ip_netns(
                 &self.netns,
                 arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
@@ -374,7 +374,7 @@ pub fn execute_all_with_log_error(cmdvv: Vec<Vec<&str>>) -> Result<()> {
 
 pub fn execute_all(cmdvv: Vec<Vec<&str>>) -> Result<()> {
     for cmdv in cmdvv {
-        let _ = execute(cmdv)?;
+        execute(cmdv)?;
     }
     Ok(())
 }
