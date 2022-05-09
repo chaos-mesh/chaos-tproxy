@@ -50,7 +50,7 @@ mod test {
     #[ignore]
     #[tokio::test]
     async fn test_get_del_routes() {
-        let (conn, handle, _) = new_connection();
+        let (conn, mut handle, _) = new_connection().unwrap();
 
         spawn(conn);
 
