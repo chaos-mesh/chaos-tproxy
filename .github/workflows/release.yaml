@@ -66,9 +66,10 @@ jobs:
         with:
           arch: aarch64
           run: |
-            DOCKER_BUILDKIT=1 docker build --build-arg CC=${{ matrix.cc }} --build-arg TARGET=${{ matrix.target }} . -t chaos-mesh/tproxy
-            docker run -v ${PWD}:/opt/mount:z --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
-            tar -czvf ./tproxy-${{ matrix.target }}.tar.gz ./tproxy
+            apt-get update && apt-get install build-essential ${{ matrix.cc }} curl git pkg-config -y && rm -rf /var/lib/apt/lists/*
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            cargo build --release --all
+            cp /target/release/chaos-tproxy /tproxy
       - name: Upload Release Asset
         id: upload-release-asset
         uses: actions/upload-release-asset@v1
