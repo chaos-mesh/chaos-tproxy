@@ -18,8 +18,6 @@ RUN apt-get update && apt-get install build-essential $CC curl git pkg-config -y
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH "/root/.cargo/bin:${PATH}"
 
-RUN rustup target add $TARGET
-
 RUN if [ -n "$HTTP_PROXY" ]; then echo "[http]\n\
 proxy = \"${HTTP_PROXY}\"\n\
 "\
