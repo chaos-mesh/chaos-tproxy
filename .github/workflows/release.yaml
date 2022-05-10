@@ -29,6 +29,8 @@ jobs:
     strategy:
       matrix:
         include:
+        - target: aarch64-unknown-linux-gnu
+          cc: gcc-aarch64-linux-gnu
         - target: x86_64-unknown-linux-gnu
           cc: gcc
     steps:
