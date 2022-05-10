@@ -65,9 +65,12 @@ jobs:
         uses: uraimo/run-on-arch-action@v2
         with:
           arch: aarch64
-          run: |
+          distro: ubuntu20.04
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          install: |
             apt-get update && apt-get install build-essential ${{ matrix.cc }} curl git pkg-config -y && rm -rf /var/lib/apt/lists/*
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          run: |
             cargo build --release --all
             cp /target/release/chaos-tproxy /tproxy
       - name: Upload Release Asset
