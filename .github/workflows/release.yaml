@@ -67,12 +67,13 @@ jobs:
           arch: aarch64
           distro: ubuntu20.04
           githubToken: ${{ secrets.GITHUB_TOKEN }}
-          install: |
-            apt-get update && apt-get install build-essential ${{ matrix.cc }} curl git pkg-config -y && rm -rf /var/lib/apt/lists/*
+          run: |
+            apt update
+            apt install build-essential ${{ matrix.cc }} curl git pkg-config -y
+            rm -rf /var/lib/apt/lists/*
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             source $HOME/.cargo/env
             cargo build --release --all
-          run: |
             cp /target/release/chaos-tproxy /tproxy
       - name: Upload Release Asset
         id: upload-release-asset
