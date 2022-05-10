@@ -23,7 +23,7 @@ jobs:
           draft: false
           prerelease: false
   build_x86_64:
-    name: Upload Release
+    name: Upload Release x86-64
     needs: create_release
     runs-on: ubuntu-latest
     strategy:
@@ -50,7 +50,7 @@ jobs:
           asset_name: tproxy-${{ matrix.target }}.tar.gz
           asset_content_type: application/zip
   build_aarch64:
-    name: Upload Release
+    name: Upload Release aarch64
     needs: create_release
     runs-on: ubuntu-latest
     strategy:
