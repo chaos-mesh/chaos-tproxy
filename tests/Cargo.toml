@@ -40,5 +40,5 @@ futures-util = { version = "0.3.7", default-features = false, features = ["alloc
 chaos-tproxy-proxy = {path = "../chaos-tproxy-proxy"}
 chaos-tproxy-controller = {path = "../chaos-tproxy-controller"}
 pnet = "0.28.0"
-default-net = "0.2.0"
+default-net = "0.9.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}

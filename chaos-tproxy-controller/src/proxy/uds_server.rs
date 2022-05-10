@@ -15,7 +15,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
     }
 
     pub fn bind(&self) -> anyhow::Result<UnixListener> {
-        tracing::info!(target : "Uds listener try binding", "{:?}", &self.path);
+        tracing::info!("Uds listener try binding {:?}", &self.path);
         let listener = UnixListener::bind(self.path.clone())?;
         Ok(listener)
     }
@@ -26,15 +26,15 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
     }
 
     pub async fn listen(&self, listener: UnixListener) -> anyhow::Result<()> {
-        tracing::info!(target : "Uds listener listening on", "{:?}", &self.path);
+        tracing::info!("Uds listener listening on {:?}", &self.path);
         loop {
-            match (&listener).accept().await {
+            match (listener).accept().await {
                 Ok((mut stream, addr)) => {
                     let buf = serde_json::to_vec(&self.data)?;
                     tokio::spawn(async move {
                         return match stream.write_all(buf.as_slice()).await {
                             Ok(_) => {
-                                tracing::info!(target : "Uds server" ,"Config successfully transferred.");
+                                tracing::info!("Uds server Config successfully transferred.");
                                 Ok(())
                             }
                             Err(e) => {

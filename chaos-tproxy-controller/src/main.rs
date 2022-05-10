@@ -1,9 +1,11 @@
 use std::process::exit;
 
-use anyhow::anyhow;
 use chaos_tproxy_proxy::proxy_main;
 use chaos_tproxy_proxy::signal::Signals;
 use tokio::signal::unix::SignalKind;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::cmd::command_line::{get_config_from_opt, Opt};
 use crate::cmd::interactive::handler::ConfigServer;
@@ -22,11 +24,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Ok(o) => o,
     };
-    tracing_subscriber::fmt()
-        .with_max_level(opt.get_level_filter())
-        .with_writer(std::io::stderr)
-        .try_init()
-        .map_err(|err| anyhow!("{}", err))?;
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_writer(std::io::stderr))
+        .with(EnvFilter::from_default_env().add_directive(opt.get_level_filter().into()))
+        .with(EnvFilter::from_default_env().add_directive("chaos_tproxy".parse().unwrap()))
+        .init();
 
     if opt.proxy {
         proxy_main(opt.ipc_path.clone().unwrap()).await?;
@@ -34,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
 
     if opt.input.is_some() {
         let cfg = get_config_from_opt(&opt).await?;
-        let mut proxy = Proxy::new(opt.verbose);
+        let mut proxy = Proxy::new(opt.verbose).await;
         proxy.reload(cfg.proxy_config).await?;
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
@@ -43,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if opt.interactive {
-        let mut config_server = ConfigServer::new(Proxy::new(opt.verbose));
+        let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
         config_server.serve_interactive();
 
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
