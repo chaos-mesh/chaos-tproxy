@@ -19,8 +19,8 @@ pub struct Selector {
 
 pub fn select_role(src_ip: &Ipv4Addr, dst_ip: &Ipv4Addr, role: &Role) -> bool {
     match role {
-        Role::Client(ipv4) => ipv4 == src_ip,
-        Role::Server(ipv4) => ipv4 == dst_ip,
+        Role::Client(ipv4s) => ipv4s.iter().any(|ipv4| ipv4 == src_ip),
+        Role::Server(ipv4s) => ipv4s.iter().any(|ipv4| ipv4 == dst_ip),
     }
 }
 

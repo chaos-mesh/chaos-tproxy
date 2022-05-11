@@ -28,8 +28,8 @@ pub struct RawConfig {
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 pub enum Role {
-    Client(Ipv4Addr),
-    Server(Ipv4Addr),
+    Client(Vec<Ipv4Addr>),
+    Server(Vec<Ipv4Addr>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]

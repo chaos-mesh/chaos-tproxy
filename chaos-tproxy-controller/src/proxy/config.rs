@@ -45,8 +45,8 @@ impl TryFrom<RawConfig> for Config {
                 rules: raw.rules.map_or(vec![], |rules| rules),
                 role: raw.role.and_then(|role| {
                     Option::from(match role {
-                        RawRole::Client => Role::Client(ipv4s[0]),
-                        RawRole::Server => Role::Server(ipv4s[0]),
+                        RawRole::Client => Role::Client(ipv4s),
+                        RawRole::Server => Role::Server(ipv4s),
                     })
                 }),
             },
