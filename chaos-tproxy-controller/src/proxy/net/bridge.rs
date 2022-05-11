@@ -71,17 +71,6 @@ impl NetEnv {
         }
     }
 
-    pub fn set_ip_with_interface_name(&mut self, interface: &str) -> anyhow::Result<()> {
-        for i in pnet::datalink::interfaces() {
-            if i.name == interface {
-                self.device = i.name.clone();
-                self.ip = get_ipv4(&i).unwrap();
-                return Ok(());
-            }
-        }
-        return Err(anyhow!("interface : {} not found", interface));
-    }
-
     pub async fn setenv_bridge(&self, handle: &mut Handle) -> Result<()> {
         let Gateway {
             mac_addr: gateway_mac,
