@@ -38,14 +38,14 @@ impl HttpServer {
     pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
         let listener = TcpListener::bind(addr)?;
-        tracing::info!(target : "Proxy", "Listening");
+        tracing::info!("Proxy Listening");
         select! {
             _ = async {
                 loop {
                     let stream = listener.accept().await?;
                     let addr_remote = stream.peer_addr()?;
                     let addr_local = stream.local_addr()?;
-                    tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}", addr_remote, addr_local);
+                    tracing::debug!("Accept streaming remote={:?}, local={:?}", addr_remote, addr_local);
                     let config = Arc::new(self.config.clone());
                     let service = HttpService::new(addr_remote, addr_local, config);
                     tokio::spawn(async move {
