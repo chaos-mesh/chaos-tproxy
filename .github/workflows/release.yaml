@@ -68,9 +68,9 @@ jobs:
           distro: ubuntu20.04
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           setup: |
-            mkdir -p "${PWD}/tproxy"
+            mkdir -p "/tproxy"
           dockerRunArgs: |
-            --volume "${PWD}/tproxy:/tproxy"
+            --volume "/tproxy:/tproxy"
           run: |
             apt update
             apt install build-essential ${{ matrix.cc }} curl git pkg-config -y
@@ -87,6 +87,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: ${PWD}/tproxy/tproxy-${{ matrix.target }}.tar.gz
+          asset_path: /tproxy/tproxy-${{ matrix.target }}.tar.gz
           asset_name: tproxy-${{ matrix.target }}.tar.gz
           asset_content_type: application/zip
