@@ -39,17 +39,18 @@ impl HttpServer {
         Self { config }
     }
 
-    pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
+    pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
         let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
+        let rx_mut = &mut rx;
         if let Some(tls_config) = &self.config.tls_config {
             let tls_client_config = Arc::new(tls_config.tls_client_config.clone());
             let tls_server_config = Arc::new(tls_config.tls_server_config.clone());
-            select! {
-                _ = async {
-                    loop {
+            loop {
+                select! {
+                        _ = async {
                             let stream = listener.accept().await?;
                             let addr_remote = stream.peer_addr()?;
                             let addr_local = stream.local_addr()?;
@@ -66,19 +67,18 @@ impl HttpServer {
                                 Err(e) => {tracing::error!("{}",e);}
                             };
                         });
+                            Ok::<_, anyhow::Error>(())
+                    }=> {},
+                    _ = &mut *rx_mut => {
+                        return Ok(());
                     }
-                    #[allow(unreachable_code)]
-                    Ok::<_, anyhow::Error>(())
-                } => {},
-                _ = rx => {
-                    return Ok(());
                 }
-            };
-            return Ok(());
+            }
         }
-        select! {
-            _ = async {
-                loop {
+
+        loop {
+            select! {
+                _ = async {
                     let stream = listener.accept().await?;
                     let addr_remote = stream.peer_addr()?;
                     let addr_local = stream.local_addr()?;
@@ -90,15 +90,13 @@ impl HttpServer {
                             Err(e) => {tracing::error!("{}",e);}
                         };
                     });
+                    Ok::<_, anyhow::Error>(())
+                }=> {}
+                _ = &mut *rx_mut => {
+                    return Ok(());
                 }
-                #[allow(unreachable_code)]
-                Ok::<_, anyhow::Error>(())
-            } => {},
-            _ = rx => {
-                return Ok(());
             }
-        };
-        Ok(())
+        }
     }
 }
 
@@ -155,15 +153,15 @@ pub async fn serve_http_with_error_return(
             },
             Err(e) => {
                 return if e.is_parse() {
-                    tracing::debug!("{}:Turn into tcp transfer.", log_key);
+                    debug!("{}:Turn into tcp transfer.", log_key);
                     match parts {
                         Some(mut part) => {
                             let addr_target = part.io.local_addr()?;
                             let addr_local = part.io.peer_addr()?;
                             let socket = TransparentSocket::bind(addr_local)?;
-                            tracing::debug!("{}:Bind local addrs.", log_key);
+                            debug!("{}:Bind local addrs.", log_key);
                             let mut client_stream = socket.connect(addr_target).await?;
-                            tracing::debug!("{}:Connected target addrs.", log_key);
+                            debug!("{}:Connected target addrs.", log_key);
                             client_stream
                                 .write_all(part.read_buf.as_ref())
                                 .await
@@ -278,8 +276,7 @@ impl HttpService {
                 }
             }
         } else {
-            let client = Client::builder()
-                .build(HttpConnector::new(self.target, self.remote));
+            let client = Client::builder().build(HttpConnector::new(self.target, self.remote));
             match client.request(request).await {
                 Ok(resp) => resp,
                 Err(err) => {
