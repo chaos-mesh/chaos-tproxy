@@ -7,7 +7,7 @@ use std::task::{Context, Poll};
 use anyhow::Error;
 use futures::TryStreamExt;
 use http::{Method, Request, Response, StatusCode};
-use hyper::server::conn::Http;
+use hyper::server::conn::{Connection, Http};
 use hyper::service::Service;
 use hyper::Body;
 use tokio::select;
@@ -41,29 +41,25 @@ impl ConfigServer {
     }
 
     pub fn serve_interactive(&mut self) {
-        let rx = self.rx.take().unwrap();
+        let mut rx = self.rx.take().unwrap();
         let mut service = ConfigService(self.proxy.clone());
         self.task = Some(tokio::spawn(async move {
-            select! {
-                _ = rx => {
-                    tracing::trace!("catch signal in config server.");
-                    return Ok(());
-                },
-                _ = async {
-                    loop {
-                        let stream = StdStream::default();
-                        let conn = Http::new()
-                            .serve_connection(stream, &mut service);
-                        if let Err(e) = conn.await {
-                            tracing::error!("{}",e);
-                            return Err(anyhow::anyhow!("{}",e));
-                        }
+            let rx_mut = &mut rx;
+            loop {
+                let stream = StdStream::default();
+                let mut conn = Http::new().serve_connection(stream, &mut service);
+                let conn_mut = &mut conn;
+                select! {
+                    _ = &mut *rx_mut => {
+                        tracing::trace!("catch signal in config server.");
+                        Connection::graceful_shutdown(Pin::new(conn_mut));
+                        return Ok(());
+                    },
+                    ret = &mut *conn_mut => if let Err(e) = ret {
+                        tracing::error!("{}",e);
                     }
-                    #[allow(unreachable_code)]
-                    Ok::<_, anyhow::Error>(())
-                } => {}
-            };
-            Ok(())
+                };
+            }
         }));
     }
 

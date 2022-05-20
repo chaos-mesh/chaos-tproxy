@@ -42,7 +42,7 @@ impl HttpServer {
     pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
         let listener = TcpListener::bind(addr)?;
-        tracing::info!(target : "Proxy", "Listening");
+        tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
         if let Some(tls_config) = &self.config.tls_config {
             let tls_client_config = Arc::new(tls_config.tls_client_config.clone());
@@ -82,7 +82,7 @@ impl HttpServer {
                     let stream = listener.accept().await?;
                     let addr_remote = stream.peer_addr()?;
                     let addr_local = stream.local_addr()?;
-                    tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}", addr_remote, addr_local);
+                    tracing::debug!("Accept streaming remote={:?}, local={:?}", addr_remote, addr_local);
                     let service = HttpService::new(addr_remote, addr_local, http_config.clone(), None);
                     tokio::spawn(async move {
                         match serve_http_with_error_return(stream, &service).await{

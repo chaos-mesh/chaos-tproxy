@@ -2,19 +2,22 @@ use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
 use default_net;
+use default_net::Gateway;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
+use rtnetlink::Handle;
+use rtnetlink::packet::route::Nla;
+use rtnetlink::packet::RouteMessage;
 use uuid::Uuid;
-
 use crate::proxy::net::iptables::clear_ebtables;
+
+use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
 #[derive(Debug, Clone)]
 pub struct NetEnv {
     pub netns: String,
     pub device: String,
     pub ip: String,
-
-    ip_route_store: String,
 
     bridge1: String,
     bridge2: String,
@@ -23,10 +26,12 @@ pub struct NetEnv {
     veth2: String,
     veth3: String,
     pub veth4: String,
+
+    save_routes: Vec<RouteMessage>,
 }
 
 impl NetEnv {
-    pub fn new() -> Self {
+    pub async fn new(handle:&Handle) -> Self {
         let interfaces = pnet::datalink::interfaces();
         let prefix = loop {
             let key = Uuid::new_v4().to_string()[0..13].to_string();
@@ -38,7 +43,6 @@ impl NetEnv {
                 break key;
             }
         };
-        let ip_route_store = "ip_route_store".to_string() + &Uuid::new_v4().to_string();
         let device = get_default_interface().unwrap();
         let netns = prefix.clone() + "ns";
         let bridge1 = prefix.clone() + "b1";
@@ -48,17 +52,22 @@ impl NetEnv {
         let veth3 = "veth1".to_string();
         let veth4 = prefix + "v4";
         let ip = get_ipv4(&device).unwrap();
+
+        let mut routes = get_routes_noblock(handle).await.unwrap();
+
+        routes.reverse();
+
         Self {
             netns,
             device: device.name,
             ip,
-            ip_route_store,
             bridge1,
             bridge2,
             veth1,
             veth2,
             veth3,
             veth4,
+            save_routes: routes,
         }
     }
 
@@ -73,19 +82,15 @@ impl NetEnv {
         return Err(anyhow!("interface : {} not found", interface));
     }
 
-    pub fn setenv_bridge(&self) -> Result<()> {
-        let gateway_ip = match try_get_default_gateway_ip() {
-            Ok(s) => s,
-            Err(e) => return Err(e),
-        };
-        let gateway_mac = match default_net::get_default_gateway_mac(gateway_ip.clone()) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("{}", e);
-                return Err(anyhow!(e));
-            }
-        };
-        let save = format!("ip route save table all > {}", &self.ip_route_store);
+    pub async fn setenv_bridge(&self, handle: &mut Handle) -> Result<()> {
+        let Gateway {
+            mac_addr: gateway_mac,
+            ip_addr: gateway_ip,
+        } = try_get_default_gateway()?;
+
+        let gateway_ip = gateway_ip.to_string();
+        let gateway_mac = gateway_mac.to_string();
+
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self
             .ip
@@ -96,7 +101,6 @@ impl NetEnv {
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
         let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
         let cmdvv = vec![
-            bash_c(&save),
             bash_c(save_dns),
             ip_netns_add(&self.netns),
             ip_link_add_bridge(&self.bridge1),
@@ -114,7 +118,12 @@ impl NetEnv {
             ip_netns(&self.netns, ip_link_set_master(&self.veth2, &self.bridge2)),
             ip_netns(&self.netns, ip_link_set_master(&self.veth3, &self.bridge2)),
             ip_netns(&self.netns, ip_link_set_up("lo")),
-            ip_address("del", &self.ip, &self.device),
+        ];
+        execute_all(cmdvv)?;
+
+        execute_all_with_log_error(vec![ip_address("del", &self.ip, &self.device)])?;
+
+        let cmdvv = vec![
             ip_address("add", &self.ip, &self.veth4),
             arp_set(&gateway_ip, &gateway_mac, &self.veth1),
             arp_set(&gateway_ip, &gateway_mac, &self.veth4),
@@ -185,63 +194,76 @@ impl NetEnv {
             .mac
             .context(format!("mac {} not found", self.veth4.clone()))?
             .to_string();
-        let _ = execute(ip_netns(
-            &self.netns,
-            arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
-        ))?;
+        execute_all(vec![
+            ip_netns(
+                &self.netns,
+                arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
+            ),
+        ])?;
+
+        let all_routes = get_routes_noblock(handle).await?;
+
+        let kernel_routes: Vec<RouteMessage> = all_routes
+            .into_iter()
+            .filter(|msg| {
+                msg.header.table != 255
+                    && msg.nlas.iter().any(|n| match n {
+                        Nla::PrefSource(addr) => {
+                            let digits: Vec<String> = addr
+                                .clone()
+                                .into_iter()
+                                .map(|digit| digit.to_string())
+                                .collect();
+                            let addr_string = digits.join(".");
+                            self.ip.contains(&addr_string)
+                        }
+                        _ => false,
+                    })
+                    && msg.nlas.iter().all(|n| !matches!(n, Nla::Gateway(_)))
+            })
+            .collect();
+        del_routes_noblock(handle, kernel_routes).await?;
         Ok(())
     }
 
-    pub fn clear_bridge(&self) -> Result<()> {
+    pub async fn clear_bridge(&self, handle:&mut Handle) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
-        let remove_store = format!("rm -f {}", &self.ip_route_store);
-
-        let flush_main_route = "ip route flush table main";
 
         let cmdvv = vec![
             ip_netns_del(&self.netns),
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            bash_c(flush_main_route),
             clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
 
-        let ip_routes = restore_all_ip_routes(&self.ip_route_store)?;
-        let iproute_cmds: Vec<Vec<&str>> = ip_routes.iter().map(|s| bash_c(&**s)).collect();
-        execute_all_with_log_error(iproute_cmds)?;
+        let routes = get_routes_noblock(handle).await.unwrap_or_else(|e| {
+            tracing::error!("clear routes get_routes_noblock with error {}", e);
+            vec![]
+        });
 
-        let cmdvv = vec![bash_c(&remove_store)];
-        execute_all_with_log_error(cmdvv)?;
+        del_routes_noblock(handle, routes).await.unwrap_or_else(|e| {
+            tracing::error!("clear routes del_routes_noblock with error {}", e);
+        });
 
-        let gateway_ip = match try_get_default_gateway_ip() {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("try_get_default_gateway_ip :{}", e);
-                return Ok(());
-            }
-        };
-        let gateway_mac = match default_net::get_default_gateway_mac(gateway_ip.clone()) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("get_default_gateway_mac :{}", e);
-                return Ok(());
-            }
-        };
-        let cmdvv = vec![arp_set(
-            gateway_ip.as_str(),
-            gateway_mac.as_str(),
-            self.device.as_str(),
-        )];
+        load_routes(handle, self.save_routes.clone())
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("clear routes load_routes with error {}", e);
+            });
+
+        let Gateway {
+            mac_addr: gateway_mac,
+            ip_addr: gateway_ip,
+        } = try_get_default_gateway()?;
+
+        let gateway_ip = gateway_ip.to_string();
+        let gateway_mac = gateway_mac.to_string();
+
+        let cmdvv = vec![arp_set(&gateway_ip, &gateway_mac, self.device.as_str())];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
-    }
-}
-
-impl Default for NetEnv {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -322,23 +344,16 @@ pub fn ip_route_add<'a>(target: &'a str, gateway_ip: &'a str, device: &'a str) -
     ]
 }
 
-pub fn try_get_default_gateway_ip() -> Result<String> {
-    match system_gateway::gateway() {
-        Ok(ip) => return Ok(ip),
-        Err(e) => {
-            tracing::error!("{}", e);
-            let mut count = 5;
-            while count > 0 {
-                let gataway_ip = default_net::get_default_gateway_ip();
-                match gataway_ip {
-                    Ok(ip) => return Ok(ip),
-                    Err(e) => tracing::error!("{}", e),
-                }
-                count -= 1;
-            }
+pub fn try_get_default_gateway() -> Result<Gateway> {
+    let mut count = 5;
+    while count > 0 {
+        match default_net::get_default_gateway() {
+            Ok(gateway) => return Ok(gateway),
+            Err(e) => tracing::error!("{}", e),
         }
-    };
-    Err(anyhow!("tried 5 times but icmp target 8.8.8.8"))
+        count -= 1;
+    }
+    Err(anyhow!("tried 5 times but not get gateway"))
 }
 
 pub fn get_ipv4(device: &NetworkInterface) -> Option<String> {
@@ -359,7 +374,7 @@ pub fn execute_all_with_log_error(cmdvv: Vec<Vec<&str>>) -> Result<()> {
 
 pub fn execute_all(cmdvv: Vec<Vec<&str>>) -> Result<()> {
     for cmdv in cmdvv {
-        let _ = execute(cmdv)?;
+        execute(cmdv)?;
     }
     Ok(())
 }
@@ -403,22 +418,4 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
         }
     }
     Err(anyhow!("no valid interface"))
-}
-
-pub fn restore_all_ip_routes(path: &str) -> Result<Vec<String>> {
-    let cmd_string = format!("ip route showdump < {}", path);
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(cmd_string);
-    let stdo = cmd.output()?.stdout;
-    let out = String::from_utf8_lossy(stdo.as_slice());
-
-    let mut ip_routes: Vec<_> = out.split('\n').collect();
-    ip_routes.reverse();
-    let mut route_cmds: Vec<String> = Vec::new();
-    for ip_route in ip_routes {
-        if !ip_route.is_empty() {
-            route_cmds.push(format!("{} {}", "ip route add", ip_route));
-        }
-    }
-    Ok(route_cmds)
 }

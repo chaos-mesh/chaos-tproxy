@@ -25,8 +25,7 @@ structopt = {version = "0.3", features = ["paw"]}
 tokio = {version = "1.4", features = ["full"]}
 wildmatch = "2.1"
 tracing = "0.1"
-tracing-futures = "0.2"
-tracing-subscriber = "0.2"
+tracing-subscriber = {version = "0.3", features = ["env-filter", "std"]}
 json-patch = "0.2.6"
 async-trait = "0.1.50"
 bytes = "1.0.1"
@@ -41,3 +40,5 @@ derivative = "2.2.0"
 rustls-pemfile = "1.0.0"
 webpki-roots = "0.22"
 hyper-rustls = { git = "https://github.com/Andrewmatilde/hyper-rustls.git", features = ["http2"] }
+rtnetlink = "0.9.1"
+futures-util = "0.3"

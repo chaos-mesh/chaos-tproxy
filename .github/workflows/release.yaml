@@ -22,25 +22,21 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-  build:
+  upload_release:
     name: Upload Release
     needs: create_release
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-        - target: aarch64-unknown-linux-gnu
-          cc: gcc-aarch64-linux-gnu
-        - target: x86_64-unknown-linux-gnu
-          cc: gcc
+        arch: [x86_64, aarch64]
+    runs-on: ${{ fromJson('{"x86_64":"ubuntu-latest", "aarch64":["self-hosted", "Linux", "ARM64"]}')[matrix.arch] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Build
         run: |
-          DOCKER_BUILDKIT=1 docker build --build-arg CC=${{ matrix.cc }} --build-arg TARGET=${{ matrix.target }} --build-arg HTTP_PROXY=${HTTP_PROXY} --build-arg HTTPS_PROXY=${HTTPS_PROXY} . -t chaos-mesh/tproxy
+          DOCKER_BUILDKIT=1 docker build --build-arg HTTP_PROXY=${HTTP_PROXY} --build-arg HTTPS_PROXY=${HTTPS_PROXY} . -t chaos-mesh/tproxy
           docker run -v ${PWD}:/opt/mount:z --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
-          tar -czvf ./tproxy-${{ matrix.target }}.tar.gz ./tproxy
+          tar -czvf ./tproxy-${{ matrix.arch }}.tar.gz ./tproxy
       - name: Upload Release Asset
         id: upload-release-asset 
         uses: actions/upload-release-asset@v1
@@ -48,6 +44,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create_release.outputs.upload_url }} 
-          asset_path: ./tproxy-${{ matrix.target }}.tar.gz
-          asset_name: tproxy-${{ matrix.target }}.tar.gz
+          asset_path: ./tproxy-${{ matrix.arch }}.tar.gz
+          asset_name: tproxy-${{ matrix.arch }}.tar.gz
           asset_content_type: application/zip
+ 

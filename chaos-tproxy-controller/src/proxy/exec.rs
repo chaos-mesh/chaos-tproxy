@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::Error;
+use rtnetlink::{Handle, new_connection};
 use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 use tokio::process::Command;
 use tokio::select;
@@ -30,22 +31,27 @@ impl ProxyOpt {
 pub struct Proxy {
     pub opt: ProxyOpt,
     pub net_env: NetEnv,
+    pub rtnl_handle: Handle,
     pub sender: Option<Sender<()>>,
     pub rx: Option<Receiver<()>>,
     pub task: Option<JoinHandle<Result<(), Error>>>,
 }
 
 impl Proxy {
-    pub fn new(verbose: u8) -> Self {
+    pub async fn new(verbose: u8) -> Self {
         let uds_path = env::temp_dir()
             .join(Uuid::new_v4().to_string())
             .with_extension("sock");
 
         let opt = ProxyOpt::new(uds_path, verbose);
         let (sender, rx) = channel();
+
+        let (conn, handle, _) = new_connection().unwrap();
+        tokio::spawn(conn);
         Self {
             opt,
-            net_env: NetEnv::new(),
+            net_env: NetEnv::new(&handle).await,
+            rtnl_handle: handle,
             sender: Some(sender),
             rx: Some(rx),
             task: None,
@@ -53,7 +59,7 @@ impl Proxy {
     }
 
     pub async fn exec(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
-        tracing::info!(target : "transferring proxy raw config ", "{:?}" ,&config);
+        tracing::info!("transferring proxy raw config {:?}", &config);
         let uds_server = UdsDataServer::new(config.clone(), self.opt.ipc_path.clone());
         let listener = uds_server.bind()?;
 
@@ -76,7 +82,7 @@ impl Proxy {
             Ok(path) => path,
         };
 
-        tracing::info!(target: "Network device name", "{}", self.net_env.device.clone());
+        tracing::info!("Network device name {}", self.net_env.device.clone());
         match config.interface {
             None => {}
             Some(interface) => {
@@ -84,11 +90,13 @@ impl Proxy {
             }
         }
         set_net(
+            &mut self.rtnl_handle,
             &self.net_env,
             config.proxy_ports,
             config.listen_port,
             config.safe_mode,
-        )?;
+        )
+        .await?;
 
         let mut proxy = Command::new("ip");
         proxy
@@ -105,10 +113,10 @@ impl Proxy {
 
         let rx = self.rx.take().unwrap();
         self.task = Some(tokio::spawn(async move {
-            tracing::info!(target : "Proxy executor", "Starting proxy.");
+            tracing::info!("Proxy executor Starting proxy.");
             let mut process = match proxy.stdin(Stdio::piped()).spawn() {
                 Ok(process) => {
-                    tracing::info!(target : "Proxy executor", "Proxy is running.");
+                    tracing::info!("Proxy executor Proxy is running.");
                     process
                 }
                 Err(e) => {
@@ -118,7 +126,7 @@ impl Proxy {
             select! {
                 _ = process.wait() => {}
                 _ = rx => {
-                    tracing::info!(target : "Proxy executor","killing sub process");
+                    tracing::info!("Proxy executor killing sub process");
                     let id = process.id().unwrap() as i32;
                     unsafe {
                         libc::kill(id, libc::SIGINT);
@@ -135,7 +143,7 @@ impl Proxy {
             if let Some(sender) = self.sender.take() {
                 let _ = sender.send(());
             };
-            let _ = self.net_env.clear_bridge();
+            let _ = self.net_env.clear_bridge(&mut self.rtnl_handle).await;
             let _ = task.await?;
         }
         Ok(())
@@ -147,7 +155,7 @@ impl Proxy {
             return Ok(());
         }
         if self.task.is_none() {
-            let mut new = Self::new(self.opt.verbose);
+            let mut new = Self::new(self.opt.verbose).await;
             self.net_env = new.net_env;
             self.opt = new.opt;
             self.sender = new.sender.take();
@@ -156,7 +164,7 @@ impl Proxy {
 
         return match self.exec(config).await {
             Err(e) => {
-                self.net_env.clear_bridge()?;
+                self.net_env.clear_bridge(&mut self.rtnl_handle).await?;
                 Err(e)
             }
             Ok(_) => Ok(()),
