@@ -258,7 +258,7 @@ impl HttpService {
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
-        let mut response = if let Some(tls_client_config) = &self.tls_client_config {
+        let rsp_fut = if let Some(tls_client_config) = &self.tls_client_config {
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config((**tls_client_config).clone())
                 .https_only()
@@ -267,25 +267,19 @@ impl HttpService {
                 .wrap_connector(HttpConnector::new(self.target, self.remote));
 
             let client: client::Client<_, hyper::Body> = client::Client::builder().build(https);
-            match client.request(request).await {
-                Ok(resp) => resp,
-                Err(err) => {
-                    error!("{} : fail to forward request: {}", log_key, err);
-                    Response::builder()
-                        .status(StatusCode::BAD_GATEWAY)
-                        .body(Body::empty())?
-                }
-            }
+            client.request(request)
         } else {
             let client = Client::builder().build(HttpConnector::new(self.target, self.remote));
-            match client.request(request).await {
-                Ok(resp) => resp,
-                Err(err) => {
-                    error!("{} : fail to forward request: {}", log_key, err);
-                    Response::builder()
-                        .status(StatusCode::BAD_GATEWAY)
-                        .body(Body::empty())?
-                }
+            client.request(request)
+        };
+
+        let mut response = match rsp_fut.await {
+            Ok(resp) => resp,
+            Err(err) => {
+                error!("{} : fail to forward request: {}", log_key, err);
+                Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Body::empty())?
             }
         };
 
