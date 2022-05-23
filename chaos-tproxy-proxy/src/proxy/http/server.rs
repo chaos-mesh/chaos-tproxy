@@ -20,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, error, Level, span, trace};
+use tracing::{debug, error, span, trace, Level};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -133,11 +133,12 @@ pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
-    let span = span!(Level::TRACE,
+    let log_key = format!(
         "{{ peer={},local={} }}",
         stream.peer_addr()?,
         stream.local_addr()?
     );
+    let span = span!(Level::TRACE, "Stream", "{}", &log_key);
     let _guard = span.enter();
     loop {
         let (r, parts) = Http::new()
