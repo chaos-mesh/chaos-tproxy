@@ -20,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, Level, span, trace};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -133,11 +133,12 @@ pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
-    let log_key = format!(
+    let span = span!(Level::TRACE,
         "{{ peer={},local={} }}",
         stream.peer_addr()?,
         stream.local_addr()?
     );
+    let _guard = span.enter();
     loop {
         let (r, parts) = Http::new()
             .error_return(true)
@@ -152,15 +153,15 @@ pub async fn serve_http_with_error_return(
             },
             Err(e) => {
                 return if e.is_parse() {
-                    debug!("{}:Turn into tcp transfer.", log_key);
+                    debug!("Turn into tcp transfer.");
                     match parts {
                         Some(mut part) => {
                             let addr_target = part.io.local_addr()?;
                             let addr_local = part.io.peer_addr()?;
                             let socket = TransparentSocket::bind(addr_local)?;
-                            debug!("{}:Bind local addrs.", log_key);
+                            debug!("Bind local addrs.");
                             let mut client_stream = socket.connect(addr_target).await?;
-                            debug!("{}:Connected target addrs.", log_key);
+                            debug!("Connected target addrs.");
                             client_stream
                                 .write_all(part.read_buf.as_ref())
                                 .await
@@ -172,7 +173,7 @@ pub async fn serve_http_with_error_return(
                     }
                 } else {
                     if !e.to_string().contains("error shutting down connection") {
-                        tracing::info!("{}:fail to serve http: {}", log_key, e);
+                        tracing::info!("fail to serve http: {}", e);
                     }
                     Ok(())
                 }
