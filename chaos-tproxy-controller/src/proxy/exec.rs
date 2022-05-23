@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::Error;
-use rtnetlink::{Handle, new_connection};
 use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use rtnetlink::{new_connection, Handle};
 use tokio::process::Command;
 use tokio::select;
 use tokio::sync::oneshot::{channel, Receiver, Sender};

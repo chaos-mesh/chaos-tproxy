@@ -18,7 +18,7 @@ pub struct HttpConnector {
 }
 
 impl HttpConnector {
-    pub fn new(dst: SocketAddr,src: SocketAddr) -> Self {
+    pub fn new(dst: SocketAddr, src: SocketAddr) -> Self {
         Self {
             target: dst,
             socket: TransparentSocket::new(src),

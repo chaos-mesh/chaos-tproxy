@@ -50,18 +50,17 @@ impl HttpServer {
             let tls_server_config = Arc::new(tls_config.tls_server_config.clone());
             loop {
                 select! {
-                        _ = async {
-                            let stream = listener.accept().await?;
-                            let addr_remote = stream.peer_addr()?;
-                            let addr_local = stream.local_addr()?;
-                            tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}",
-                            addr_remote, addr_local);
-                            let service = HttpService::new(addr_remote,
+                    _ = async {
+                        let stream = listener.accept().await?;
+                        let addr_remote = stream.peer_addr()?;
+                        let addr_local = stream.local_addr()?;
+                        tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}",addr_remote, addr_local);
+                        let service = HttpService::new(addr_remote,
                             addr_local,
                             http_config.clone(),
                             Some(tls_client_config.clone()));
-                            let acceptor = TlsAcceptor::from(tls_server_config.clone());
-                            tokio::spawn(async move {
+                        let acceptor = TlsAcceptor::from(tls_server_config.clone());
+                        tokio::spawn(async move {
                             match serve_https(stream, &service, acceptor).await{
                                 Ok(_)=>{}
                                 Err(e) => {tracing::error!("{}",e);}
