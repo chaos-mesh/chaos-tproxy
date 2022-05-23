@@ -45,55 +45,47 @@ impl HttpServer {
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
         let rx_mut = &mut rx;
-        if let Some(tls_config) = &self.config.tls_config {
-            let tls_client_config = Arc::new(tls_config.tls_client_config.clone());
-            let tls_server_config = Arc::new(tls_config.tls_server_config.clone());
-            loop {
-                select! {
-                    _ = async {
-                        let stream = listener.accept().await?;
-                        let addr_remote = stream.peer_addr()?;
-                        let addr_local = stream.local_addr()?;
-                        tracing::debug!(target : "Accept streaming", "remote={:?}, local={:?}",addr_remote, addr_local);
-                        let service = HttpService::new(addr_remote,
-                            addr_local,
-                            http_config.clone(),
-                            Some(tls_client_config.clone()));
-                        let acceptor = TlsAcceptor::from(tls_server_config.clone());
-                        tokio::spawn(async move {
-                            match serve_https(stream, &service, acceptor).await{
-                                Ok(_)=>{}
-                                Err(e) => {tracing::error!("{}",e);}
-                            };
-                        });
-                            Ok::<_, anyhow::Error>(())
-                    }=> {},
-                    _ = &mut *rx_mut => {
-                        return Ok(());
-                    }
-                }
-            }
-        }
 
         loop {
-            select! {
-                _ = async {
-                    let stream = listener.accept().await?;
-                    let addr_remote = stream.peer_addr()?;
-                    let addr_local = stream.local_addr()?;
-                    tracing::debug!("Accept streaming remote={:?}, local={:?}", addr_remote, addr_local);
-                    let service = HttpService::new(addr_remote, addr_local, http_config.clone(), None);
-                    tokio::spawn(async move {
-                        match serve_http_with_error_return(stream, &service).await{
-                            Ok(_)=>{}
-                            Err(e) => {tracing::error!("{}",e);}
-                        };
-                    });
-                    Ok::<_, anyhow::Error>(())
-                }=> {}
+            let stream = select! {
+                stream = listener.accept() => {
+                    stream
+                },
                 _ = &mut *rx_mut => {
                     return Ok(());
                 }
+            }?;
+            let addr_remote = stream.peer_addr()?;
+            let addr_local = stream.local_addr()?;
+            debug!(target : "Accept streaming", "remote={:?}, local={:?}",addr_remote, addr_local);
+            if let Some(tls_config) = &self.config.tls_config {
+                let tls_client_config = Arc::new(tls_config.tls_client_config.clone());
+                let tls_server_config = Arc::new(tls_config.tls_server_config.clone());
+                let service = HttpService::new(
+                    addr_remote,
+                    addr_local,
+                    http_config.clone(),
+                    Some(tls_client_config.clone()),
+                );
+                let acceptor = TlsAcceptor::from(tls_server_config.clone());
+                tokio::spawn(async move {
+                    match serve_https(stream, &service, acceptor).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("{}", e);
+                        }
+                    };
+                });
+            } else {
+                let service = HttpService::new(addr_remote, addr_local, http_config.clone(), None);
+                tokio::spawn(async move {
+                    match serve_http_with_error_return(stream, &service).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("{}", e);
+                        }
+                    };
+                });
             }
         }
     }
