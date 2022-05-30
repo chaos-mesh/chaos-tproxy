@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::future::Future;
 use std::matches;
 use std::net::SocketAddr;
@@ -5,27 +6,30 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use anyhow::Result;
-use http::uri::{Scheme, Uri};
+use anyhow::{anyhow, Result};
+use derivative::Derivative;
+use http::header::HOST;
+use http::uri::{PathAndQuery, Scheme, Uri};
 use http::StatusCode;
 use hyper::server::conn::Http;
 use hyper::service::Service;
-use hyper::{Body, Client, Request, Response};
+use hyper::{client, Body, Client, Request, Response};
+use rustls::ClientConfig;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
-use tracing::{debug, error};
+use tokio_rustls::TlsAcceptor;
+use tracing::{debug, error, span, trace, Level};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
 use crate::handler::http::selector::{select_request, select_response};
-use crate::proxy::http::config::Config;
+use crate::proxy::http::config::{Config, HTTPConfig};
 use crate::proxy::http::connector::HttpConnector;
 use crate::proxy::tcp::listener::TcpListener;
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
 
-#[derive(Debug)]
 pub struct HttpServer {
     config: Config,
 }
@@ -35,34 +39,85 @@ impl HttpServer {
         Self { config }
     }
 
-    pub async fn serve(&mut self, rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.proxy_port));
+    pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
+        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
         let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
-        select! {
-            _ = async {
-                loop {
-                    let stream = listener.accept().await?;
-                    let addr_remote = stream.peer_addr()?;
-                    let addr_local = stream.local_addr()?;
-                    tracing::debug!("Accept streaming remote={:?}, local={:?}", addr_remote, addr_local);
-                    let config = Arc::new(self.config.clone());
-                    let service = HttpService::new(addr_remote, addr_local, config);
-                    tokio::spawn(async move {
-                        match serve_http_with_error_return(stream, &service).await{
-                            Ok(_)=>{}
-                            Err(e) => {tracing::error!("{}",e);}
-                        };
-                    });
+        let http_config = Arc::new(self.config.http_config.clone());
+        let rx_mut = &mut rx;
+
+        loop {
+            let stream = select! {
+                stream = listener.accept() => {
+                    stream
+                },
+                _ = &mut *rx_mut => {
+                    return Ok(());
                 }
-                #[allow(unreachable_code)]
-                Ok::<_, anyhow::Error>(())
-            } => {},
-            _ = rx => {
-                return Ok(());
+            }?;
+            let addr_remote = stream.peer_addr()?;
+            let addr_local = stream.local_addr()?;
+            debug!(target : "Accept streaming", "remote={:?}, local={:?}",addr_remote, addr_local);
+            if let Some(tls_config) = &self.config.tls_config {
+                let tls_client_config = Arc::new(tls_config.tls_client_config.clone());
+                let tls_server_config = Arc::new(tls_config.tls_server_config.clone());
+                let service = HttpService::new(
+                    addr_remote,
+                    addr_local,
+                    http_config.clone(),
+                    Some(tls_client_config.clone()),
+                );
+                let acceptor = TlsAcceptor::from(tls_server_config.clone());
+                tokio::spawn(async move {
+                    match serve_https(stream, &service, acceptor).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("{}", e);
+                        }
+                    };
+                });
+            } else {
+                let service = HttpService::new(addr_remote, addr_local, http_config.clone(), None);
+                tokio::spawn(async move {
+                    match serve_http_with_error_return(stream, &service).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("{}", e);
+                        }
+                    };
+                });
+            }
+        }
+    }
+}
+
+pub async fn serve_https(
+    stream: TcpStream,
+    service: &HttpService,
+    acceptor: TlsAcceptor,
+) -> Result<()> {
+    let log_key = format!(
+        "{{ peer={},local={} }}",
+        stream.peer_addr()?,
+        stream.local_addr()?
+    );
+    let mut tls_stream = acceptor.accept(stream).await?;
+    loop {
+        let (r, parts) = Http::new()
+            .serve_connection_with_parts(tls_stream, service.clone())
+            .await;
+        let part_stream = match r {
+            Ok(()) => match parts {
+                Some(part) => part.io,
+                None => {
+                    return Ok(());
+                }
+            },
+            Err(e) => {
+                return Err(anyhow!("{}: stream block with error: {}", log_key, e));
             }
         };
-        Ok(())
+        tls_stream = part_stream;
     }
 }
 
@@ -75,6 +130,8 @@ pub async fn serve_http_with_error_return(
         stream.peer_addr()?,
         stream.local_addr()?
     );
+    let span = span!(Level::TRACE, "Stream", "{}", &log_key);
+    let _guard = span.enter();
     loop {
         let (r, parts) = Http::new()
             .error_return(true)
@@ -89,15 +146,15 @@ pub async fn serve_http_with_error_return(
             },
             Err(e) => {
                 return if e.is_parse() {
-                    tracing::debug!("{}:Turn into tcp transfer.", log_key);
+                    debug!("Turn into tcp transfer.");
                     match parts {
                         Some(mut part) => {
                             let addr_target = part.io.local_addr()?;
                             let addr_local = part.io.peer_addr()?;
                             let socket = TransparentSocket::bind(addr_local)?;
-                            tracing::debug!("{}:Bind local addrs.", log_key);
+                            debug!("Bind local addrs.");
                             let mut client_stream = socket.connect(addr_target).await?;
-                            tracing::debug!("{}:Connected target addrs.", log_key);
+                            debug!("Connected target addrs.");
                             client_stream
                                 .write_all(part.read_buf.as_ref())
                                 .await
@@ -109,7 +166,7 @@ pub async fn serve_http_with_error_return(
                     }
                 } else {
                     if !e.to_string().contains("error shutting down connection") {
-                        tracing::info!("{}:fail to serve http: {}", log_key, e);
+                        tracing::info!("fail to serve http: {}", e);
                     }
                     Ok(())
                 }
@@ -119,19 +176,30 @@ pub async fn serve_http_with_error_return(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug)]
+#[derive(Clone)]
 pub struct HttpService {
     remote: SocketAddr,
     target: SocketAddr,
-    config: Arc<Config>,
+    config: Arc<HTTPConfig>,
+
+    #[derivative(Debug = "ignore")]
+    tls_client_config: Option<Arc<ClientConfig>>,
 }
 
 impl HttpService {
-    fn new(addr_remote: SocketAddr, addr_target: SocketAddr, config: Arc<Config>) -> Self {
+    fn new(
+        addr_remote: SocketAddr,
+        addr_target: SocketAddr,
+        config: Arc<HTTPConfig>,
+        tls_client_config: Option<Arc<ClientConfig>>,
+    ) -> Self {
         Self {
             remote: addr_remote,
             target: addr_target,
             config,
+            tls_client_config,
         }
     }
 
@@ -156,22 +224,48 @@ impl HttpService {
         let uri = request.uri().clone();
         let method = request.method().clone();
         let headers = request.headers().clone();
-
+        trace!("URI: {}", request.uri());
         let mut parts = request.uri().clone().into_parts();
 
-        parts.authority = match self.target.to_string().parse() {
-            Ok(o) => Some(o),
-            Err(_) => None,
+        parts.authority = match request
+            .headers()
+            .iter()
+            .find(|(header_name, _)| **header_name == HOST)
+        {
+            None => match self.target.to_string().parse() {
+                Ok(o) => Some(o),
+                Err(_) => None,
+            },
+            Some((_, value)) => Some(value.as_bytes().try_into()?),
         };
-        if parts.path_and_query.is_some() && parts.authority.is_some() && parts.scheme.is_none() {
+        trace!("authority: {:?}", parts.authority);
+        if parts.path_and_query.is_none() {
+            parts.path_and_query = Some(PathAndQuery::from_static("/"))
+        }
+        if self.tls_client_config.is_some() {
+            parts.scheme = Some(Scheme::HTTPS);
+        } else {
             parts.scheme = Some(Scheme::HTTP);
         }
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
-        let client = Client::builder().build(HttpConnector::new(self.remote));
+        let rsp_fut = if let Some(tls_client_config) = &self.tls_client_config {
+            let https = hyper_rustls::HttpsConnectorBuilder::new()
+                .with_tls_config((**tls_client_config).clone())
+                .https_only()
+                .enable_http1()
+                .enable_http2()
+                .wrap_connector(HttpConnector::new(self.target, self.remote));
 
-        let mut response = match client.request(request).await {
+            let client: client::Client<_, hyper::Body> = client::Client::builder().build(https);
+            client.request(request)
+        } else {
+            let client = Client::builder().build(HttpConnector::new(self.target, self.remote));
+            client.request(request)
+        };
+
+        let mut response = match rsp_fut.await {
             Ok(resp) => resp,
             Err(err) => {
                 error!("{} : fail to forward request: {}", log_key, err);

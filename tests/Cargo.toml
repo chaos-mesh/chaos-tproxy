@@ -11,7 +11,7 @@ path = "./integrations/mod.rs"
 anyhow = "1.0"
 clap = "2.33.3"
 futures = "0.3.10"
-http = "0.2.3"
+http = "0.2.7"
 humantime-serde = "1.0"
 hyper = {git = "https://github.com/Andrewmatilde/hyper.git", features = ["runtime", "client", "server", "http1", "http2", "stream", "error_return"]}
 iptables = "0.4"
@@ -42,3 +42,9 @@ chaos-tproxy-controller = {path = "../chaos-tproxy-controller"}
 pnet = "0.28.0"
 default-net = "0.9.0"
 system_gateway = {git="https://github.com/aruntomar/system_gateway"}
+tokio-rustls = "0.23.4"
+rustls = "0.20.4"
+derivative = "2.2.0"
+rustls-pemfile = "1.0.0"
+webpki-roots = "0.22"
+hyper-rustls = { git = "https://github.com/Andrewmatilde/hyper-rustls.git", features = ["http2"] }

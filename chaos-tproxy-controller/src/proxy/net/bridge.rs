@@ -5,12 +5,12 @@ use default_net;
 use default_net::Gateway;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
-use rtnetlink::Handle;
 use rtnetlink::packet::route::Nla;
 use rtnetlink::packet::RouteMessage;
+use rtnetlink::Handle;
 use uuid::Uuid;
-use crate::proxy::net::iptables::clear_ebtables;
 
+use crate::proxy::net::iptables::clear_ebtables;
 use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ pub struct NetEnv {
 }
 
 impl NetEnv {
-    pub async fn new(handle:&Handle) -> Self {
+    pub async fn new(handle: &Handle) -> Self {
         let interfaces = pnet::datalink::interfaces();
         let prefix = loop {
             let key = Uuid::new_v4().to_string()[0..13].to_string();
@@ -194,12 +194,10 @@ impl NetEnv {
             .mac
             .context(format!("mac {} not found", self.veth4.clone()))?
             .to_string();
-        execute_all(vec![
-            ip_netns(
-                &self.netns,
-                arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
-            ),
-        ])?;
+        execute_all(vec![ip_netns(
+            &self.netns,
+            arp_set(&net.ip().to_string(), &veth4_mac, &self.bridge2),
+        )])?;
 
         let all_routes = get_routes_noblock(handle).await?;
 
@@ -226,7 +224,7 @@ impl NetEnv {
         Ok(())
     }
 
-    pub async fn clear_bridge(&self, handle:&mut Handle) -> Result<()> {
+    pub async fn clear_bridge(&self, handle: &mut Handle) -> Result<()> {
         let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
 
         let cmdvv = vec![
@@ -243,9 +241,11 @@ impl NetEnv {
             vec![]
         });
 
-        del_routes_noblock(handle, routes).await.unwrap_or_else(|e| {
-            tracing::error!("clear routes del_routes_noblock with error {}", e);
-        });
+        del_routes_noblock(handle, routes)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("clear routes del_routes_noblock with error {}", e);
+            });
 
         load_routes(handle, self.save_routes.clone())
             .await

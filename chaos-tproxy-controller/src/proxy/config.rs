@@ -32,6 +32,7 @@ impl TryFrom<RawConfig> for Config {
                     Some(rules) => rules,
                     None => vec![],
                 },
+                tls: raw.tls,
             },
         })
     }
@@ -76,6 +77,7 @@ mod tests {
             safe_mode: None,
             interface: None,
             rules: None,
+            tls: None,
 
             listen_port: None,
             proxy_mark: None,
@@ -92,7 +94,8 @@ mod tests {
                     listen_port: get_free_port(None).unwrap(),
                     safe_mode: false,
                     interface: None,
-                    rules: vec![]
+                    rules: vec![],
+                    tls: None
                 }
             }
         );
@@ -102,6 +105,7 @@ mod tests {
             safe_mode: Some(true),
             interface: Some("ens33".parse().unwrap()),
             rules: None,
+            tls: None,
 
             listen_port: None,
             proxy_mark: None,
@@ -118,7 +122,8 @@ mod tests {
                     listen_port: 1027u16,
                     safe_mode: true,
                     interface: Some("ens33".parse().unwrap()),
-                    rules: vec![]
+                    rules: vec![],
+                    tls: None
                 }
             }
         );

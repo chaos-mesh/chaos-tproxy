@@ -1,4 +1,4 @@
-use chaos_tproxy_proxy::raw_config::RawRule;
+use chaos_tproxy_proxy::raw_config::{RawRule, TLSRawConfig};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
@@ -8,6 +8,7 @@ pub struct RawConfig {
     pub safe_mode: Option<bool>,
     pub interface: Option<String>,
     pub rules: Option<Vec<RawRule>>,
+    pub tls: Option<TLSRawConfig>,
 
     // Useless options now. Keep these options for upward compatible.
     pub listen_port: Option<u16>,
