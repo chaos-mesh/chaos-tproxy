@@ -116,7 +116,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chaos-tproxy"
-version = "0.4.5"
+version = "0.4.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "chaos-tproxy-controller"
-version = "0.4.5"
+version = "0.4.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "chaos-tproxy-proxy"
-version = "0.1.0"
+version = "0.4.7"
 dependencies = [
  "anyhow",
  "async-trait",
