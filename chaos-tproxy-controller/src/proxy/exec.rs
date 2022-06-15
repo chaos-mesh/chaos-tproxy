@@ -162,12 +162,12 @@ impl Proxy {
             self.rx = new.rx.take();
         }
 
-        return match self.exec(config).await {
+        match self.exec(config).await {
             Err(e) => {
                 self.net_env.clear_bridge(&mut self.rtnl_handle).await?;
                 Err(e)
             }
             Ok(_) => Ok(()),
-        };
+        }
     }
 }

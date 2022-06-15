@@ -79,7 +79,7 @@ impl NetEnv {
                 return Ok(());
             }
         }
-        return Err(anyhow!("interface : {} not found", interface));
+        Err(anyhow!("interface : {} not found", interface))
     }
 
     pub async fn setenv_bridge(&self, handle: &mut Handle) -> Result<()> {
