@@ -10,7 +10,6 @@ use rtnetlink::packet::RouteMessage;
 use rtnetlink::Handle;
 use uuid::Uuid;
 
-use crate::proxy::net::iptables::clear_ebtables;
 use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
 #[derive(Debug, Clone)]
@@ -88,8 +87,8 @@ impl NetEnv {
             ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
 
-        let gateway_ip = gateway_ip.to_string();
-        let gateway_mac = gateway_mac.to_string();
+        let gateway_ip_s = gateway_ip.to_string();
+        let gateway_mac_s = gateway_mac.to_string();
 
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self
@@ -100,6 +99,7 @@ impl NetEnv {
         let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
         let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
+        let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.bridge1);
         let cmdvv = vec![
             bash_c(save_dns),
             ip_netns_add(&self.netns),
@@ -108,6 +108,7 @@ impl NetEnv {
             ip_netns(&self.netns, ip_link_add_bridge(&self.bridge2)),
             ip_link_add_veth_peer(&self.veth4, None, &self.veth3, Some(&self.netns)),
             ip_link_set_up(&self.bridge1),
+            vec!["sysctl", "-w", &arp_filter_br1],
             ip_link_set_up(&self.veth1),
             ip_netns(&self.netns, ip_link_set_up(&self.veth2)),
             ip_netns(&self.netns, ip_link_set_up(&self.bridge2)),
@@ -125,17 +126,19 @@ impl NetEnv {
 
         let cmdvv = vec![
             ip_address("add", &self.ip, &self.veth4),
-            arp_set(&gateway_ip, &gateway_mac, &self.veth1),
-            arp_set(&gateway_ip, &gateway_mac, &self.veth4),
-            ip_netns(&self.netns, arp_set(&gateway_ip, &gateway_mac, &self.veth2)),
+            arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth4),
             ip_netns(
                 &self.netns,
-                arp_set(&gateway_ip, &gateway_mac, &self.bridge2),
+                arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth2),
             ),
-            ip_route_add("default", &gateway_ip, &self.veth4),
             ip_netns(
                 &self.netns,
-                ip_route_add("default", &gateway_ip, &self.bridge2),
+                arp_set(&gateway_ip_s, &gateway_mac_s, &self.bridge2),
+            ),
+            ip_route_add("default", &gateway_ip_s, &self.veth4),
+            ip_netns(
+                &self.netns,
+                ip_route_add("default", &gateway_ip_s, &self.bridge2),
             ),
             ip_netns(
                 &self.netns,
@@ -232,7 +235,6 @@ impl NetEnv {
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
-            clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
 
