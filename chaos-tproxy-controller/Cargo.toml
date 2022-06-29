@@ -1,6 +1,6 @@
 [package]
 name = "chaos-tproxy-controller"
-version = "0.4.7"
+version = "0.5.1"
 edition = "2018"
 
 [[bin]]
