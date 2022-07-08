@@ -63,7 +63,6 @@ impl ConfigServer {
                         let conn = http.serve_connection(stream, &mut service);
                         if let Err(e) = conn.await {
                             tracing::error!("{}",e);
-                            return Err(anyhow::anyhow!("{}",e));
                         }
                     },
                 };
