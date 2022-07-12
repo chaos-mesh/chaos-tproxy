@@ -258,7 +258,7 @@ impl NetEnv {
             ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
 
-        dbg!(&gateway_ip,&gateway_mac);
+        println!("{}{}{:?}",&gateway_ip,&gateway_mac,gateway_mac.octets());
         if gateway_mac.octets().iter().all(|i| i.clone()==0) {
             return Ok(())
         }
