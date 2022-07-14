@@ -260,6 +260,11 @@ impl NetEnv {
             ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
 
+        println!("{}{}{:?}",&gateway_ip,&gateway_mac,gateway_mac.octets());
+        if gateway_mac.octets().iter().all(|i| i.clone()==0) {
+            return Ok(())
+        }
+
         let gateway_ip = gateway_ip.to_string();
         let gateway_mac = gateway_mac.to_string();
 
