@@ -29,13 +29,13 @@ pub async fn set_net(
     );
 
     if let Some(ref proxy_ports) = proxy_ports {
-        execute_all(set_iptables(net_env, Some(proxy_ports), &port))?;
+        execute_all(set_iptables(net_env, Some(proxy_ports), &port, &device_mac))?;
     } else {
-        execute_all(set_iptables(net_env, None, &port))?;
+        execute_all(set_iptables(net_env, None, &port, &device_mac))?;
     }
 
     if safe {
-        execute_all(set_iptables_safe(net_env))?;
+        execute_all(set_iptables_safe(net_env, &device_mac))?;
     }
     let _ = execute(bash_c(restore_dns));
 
