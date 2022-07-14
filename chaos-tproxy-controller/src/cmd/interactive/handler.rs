@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::convert::TryInto;
 use std::future::Future;
 use std::pin::Pin;
@@ -130,7 +131,11 @@ impl Service<Request<Body>> for ConfigService {
 
     #[inline]
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        let handler = self.0.clone();
-        Box::pin(async move { Self::handle(&mut *handler.lock().await, request).await })
+        let mutex = self.0.clone();
+        Box::pin(async move {
+            let arc = mutex.clone();
+            let mut mutex = arc.lock().await;
+            Self::handle(mutex.borrow_mut(), request).await
+        })
     }
 }

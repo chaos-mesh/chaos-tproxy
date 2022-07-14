@@ -5,7 +5,7 @@ use libarp::interfaces::Interface;
 use rtnetlink::Handle;
 
 use crate::proxy::net::arp::gratuitous_arp;
-use crate::proxy::net::bridge::{bash_c, execute, execute_all, NetEnv};
+use crate::proxy::net::bridge::{bash_c, execute, execute_all, get_interface, NetEnv};
 use crate::proxy::net::iptables::{set_iptables, set_iptables_safe};
 use crate::proxy::net::ping::try_ping;
 
@@ -20,6 +20,8 @@ pub async fn set_net(
     net_env.setenv_bridge(handle).await?;
     let port = listen_port.to_string();
     let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
+    let device_interface = get_interface(net_env.veth4.clone()).unwrap();
+    let device_mac = device_interface.mac.unwrap().to_string();
 
     let arp_interface = Interface::new_by_name(net_env.veth4.clone().as_str()).unwrap();
     gratuitous_arp(
