@@ -88,8 +88,8 @@ impl NetEnv {
             ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
 
-        let gateway_ip = gateway_ip.to_string();
-        let gateway_mac = gateway_mac.to_string();
+        let gateway_ip_s = gateway_ip.to_string();
+        let gateway_mac_s = gateway_mac.to_string();
 
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self
@@ -127,17 +127,17 @@ impl NetEnv {
 
         let cmdvv = vec![
             ip_address("add", &self.ip, &self.veth4),
-            arp_set(&gateway_ip, &gateway_mac, &self.veth1),
-            arp_set(&gateway_ip, &gateway_mac, &self.veth4),
-            ip_netns(&self.netns, arp_set(&gateway_ip, &gateway_mac, &self.veth2)),
+            arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth1),
+            arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth4),
+            ip_netns(&self.netns, arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth2)),
             ip_netns(
                 &self.netns,
-                arp_set(&gateway_ip, &gateway_mac, &self.bridge2),
+                arp_set(&gateway_ip_s, &gateway_mac_s, &self.bridge2),
             ),
-            ip_route_add("default", &gateway_ip, &self.veth4),
+            ip_route_add("default", &gateway_ip_s, &self.veth4),
             ip_netns(
                 &self.netns,
-                ip_route_add("default", &gateway_ip, &self.bridge2),
+                ip_route_add("default", &gateway_ip_s, &self.bridge2),
             ),
             ip_netns(
                 &self.netns,
