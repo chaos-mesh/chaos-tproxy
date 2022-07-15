@@ -129,7 +129,10 @@ impl NetEnv {
             ip_address("add", &self.ip, &self.veth4),
             arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth1),
             arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth4),
-            ip_netns(&self.netns, arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth2)),
+            ip_netns(
+                &self.netns,
+                arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth2),
+            ),
             ip_netns(
                 &self.netns,
                 arp_set(&gateway_ip_s, &gateway_mac_s, &self.bridge2),

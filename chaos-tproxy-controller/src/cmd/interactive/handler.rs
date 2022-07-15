@@ -1,6 +1,6 @@
-use std::borrow::BorrowMut;
 use std::convert::TryInto;
 use std::future::Future;
+use std::ops::DerefMut;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -131,11 +131,7 @@ impl Service<Request<Body>> for ConfigService {
 
     #[inline]
     fn call(&mut self, request: Request<Body>) -> Self::Future {
-        let mutex = self.0.clone();
-        Box::pin(async move {
-            let arc = mutex.clone();
-            let mut mutex = arc.lock().await;
-            Self::handle(mutex.borrow_mut(), request).await
-        })
+        let handler = self.0.clone();
+        Box::pin(async move { Self::handle(handler.lock().await.deref_mut(), request).await })
     }
 }
