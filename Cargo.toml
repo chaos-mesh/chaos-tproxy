@@ -2,7 +2,7 @@
 authors = ["Andrewmatilde <davis6813585853062@outlook.com>", "Hexilee <i@hexilee.me>"]
 edition = "2018"
 name = "chaos-tproxy"
-version = "0.5.1"
+version = "0.5.2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

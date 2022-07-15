@@ -10,6 +10,7 @@ use rtnetlink::packet::RouteMessage;
 use rtnetlink::Handle;
 use uuid::Uuid;
 
+use crate::proxy::net::iptables::clear_ebtables;
 use crate::proxy::net::routes::{del_routes_noblock, get_routes_noblock, load_routes};
 
 #[derive(Debug, Clone)]
@@ -126,6 +127,7 @@ impl NetEnv {
 
         let cmdvv = vec![
             ip_address("add", &self.ip, &self.veth4),
+            arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth1),
             arp_set(&gateway_ip_s, &gateway_mac_s, &self.veth4),
             ip_netns(
                 &self.netns,
@@ -235,6 +237,7 @@ impl NetEnv {
             ip_link_del_bridge(&self.bridge1),
             ip_address("add", &self.ip, &self.device),
             bash_c(restore_dns),
+            clear_ebtables(),
         ];
         execute_all_with_log_error(cmdvv)?;
 
@@ -259,6 +262,10 @@ impl NetEnv {
             mac_addr: gateway_mac,
             ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
+
+        if gateway_mac.octets().iter().all(|&i| i == 0) {
+            return Ok(());
+        }
 
         let gateway_ip = gateway_ip.to_string();
         let gateway_mac = gateway_mac.to_string();
