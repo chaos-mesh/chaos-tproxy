@@ -1,0 +1,25 @@
+proxy_ports: [80, 443, 8080] # proxy will do nothing if empty
+rules:
+  - target: Request
+    selector:
+      port: 8080
+      path: /example # match all path starts with "/example"
+      method: GET
+    actions:
+      delay: 10s
+      replace:
+        body:
+          update_content_length: false # true by default
+          contents:
+            type: TEXT
+            value: '{"name": "Chaos Mesh", "message": "Hello!"}'
+tls:
+  cert_file:
+    type: Path
+    value: /usr/local/example.cert
+  key_file:
+    type: Path
+    value: /usr/local/example.key
+  # ca_file:
+  #   type: Path
+  #   value: /usr/local/root.cert

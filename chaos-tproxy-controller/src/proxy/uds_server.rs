@@ -32,7 +32,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
                 Ok((mut stream, addr)) => {
                     let buf = serde_json::to_vec(&self.data)?;
                     tokio::spawn(async move {
-                        return match stream.write_all(buf.as_slice()).await {
+                        match stream.write_all(buf.as_slice()).await {
                             Ok(_) => {
                                 tracing::info!("Uds server Config successfully transferred.");
                                 Ok(())
@@ -44,7 +44,7 @@ impl<T: serde::ser::Serialize> UdsDataServer<T> {
                                 );
                                 Err(anyhow::anyhow!("{}", e))
                             }
-                        };
+                        }
                     });
                 }
                 Err(e) => {

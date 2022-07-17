@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::time::Duration;
+use std::{fs, io};
 
 use anyhow::{anyhow, Error};
 use http::header::{HeaderMap, HeaderName};
 use http::StatusCode;
+use rustls::OwnedTrustAnchor;
+use rustls_pemfile::{certs, rsa_private_keys};
 use serde::{Deserialize, Serialize};
+use tokio_rustls::rustls::{Certificate, PrivateKey};
+use tokio_rustls::webpki;
 use wildmatch::WildMatch;
 
 use crate::handler::http::action::{
@@ -15,21 +20,30 @@ use crate::handler::http::action::{
 };
 use crate::handler::http::rule::{Rule, Target};
 use crate::handler::http::selector::Selector;
-use crate::proxy::http::config::Config;
+use crate::proxy::http::config::{Config, HTTPConfig, TLSConfig};
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct RawConfig {
     pub proxy_ports: Option<String>,
     pub listen_port: u16,
     pub safe_mode: bool,
+    pub interface: Option<String>,
     pub rules: Vec<RawRule>,
-    pub role: Option<Role>,
+    pub tls: Option<TLSRawConfig>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
-pub enum Role {
-    Client(Vec<Ipv4Addr>),
-    Server(Vec<Ipv4Addr>),
+#[serde(tag = "type", content = "value")]
+pub enum RawFile {
+    Path(PathBuf),
+    Contents(Vec<u8>),
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
+pub struct TLSRawConfig {
+    pub ca_file: Option<RawFile>,
+    pub cert_file: RawFile,
+    pub key_file: RawFile,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -153,19 +167,97 @@ pub(crate) fn try_from_vec(
     .transpose()
 }
 
+impl Default for RawFile {
+    fn default() -> Self {
+        RawFile::Contents(Default::default())
+    }
+}
+
+impl TryFrom<RawFile> for Vec<u8> {
+    type Error = Error;
+
+    fn try_from(value: RawFile) -> Result<Self, Self::Error> {
+        match value {
+            RawFile::Contents(c) => Ok(c),
+            RawFile::Path(p) => Ok(fs::read(p)?),
+        }
+    }
+}
+
 impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(Self {
-            proxy_port: raw.listen_port,
-            rules: raw
-                .rules
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, Self::Error>>()?,
-            role: raw.role,
+            http_config: HTTPConfig {
+                proxy_port: raw.listen_port,
+                rules: raw
+                    .rules
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<Vec<_>, Self::Error>>()?,
+            },
+
+            tls_config: match raw.tls {
+                None => None,
+                Some(tls) => Some(tls.try_into()?),
+            },
         })
+    }
+}
+
+impl TryFrom<TLSRawConfig> for TLSConfig {
+    type Error = Error;
+
+    fn try_from(raw: TLSRawConfig) -> Result<Self, Self::Error> {
+        let certs = certs(&mut &*Vec::<u8>::try_from(raw.cert_file)?)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))
+            .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
+        let keys: Vec<PrivateKey> = rsa_private_keys(&mut &*Vec::<u8>::try_from(raw.key_file)?)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))
+            .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+
+        if keys.is_empty() {
+            return Err(anyhow!("empty key"));
+        }
+        let key = keys[0].clone();
+
+        let mut root_cert_store = rustls::RootCertStore::empty();
+        if let Some(cafile) = raw.ca_file {
+            let certs = rustls_pemfile::certs(&mut &*Vec::<u8>::try_from(cafile)?)?;
+            let trust_anchors = certs.iter().map(|cert| {
+                let ta = webpki::TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            });
+            root_cert_store.add_server_trust_anchors(trust_anchors);
+        } else {
+            root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+                |ta| {
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                },
+            ));
+        }
+
+        let tls_config = Self {
+            tls_client_config: rustls::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(root_cert_store)
+                .with_no_client_auth(),
+            tls_server_config: rustls::ServerConfig::builder()
+                .with_safe_defaults()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?,
+        };
+        Ok(tls_config)
     }
 }
 
