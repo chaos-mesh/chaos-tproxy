@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::future::Future;
 use std::matches;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -208,16 +208,8 @@ impl HttpService {
             None => return true,
             Some(r) => r.clone(),
         };
-        let remote_v4 = match self.remote.ip() {
-            IpAddr::V4(ipv4) => ipv4,
-            _ => return false,
-        };
-        let target_v4 = match self.target.ip() {
-            IpAddr::V4(ipv4) => ipv4,
-            _ => return false,
-        };
 
-        select_role(&remote_v4, &target_v4, &role)
+        select_role(&self.remote.ip(), &self.target.ip(), &role)
     }
 
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {

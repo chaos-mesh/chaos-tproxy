@@ -28,7 +28,6 @@ pub struct RawConfig {
     pub proxy_ports: Option<String>,
     pub listen_port: u16,
     pub safe_mode: bool,
-    pub interface: Option<String>,
     pub rules: Vec<RawRule>,
     pub role: Option<Role>,
     pub tls: Option<TLSRawConfig>,

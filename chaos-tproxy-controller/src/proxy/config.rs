@@ -111,7 +111,6 @@ mod tests {
                     proxy_ports: None,
                     listen_port: get_free_port(None).unwrap(),
                     safe_mode: false,
-                    interface: None,
                     rules: vec![],
                     role: None,
                     tls: None
@@ -141,7 +140,6 @@ mod tests {
                     proxy_ports: Some("1025,1026".parse().unwrap()),
                     listen_port: 1027u16,
                     safe_mode: true,
-                    interface: None,
                     rules: vec![],
                     role: None,
                     tls: None

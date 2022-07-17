@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 
 use http::header::HeaderMap;
 use http::{Method, Request, Response, StatusCode, Uri};
@@ -17,10 +17,19 @@ pub struct Selector {
     pub response_headers: Option<HeaderMap>,
 }
 
-pub fn select_role(src_ip: &Ipv4Addr, dst_ip: &Ipv4Addr, role: &Role) -> bool {
+pub fn select_role(src_ip: &IpAddr, dst_ip: &IpAddr, role: &Role) -> bool {
+    let src_ipv4 = match src_ip {
+        IpAddr::V4(ipv4) => ipv4,
+        _ => return false,
+    };
+    let dst_ipv4 = match dst_ip {
+        IpAddr::V4(ipv4) => ipv4,
+        _ => return false,
+    };
+
     match role {
-        Role::Client(ipv4s) => ipv4s.iter().any(|ipv4| ipv4 == src_ip),
-        Role::Server(ipv4s) => ipv4s.iter().any(|ipv4| ipv4 == dst_ip),
+        Role::Client(ipv4s) => ipv4s.iter().any(|ipv4| ipv4 == src_ipv4),
+        Role::Server(ipv4s) => ipv4s.iter().any(|ipv4| ipv4 == dst_ipv4),
     }
 }
 
