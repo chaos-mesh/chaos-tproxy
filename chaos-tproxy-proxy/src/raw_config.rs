@@ -3,6 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use std::path::PathBuf;
 use std::time::Duration;
 use std::{fs, io};
+use std::net::Ipv4Addr;
 
 use anyhow::{anyhow, Error};
 use http::header::{HeaderMap, HeaderName};
@@ -29,7 +30,14 @@ pub struct RawConfig {
     pub safe_mode: bool,
     pub interface: Option<String>,
     pub rules: Vec<RawRule>,
+    pub role: Option<Role>,
     pub tls: Option<TLSRawConfig>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub enum Role {
+    Client(Vec<Ipv4Addr>),
+    Server(Vec<Ipv4Addr>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -191,6 +199,7 @@ impl TryFrom<RawConfig> for Config {
         Ok(Self {
             http_config: HTTPConfig {
                 proxy_port: raw.listen_port,
+                role: raw.role,
                 rules: raw
                     .rules
                     .into_iter()

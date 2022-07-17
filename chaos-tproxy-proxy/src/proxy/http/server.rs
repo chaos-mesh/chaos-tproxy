@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::future::Future;
 use std::matches;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -24,7 +24,7 @@ use tracing::{debug, error, span, trace, Level};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
-use crate::handler::http::selector::{select_request, select_response};
+use crate::handler::http::selector::{select_request, select_response, select_role};
 use crate::proxy::http::config::{Config, HTTPConfig};
 use crate::proxy::http::connector::HttpConnector;
 use crate::proxy::tcp::listener::TcpListener;
@@ -203,15 +203,34 @@ impl HttpService {
         }
     }
 
+    fn role_ok(&self) -> bool {
+        let role = match &self.config.role {
+            None => return true,
+            Some(r) => r.clone(),
+        };
+        let remote_v4 = match self.remote.ip() {
+            IpAddr::V4(ipv4) => ipv4,
+            _ => return false,
+        };
+        let target_v4 = match self.target.ip() {
+            IpAddr::V4(ipv4) => ipv4,
+            _ => return false,
+        };
+
+        select_role(&remote_v4, &target_v4, &role)
+    }
+
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
         debug!("{} : Proxy is handling http request", log_key);
+
+        let role_ok = self.role_ok();
         let request_rules: Vec<_> = self
             .config
             .rules
             .iter()
             .filter(|rule| {
-                matches!(rule.target, Target::Request)
+                role_ok && matches!(rule.target, Target::Request)
                     && select_request(self.target.port(), &request, &rule.selector)
             })
             .collect();
@@ -280,7 +299,7 @@ impl HttpService {
             .rules
             .iter()
             .filter(|rule| {
-                matches!(rule.target, Target::Response)
+                role_ok && matches!(rule.target, Target::Response)
                     && select_response(
                         self.target.port(),
                         &uri,
