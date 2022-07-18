@@ -83,12 +83,6 @@ impl Proxy {
         };
 
         tracing::info!("Network device name {}", self.net_env.device.clone());
-        match config.interface {
-            None => {}
-            Some(interface) => {
-                self.net_env.set_ip_with_interface_name(&interface)?;
-            }
-        }
         set_net(
             &mut self.rtnl_handle,
             &self.net_env,

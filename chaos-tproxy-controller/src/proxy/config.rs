@@ -1,9 +1,12 @@
 use std::convert::TryFrom;
+use std::net::Ipv4Addr;
 
 use anyhow::{anyhow, Error};
-use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
+use pnet::ipnetwork::IpNetwork;
+use chaos_tproxy_proxy::raw_config::{RawConfig as ProxyRawConfig, Role};
+use crate::proxy::net::bridge::get_default_interface;
 
-use crate::raw_config::RawConfig;
+use crate::raw_config::{RawConfig, RawRole};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Config {
@@ -14,6 +17,18 @@ impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
+        let ipv4s: Vec<Ipv4Addr> = get_default_interface()?
+            .ips
+            .iter()
+            .filter_map(|ips| match ips {
+                IpNetwork::V4(ipv4) => Some(ipv4),
+                _ => None,
+            })
+            .map(|ipv4| ipv4.ip())
+            .collect();
+        if ipv4s.is_empty() {
+            return Err(anyhow!("no default ipv4"));
+        }
         Ok(Config {
             proxy_config: ProxyRawConfig {
                 proxy_ports: raw.proxy_ports.clone().map(|c| {
@@ -26,12 +41,14 @@ impl TryFrom<RawConfig> for Config {
                     Some(b) => *b,
                     None => false,
                 },
-                interface: raw.interface,
                 listen_port: get_free_port(raw.proxy_ports.clone())?,
-                rules: match raw.rules {
-                    Some(rules) => rules,
-                    None => vec![],
-                },
+                rules: raw.rules.map_or(vec![], |rules| rules),
+                role: raw.role.and_then(|role| {
+                    Option::from(match role {
+                        RawRole::Client => Role::Client(ipv4s),
+                        RawRole::Server => Role::Server(ipv4s),
+                    })
+                }),
                 tls: raw.tls,
             },
         })
@@ -75,10 +92,11 @@ mod tests {
         let config: Config = RawConfig {
             proxy_ports: None,
             safe_mode: None,
-            interface: None,
             rules: None,
             tls: None,
+            role: None,
 
+            interface: None,
             listen_port: None,
             proxy_mark: None,
             ignore_mark: None,
@@ -93,8 +111,8 @@ mod tests {
                     proxy_ports: None,
                     listen_port: get_free_port(None).unwrap(),
                     safe_mode: false,
-                    interface: None,
                     rules: vec![],
+                    role: None,
                     tls: None
                 }
             }
@@ -103,10 +121,11 @@ mod tests {
         let config: Config = RawConfig {
             proxy_ports: Some(vec![1025u16, 1026u16]),
             safe_mode: Some(true),
-            interface: Some("ens33".parse().unwrap()),
             rules: None,
             tls: None,
+            role: None,
 
+            interface: None,
             listen_port: None,
             proxy_mark: None,
             ignore_mark: None,
@@ -121,8 +140,8 @@ mod tests {
                     proxy_ports: Some("1025,1026".parse().unwrap()),
                     listen_port: 1027u16,
                     safe_mode: true,
-                    interface: Some("ens33".parse().unwrap()),
                     rules: vec![],
+                    role: None,
                     tls: None
                 }
             }
