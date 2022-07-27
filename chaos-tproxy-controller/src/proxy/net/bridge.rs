@@ -90,6 +90,8 @@ impl NetEnv {
         let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
         let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
         let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.bridge1);
+        let arp_filter_v1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.veth1);
+        let arp_filter_dev = format!("net.ipv4.conf.{}.arp_filter=1", &self.device);
         let cmdvv = vec![
             bash_c(save_dns),
             ip_netns_add(&self.netns),
@@ -99,6 +101,8 @@ impl NetEnv {
             ip_link_add_veth_peer(&self.veth4, None, &self.veth3, Some(&self.netns)),
             ip_link_set_up(&self.bridge1),
             vec!["sysctl", "-w", &arp_filter_br1],
+            vec!["sysctl", "-w", &arp_filter_v1],
+            vec!["sysctl", "-w", &arp_filter_dev],
             ip_link_set_up(&self.veth1),
             ip_netns(&self.netns, ip_link_set_up(&self.veth2)),
             ip_netns(&self.netns, ip_link_set_up(&self.bridge2)),
