@@ -33,6 +33,10 @@ pub struct Opt {
     /// ipc path for sub proxy.
     #[structopt(long)]
     pub ipc_path: Option<PathBuf>,
+
+    /// ipc path to communicate with chaos-mesh.
+    #[structopt(short = "u", long = "unix-socket-path", default_value = "/chaos-tproxy.sock")]
+    pub unix_socket_path: PathBuf,
 }
 
 impl Opt {

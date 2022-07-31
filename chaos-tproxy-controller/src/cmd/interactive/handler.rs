@@ -15,6 +15,7 @@ use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::instrument;
+use std::path::PathBuf;
 
 use tokio::net::{UnixListener};
 #[cfg(unix)]
@@ -42,13 +43,13 @@ impl ConfigServer {
         }
     }
 
-    pub fn serve_interactive(&mut self) {
+    pub fn serve_interactive(&mut self,  unix_socket_path: PathBuf) {
         let mut rx = self.rx.take().unwrap();
         let mut service = ConfigService(self.proxy.clone());
 
         self.task = Some(tokio::spawn(async move {
             let  rx_mut = &mut rx;
-            let unix_listener = UnixListener::from_std(unsafe {std::os::unix::net::UnixListener::from_raw_fd(3)}).unwrap();
+            let unix_listener = UnixListener::bind(unix_socket_path).unwrap();
 
             loop {
                 select! {

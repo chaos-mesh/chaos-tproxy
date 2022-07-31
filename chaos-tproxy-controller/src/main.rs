@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
     if opt.interactive {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
-        config_server.serve_interactive();
+        config_server.serve_interactive(opt.unix_socket_path.clone());
 
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
