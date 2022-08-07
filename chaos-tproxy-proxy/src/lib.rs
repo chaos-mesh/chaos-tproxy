@@ -29,7 +29,7 @@ pub async fn proxy_main(path: PathBuf) -> anyhow::Result<()> {
         server.serve(rx).await.unwrap();
     });
 
-    let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+    let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()], PathBuf::new())?;
     signals.wait().await?;
 
     let _ = sender.send(());

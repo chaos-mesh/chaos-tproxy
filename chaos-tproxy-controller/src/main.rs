@@ -6,6 +6,7 @@ use tokio::signal::unix::SignalKind;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+use std::path::PathBuf;
 
 use crate::cmd::command_line::{get_config_from_opt, Opt};
 use crate::cmd::interactive::handler::ConfigServer;
@@ -38,17 +39,17 @@ async fn main() -> anyhow::Result<()> {
         let cfg = get_config_from_opt(&opt).await?;
         let mut proxy = Proxy::new(opt.verbose).await;
         proxy.reload(cfg.proxy_config).await?;
-        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()], PathBuf::new())?;
         signals.wait().await?;
         proxy.stop().await?;
         return Ok(());
     }
 
-    if opt.interactive {
+    if opt.interactive_path.is_some() {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
-        config_server.serve_interactive(opt.unix_socket_path.clone());
+        config_server.serve_interactive(opt.interactive_path.clone().unwrap());
 
-        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()], opt.interactive_path.clone().unwrap())?;
         signals.wait().await?;
         config_server.stop().await?;
 

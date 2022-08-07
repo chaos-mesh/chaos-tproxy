@@ -19,7 +19,6 @@ use std::path::PathBuf;
 
 use tokio::net::{UnixListener};
 #[cfg(unix)]
-use std::os::unix::io::{FromRawFd};
 use crate::proxy::config::Config;
 use crate::proxy::exec::Proxy;
 use crate::raw_config::RawConfig;
@@ -43,13 +42,14 @@ impl ConfigServer {
         }
     }
 
-    pub fn serve_interactive(&mut self,  unix_socket_path: PathBuf) {
+    pub fn serve_interactive(&mut self,  interactive_path: PathBuf) {
         let mut rx = self.rx.take().unwrap();
         let mut service = ConfigService(self.proxy.clone());
 
         self.task = Some(tokio::spawn(async move {
             let  rx_mut = &mut rx;
-            let unix_listener = UnixListener::bind(unix_socket_path).unwrap();
+            tracing::info!("ConfigServer listener try binding {:?}", interactive_path);
+            let unix_listener = UnixListener::bind(interactive_path).unwrap();
 
             loop {
                 select! {
