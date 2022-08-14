@@ -50,7 +50,7 @@ impl Opt {
     }
 
     fn checked(self) -> Result<Self> {
-        if !self.interactive_path.is_none() && !self.proxy && self.input.is_none() {
+        if self.interactive_path.is_none() && !self.proxy && self.input.is_none() {
             return Err(anyhow!("config file is required when interactive mode and daemon mode is all disabled, use `-h | --help` for more details"));
         }
         Ok(self)
