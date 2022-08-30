@@ -6,7 +6,6 @@ use tokio::signal::unix::SignalKind;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-use std::path::PathBuf;
 
 use crate::cmd::command_line::{get_config_from_opt, Opt};
 use crate::cmd::interactive::handler::ConfigServer;
@@ -39,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         let cfg = get_config_from_opt(&opt).await?;
         let mut proxy = Proxy::new(opt.verbose).await;
         proxy.reload(cfg.proxy_config).await?;
-        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()], PathBuf::new())?;
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
         proxy.stop().await?;
         return Ok(());
@@ -49,11 +48,14 @@ async fn main() -> anyhow::Result<()> {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
         config_server.serve_interactive(opt.interactive_path.clone().unwrap());
 
-        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()], opt.interactive_path.clone().unwrap())?;
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
+        // Currently we cannot graceful shutdown the config server.
         config_server.stop().await?;
 
-        // Currently we cannot graceful shutdown the config server.
+        // delete the unix socket file
+        std::fs::remove_file(opt.interactive_path.clone().unwrap())?;
+
         exit(0);
     }
     Ok(())
