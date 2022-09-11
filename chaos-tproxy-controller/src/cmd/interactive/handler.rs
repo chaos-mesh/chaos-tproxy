@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -7,17 +8,16 @@ use std::task::{Context, Poll};
 use anyhow::Error;
 use futures::TryStreamExt;
 use http::{Method, Request, Response, StatusCode};
-use hyper::server::conn::{Http};
+use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::Body;
+use tokio::net::UnixListener;
 use tokio::select;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::instrument;
-use std::path::PathBuf;
 
-use tokio::net::{UnixListener};
 #[cfg(unix)]
 use crate::proxy::config::Config;
 use crate::proxy::exec::Proxy;
@@ -42,12 +42,12 @@ impl ConfigServer {
         }
     }
 
-    pub fn serve_interactive(&mut self,  interactive_path: PathBuf) {
+    pub fn serve_interactive(&mut self, interactive_path: PathBuf) {
         let mut rx = self.rx.take().unwrap();
         let mut service = ConfigService(self.proxy.clone());
 
         self.task = Some(tokio::spawn(async move {
-            let  rx_mut = &mut rx;
+            let rx_mut = &mut rx;
             tracing::info!("ConfigServer listener try binding {:?}", interactive_path);
             let unix_listener = UnixListener::bind(interactive_path).unwrap();
 

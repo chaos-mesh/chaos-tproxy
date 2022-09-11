@@ -44,9 +44,9 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if opt.interactive_path.is_some() {
+    if let Some(path) = opt.interactive_path {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
-        config_server.serve_interactive(opt.interactive_path.clone().unwrap());
+        config_server.serve_interactive(path.clone());
 
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
         config_server.stop().await?;
 
         // delete the unix socket file
-        std::fs::remove_file(opt.interactive_path.clone().unwrap())?;
+        std::fs::remove_file(path.clone())?;
 
         exit(0);
     }
