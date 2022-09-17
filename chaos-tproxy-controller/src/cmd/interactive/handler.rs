@@ -44,27 +44,29 @@ impl ConfigServer {
 
     pub fn serve_interactive(&mut self, interactive_path: PathBuf) {
         let mut rx = self.rx.take().unwrap();
-        let mut service = ConfigService(self.proxy.clone());
-
-        self.task = Some(tokio::spawn(async move {
+        let proxy = self.proxy.clone();
+        self.task = Some(tokio::task::spawn(async move {
             let rx_mut = &mut rx;
             tracing::info!("ConfigServer listener try binding {:?}", interactive_path);
             let unix_listener = UnixListener::bind(interactive_path).unwrap();
 
             loop {
+                let mut service = ConfigService(proxy.clone());
                 select! {
                     _ = &mut *rx_mut => {
                         tracing::trace!("catch signal in config server.");
                         return Ok(());
                     },
                     stream = unix_listener.accept() => {
-                        let (stream, _) = stream.unwrap();
+                        tokio::task::spawn(async move {
+                            let (stream, _) = stream.unwrap();
 
-                        let http = Http::new();
-                        let conn = http.serve_connection(stream, &mut service);
-                        if let Err(e) = conn.await {
-                            tracing::error!("{}",e);
-                        }
+                            let http = Http::new();
+                            let conn = http.serve_connection(stream, &mut service);
+                            if let Err(e) = conn.await {
+                                tracing::error!("{}",e);
+                            }
+                        });
                     },
                 };
             }
