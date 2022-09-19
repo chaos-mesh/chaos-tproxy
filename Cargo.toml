@@ -2,7 +2,7 @@
 authors = ["Andrewmatilde <davis6813585853062@outlook.com>", "Hexilee <i@hexilee.me>"]
 edition = "2018"
 name = "chaos-tproxy"
-version = "0.4.5"
+version = "0.5.3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -53,6 +53,9 @@ hyper-rustls = { git = "https://github.com/Andrewmatilde/hyper-rustls.git", feat
 rtnetlink = "0.9.1"
 iproute2-rs = {git="https://github.com/chaos-mesh/iproute2-rs.git"}
 futures-util = "0.3"
+arp-toolkit = {version = "0.2", features = ["sync"]}
+surge-ping = "0.7.0"
+rand = "0.8.5"
 
 [dev-dependencies]
 test-case = "1.2"

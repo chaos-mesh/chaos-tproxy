@@ -48,3 +48,6 @@ derivative = "2.2.0"
 rustls-pemfile = "1.0.0"
 webpki-roots = "0.22"
 hyper-rustls = { git = "https://github.com/Andrewmatilde/hyper-rustls.git", features = ["http2"] }
+arp-toolkit = {version = "0.2", features = ["sync"]}
+surge-ping = "0.7.0"
+rand = "0.8.5"

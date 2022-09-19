@@ -36,6 +36,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28ae2b3dec75a406790005a200b1bd89785afc02517a00ca99ecfe093ee9e6cf"
 
 [[package]]
+name = "arp-toolkit"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caa729edc4b41932e0c2049719e71e043d2bca18222d6e5c8fc3dd1575774f68"
+dependencies = [
+ "maybe-async",
+ "num-derive",
+ "num-traits",
+ "pnet",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -116,9 +128,10 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chaos-tproxy"
-version = "0.4.5"
+version = "0.5.3"
 dependencies = [
  "anyhow",
+ "arp-toolkit",
  "async-trait",
  "base64",
  "bincode",
@@ -139,6 +152,7 @@ dependencies = [
  "libc",
  "paw",
  "pnet",
+ "rand",
  "rtnetlink",
  "rustls",
  "rustls-pemfile",
@@ -149,6 +163,7 @@ dependencies = [
  "serde_yaml",
  "socket2 0.3.19",
  "structopt",
+ "surge-ping",
  "system_gateway",
  "test-case",
  "tokio",
@@ -162,9 +177,10 @@ dependencies = [
 
 [[package]]
 name = "chaos-tproxy-controller"
-version = "0.4.5"
+version = "0.5.3"
 dependencies = [
  "anyhow",
+ "arp-toolkit",
  "async-trait",
  "bincode",
  "bytes",
@@ -185,6 +201,7 @@ dependencies = [
  "libc",
  "paw",
  "pnet",
+ "rand",
  "rtnetlink",
  "rustls",
  "rustls-pemfile",
@@ -195,6 +212,7 @@ dependencies = [
  "serde_yaml",
  "socket2 0.3.19",
  "structopt",
+ "surge-ping",
  "system_gateway",
  "tempfile",
  "tokio",
@@ -208,9 +226,10 @@ dependencies = [
 
 [[package]]
 name = "chaos-tproxy-proxy"
-version = "0.1.0"
+version = "0.5.3"
 dependencies = [
  "anyhow",
+ "arp-toolkit",
  "async-trait",
  "base64",
  "bincode",
@@ -228,6 +247,7 @@ dependencies = [
  "json-patch",
  "libc",
  "paw",
+ "rand",
  "rtnetlink",
  "rustls",
  "rustls-pemfile",
@@ -238,6 +258,7 @@ dependencies = [
  "serde_yaml",
  "socket2 0.3.19",
  "structopt",
+ "surge-ping",
  "tempfile",
  "tokio",
  "tokio-rustls",
@@ -741,6 +762,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
+name = "maybe-async"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6007f9dad048e0a224f27ca599d669fca8cfa0dac804725aab542b2eb032bce6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "memchr"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -859,6 +891,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "no-std-net"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43794a0ace135be66a25d3ae77d41b91615fb68ae937f904090203e81f755b65"
+
+[[package]]
+name = "num-derive"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "num-integer"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -889,9 +938,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.8.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56"
+checksum = "7709cef83f0c1f58f666e746a08b21e0085f7440fa6a29cc194d68aac97a4225"
 
 [[package]]
 name = "openssl-probe"
@@ -1025,9 +1074,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b6d2a0409666964722368ef5fb74b9f93fac11c18bef3308693c16c6733f103"
 dependencies = [
  "ipnetwork",
- "pnet_base",
+ "pnet_base 0.28.0",
  "pnet_datalink",
- "pnet_packet",
+ "pnet_packet 0.28.0",
  "pnet_sys",
  "pnet_transport",
 ]
@@ -1039,6 +1088,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25488cd551a753dcaaa6fffc9f69a7610a412dd8954425bf7ffad5f7d1156fb8"
 
 [[package]]
+name = "pnet_base"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e88341c6c842f89bdc7287f7b1e26b6fa64fa11c7ea3756971e6f18cd2510c4"
+dependencies = [
+ "no-std-net",
+]
+
+[[package]]
 name = "pnet_datalink"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1046,7 +1104,7 @@ checksum = "d4d1f8ab1ef6c914cf51dc5dfe0be64088ea5f3b08bbf5a31abc70356d271198"
 dependencies = [
  "ipnetwork",
  "libc",
- "pnet_base",
+ "pnet_base 0.28.0",
  "pnet_sys",
  "winapi",
 ]
@@ -1064,12 +1122,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "pnet_macros"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebfcdc9c072966723026b3596a1f655fb8bbfe0142f9770f8d481aee4459d6b9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn",
+]
+
+[[package]]
 name = "pnet_macros_support"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4714e10f30cab023005adce048f2d30dd4ac4f093662abf2220855655ef8f90"
 dependencies = [
- "pnet_base",
+ "pnet_base 0.28.0",
+]
+
+[[package]]
+name = "pnet_macros_support"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bba532f5a4b320c029d89e612671fb621851b3b07e972c53850d34130033a5cd"
+dependencies = [
+ "pnet_base 0.30.0",
 ]
 
 [[package]]
@@ -1079,9 +1158,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8588067671d03c9f4254b2e66fecb4d8b93b5d3e703195b84f311cd137e32130"
 dependencies = [
  "glob",
- "pnet_base",
- "pnet_macros",
- "pnet_macros_support",
+ "pnet_base 0.28.0",
+ "pnet_macros 0.28.0",
+ "pnet_macros_support 0.28.0",
+]
+
+[[package]]
+name = "pnet_packet"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7009716ac86091c1b6e2cdec95a2b028c880f516054c1ec11edd02f9f463cbde"
+dependencies = [
+ "glob",
+ "pnet_base 0.30.0",
+ "pnet_macros 0.30.0",
+ "pnet_macros_support 0.30.0",
 ]
 
 [[package]]
@@ -1101,8 +1192,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "932b2916d693bcc5fa18443dc99142e0a6fd31a6ce75a511868f7174c17e2bce"
 dependencies = [
  "libc",
- "pnet_base",
- "pnet_packet",
+ "pnet_base 0.28.0",
+ "pnet_packet 0.28.0",
  "pnet_sys",
 ]
 
@@ -1168,14 +1259,13 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
  "rand_core",
- "rand_hc",
 ]
 
 [[package]]
@@ -1195,15 +1285,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
 dependencies = [
  "getrandom",
-]
-
-[[package]]
-name = "rand_hc"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
-dependencies = [
- "rand_core",
 ]
 
 [[package]]
@@ -1542,6 +1623,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "surge-ping"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcd2bceb52e0a2295cec5278ec15a799b289e8dded32a761e906e8084488a51a"
+dependencies = [
+ "parking_lot 0.12.0",
+ "pnet_packet 0.30.0",
+ "rand",
+ "socket2 0.4.4",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1610,6 +1706,7 @@ name = "tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arp-toolkit",
  "async-trait",
  "bincode",
  "bytes",
@@ -1630,6 +1727,7 @@ dependencies = [
  "libc",
  "paw",
  "pnet",
+ "rand",
  "rustls",
  "rustls-pemfile",
  "serde",
@@ -1639,6 +1737,7 @@ dependencies = [
  "serde_yaml",
  "socket2 0.3.19",
  "structopt",
+ "surge-ping",
  "system_gateway",
  "tempfile",
  "tokio",
@@ -1753,9 +1852,9 @@ checksum = "360dfd1d6d30e05fda32ace2c8c70e9c0a9da713275777f5a4dbb8a1893930c6"
 
 [[package]]
 name = "tracing"
-version = "0.1.26"
+version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09adeb8c97449311ccd28a427f96fb563e7fd31aabf994189879d9da2394b89d"
+checksum = "a400e31aa60b9d44a52a8ee0343b5b18566b03a8321e0d321f695cf56e940160"
 dependencies = [
  "cfg-if",
  "pin-project-lite",
@@ -1765,9 +1864,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.15"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c42e6fa53307c8a17e4ccd4dc81cf5ec38db9209f59b222210375b54ee40d1e2"
+checksum = "cc6b8ad3567499f98a1db7a752b07a7c8c7c7c34c332ec00effb2b0027974b7c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1776,11 +1875,11 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.26"
+version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f54c8ca710e81886d498c2fd3331b56c93aa248d49de2222ad2742247c60072f"
+checksum = "7b7358be39f2f274f322d2aaed611acc57f382e8eb1e5b48cb9ae30933495ce7"
 dependencies = [
- "lazy_static",
+ "once_cell",
  "valuable",
 ]
 

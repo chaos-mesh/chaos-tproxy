@@ -1,6 +1,6 @@
 [package]
 name = "chaos-tproxy-proxy"
-version = "0.1.0"
+version = "0.5.3"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -42,3 +42,6 @@ webpki-roots = "0.22"
 hyper-rustls = { git = "https://github.com/Andrewmatilde/hyper-rustls.git", features = ["http2"] }
 rtnetlink = "0.9.1"
 futures-util = "0.3"
+arp-toolkit = {version = "0.2", features = ["sync"]}
+surge-ping = "0.7.0"
+rand = "0.8.5"

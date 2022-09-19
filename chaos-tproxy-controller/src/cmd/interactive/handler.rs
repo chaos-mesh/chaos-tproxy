@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::future::Future;
 use std::path::PathBuf;
+use std::ops::DerefMut;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -141,6 +142,6 @@ impl Service<Request<Body>> for ConfigService {
     #[inline]
     fn call(&mut self, request: Request<Body>) -> Self::Future {
         let handler = self.0.clone();
-        Box::pin(async move { Self::handle(&mut *handler.lock().await, request).await })
+        Box::pin(async move { Self::handle(handler.lock().await.deref_mut(), request).await })
     }
 }

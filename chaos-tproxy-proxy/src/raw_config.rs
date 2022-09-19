@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::fs::File;
-use std::io;
-use std::io::BufReader;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::{fs, io};
+use std::net::Ipv4Addr;
 
 use anyhow::{anyhow, Error};
 use http::header::{HeaderMap, HeaderName};
@@ -29,16 +28,29 @@ pub struct RawConfig {
     pub proxy_ports: Option<String>,
     pub listen_port: u16,
     pub safe_mode: bool,
-    pub interface: Option<String>,
     pub rules: Vec<RawRule>,
+    pub role: Option<Role>,
     pub tls: Option<TLSRawConfig>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+pub enum Role {
+    Client(Vec<Ipv4Addr>),
+    Server(Vec<Ipv4Addr>),
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "value")]
+pub enum RawFile {
+    Path(PathBuf),
+    Contents(Vec<u8>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, Default)]
 pub struct TLSRawConfig {
-    pub ca_file: Option<PathBuf>,
-    pub cert_file: PathBuf,
-    pub key_file: PathBuf,
+    pub ca_file: Option<RawFile>,
+    pub cert_file: RawFile,
+    pub key_file: RawFile,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
@@ -162,6 +174,23 @@ pub(crate) fn try_from_vec(
     .transpose()
 }
 
+impl Default for RawFile {
+    fn default() -> Self {
+        RawFile::Contents(Default::default())
+    }
+}
+
+impl TryFrom<RawFile> for Vec<u8> {
+    type Error = Error;
+
+    fn try_from(value: RawFile) -> Result<Self, Self::Error> {
+        match value {
+            RawFile::Contents(c) => Ok(c),
+            RawFile::Path(p) => Ok(fs::read(p)?),
+        }
+    }
+}
+
 impl TryFrom<RawConfig> for Config {
     type Error = Error;
 
@@ -169,6 +198,7 @@ impl TryFrom<RawConfig> for Config {
         Ok(Self {
             http_config: HTTPConfig {
                 proxy_port: raw.listen_port,
+                role: raw.role,
                 rules: raw
                     .rules
                     .into_iter()
@@ -188,13 +218,12 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
     type Error = Error;
 
     fn try_from(raw: TLSRawConfig) -> Result<Self, Self::Error> {
-        let certs = certs(&mut BufReader::new(File::open(raw.cert_file)?))
+        let certs = certs(&mut &*Vec::<u8>::try_from(raw.cert_file)?)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))
             .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
-        let keys: Vec<PrivateKey> =
-            rsa_private_keys(&mut BufReader::new(File::open(raw.key_file)?))
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))
-                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+        let keys: Vec<PrivateKey> = rsa_private_keys(&mut &*Vec::<u8>::try_from(raw.key_file)?)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))
+            .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
 
         if keys.is_empty() {
             return Err(anyhow!("empty key"));
@@ -202,9 +231,8 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
         let key = keys[0].clone();
 
         let mut root_cert_store = rustls::RootCertStore::empty();
-        if let Some(cafile) = &raw.ca_file {
-            let mut pem = BufReader::new(File::open(cafile)?);
-            let certs = rustls_pemfile::certs(&mut pem)?;
+        if let Some(cafile) = raw.ca_file {
+            let certs = rustls_pemfile::certs(&mut &*Vec::<u8>::try_from(cafile)?)?;
             let trust_anchors = certs.iter().map(|cert| {
                 let ta = webpki::TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
                 OwnedTrustAnchor::from_subject_spki_name_constraints(
