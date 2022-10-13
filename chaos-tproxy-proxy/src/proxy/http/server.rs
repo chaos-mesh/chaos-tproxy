@@ -40,7 +40,7 @@ impl HttpServer {
     }
 
     pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
+        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.listen_port));
         let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
@@ -222,7 +222,8 @@ impl HttpService {
             .rules
             .iter()
             .filter(|rule| {
-                role_ok && matches!(rule.target, Target::Request)
+                role_ok
+                    && matches!(rule.target, Target::Request)
                     && select_request(self.target.port(), &request, &rule.selector)
             })
             .collect();
@@ -291,7 +292,8 @@ impl HttpService {
             .rules
             .iter()
             .filter(|rule| {
-                role_ok && matches!(rule.target, Target::Response)
+                role_ok
+                    && matches!(rule.target, Target::Response)
                     && select_response(
                         self.target.port(),
                         &uri,

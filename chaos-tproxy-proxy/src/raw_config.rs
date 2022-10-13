@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::{fs, io};
-use std::net::Ipv4Addr;
 
 use anyhow::{anyhow, Error};
 use http::header::{HeaderMap, HeaderName};
@@ -197,7 +197,7 @@ impl TryFrom<RawConfig> for Config {
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             http_config: HTTPConfig {
-                proxy_port: raw.listen_port,
+                listen_port: raw.listen_port,
                 role: raw.role,
                 rules: raw
                     .rules
