@@ -7,6 +7,9 @@ use wildmatch::WildMatch;
 
 use crate::raw_config::Role;
 
+/// Selector could
+/// TODO(@STRRL): refactor to different filters, each with only required parameters.
+/// Or make these functions as methods of `Selector`.
 #[derive(Debug, Clone)]
 pub struct Selector {
     pub port: Option<u16>,
@@ -17,6 +20,7 @@ pub struct Selector {
     pub response_headers: Option<HeaderMap>,
 }
 
+/// select_role checks the given src_ip (or dst_ip) is contained in the give role.
 pub fn select_role(src_ip: &IpAddr, dst_ip: &IpAddr, role: &Role) -> bool {
     let src_ipv4 = match src_ip {
         IpAddr::V4(ipv4) => ipv4,
@@ -33,6 +37,7 @@ pub fn select_role(src_ip: &IpAddr, dst_ip: &IpAddr, role: &Role) -> bool {
     }
 }
 
+/// select_request would check the given request is matched with the given selector.
 pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -> bool {
     selector.port.iter().all(|p| port == *p)
         && selector
@@ -47,6 +52,7 @@ pub fn select_request(port: u16, request: &Request<Body>, selector: &Selector) -
         })
 }
 
+/// select_response would check the given request and response is matched with the given selector.
 pub fn select_response(
     port: u16,
     uri: &Uri,
