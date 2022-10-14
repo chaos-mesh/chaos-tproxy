@@ -253,6 +253,7 @@ impl HttpService {
         trace!("URI: {}", request.uri());
         let mut parts = request.uri().clone().into_parts();
 
+        // because the original request URL is not carried in the HTTP request, we should rebuild it.
         parts.authority = match request
             .headers()
             .iter()
