@@ -30,6 +30,8 @@ use crate::proxy::http::connector::HttpConnector;
 use crate::proxy::tcp::listener::TcpListener;
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
 
+/// HttpServer is the proxy service behind the iptables tproxy. It would accept the forwarded
+/// connection from the iptables tproxy, and then let [HttpService] to handle the connection.
 pub struct HttpServer {
     config: Config,
 }
@@ -91,6 +93,7 @@ impl HttpServer {
     }
 }
 
+/// serve_https would make the HttpService resolving the resolve TLS stream.
 pub async fn serve_https(
     stream: TcpStream,
     service: &HttpService,
@@ -114,6 +117,7 @@ pub async fn serve_https(
                 }
             },
             Err(e) => {
+                // TODO(@STRRL): require similar error resolving in `serve_http_with_error_return`
                 return Err(anyhow!("{}: stream block with error: {}", log_key, e));
             }
         };
@@ -121,6 +125,9 @@ pub async fn serve_https(
     }
 }
 
+///  serve_http_with_error_return would make the HttpService resolve the incoming TCP stream.
+///
+/// TODO(@STRRL): rename it to `serve_http` to keep naming consistent with `serve_https`
 pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
@@ -176,6 +183,9 @@ pub async fn serve_http_with_error_return(
     }
 }
 
+/// HttpService could handle the forwarded connection from [HttpServer], it would parse the packet
+/// content, forwarding the request to the target server, and then return the response to the client.
+/// Also, it would inject the chaos at the same time.
 #[derive(Derivative)]
 #[derivative(Debug)]
 #[derive(Clone)]
@@ -203,6 +213,8 @@ impl HttpService {
         }
     }
 
+    /// role_ok would check the role of the chaos-tproxy, eg. working on client-side or server-side.
+    /// If `role` in config is `None`, it would effect both client-side and server-side.
     fn role_ok(&self) -> bool {
         let role = match &self.config.role {
             None => return true,
@@ -212,6 +224,7 @@ impl HttpService {
         select_role(&self.remote.ip(), &self.target.ip(), &role)
     }
 
+    /// handle would execute the core inject and forward logic.
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
         debug!("{} : Proxy is handling http request", log_key);
@@ -222,11 +235,13 @@ impl HttpService {
             .rules
             .iter()
             .filter(|rule| {
-                role_ok && matches!(rule.target, Target::Request)
+                role_ok
+                    && matches!(rule.target, Target::Request)
                     && select_request(self.target.port(), &request, &rule.selector)
             })
             .collect();
 
+        // inject chaos into request
         for rule in request_rules {
             debug!("{} : request matched, rule({:?})", log_key, rule);
             request = apply_request_action(request, &rule.actions).await?;
@@ -238,6 +253,7 @@ impl HttpService {
         trace!("URI: {}", request.uri());
         let mut parts = request.uri().clone().into_parts();
 
+        // because the original request URL is not carried in the HTTP request, we should rebuild it.
         parts.authority = match request
             .headers()
             .iter()
@@ -261,6 +277,7 @@ impl HttpService {
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
+        // forward HTTP/HTTPS request
         let rsp_fut = if let Some(tls_client_config) = &self.tls_client_config {
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config((**tls_client_config).clone())
@@ -291,7 +308,8 @@ impl HttpService {
             .rules
             .iter()
             .filter(|rule| {
-                role_ok && matches!(rule.target, Target::Response)
+                role_ok
+                    && matches!(rule.target, Target::Response)
                     && select_response(
                         self.target.port(),
                         &uri,
@@ -303,6 +321,7 @@ impl HttpService {
             })
             .collect();
 
+        // inject chaos into response
         for rule in response_rules {
             debug!("{} : response matched", log_key);
             response = apply_response_action(response, &rule.actions).await?;

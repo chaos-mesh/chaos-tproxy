@@ -61,34 +61,43 @@ async fn read_value(body: &mut Body) -> anyhow::Result<Value> {
     Ok(serde_json::from_slice(&data)?)
 }
 
+/// apply_request_action would inject chaos actions into the given request.
+/// TODO(@STRRL): refactor this function, it is NOT extensible with more actions.
 #[instrument]
 pub async fn apply_request_action(
     mut request: Request<Body>,
     actions: &Actions,
 ) -> anyhow::Result<Request<Body>> {
+    // abort the request
     if actions.abort {
         return Err(anyhow!("Abort applied"));
     }
 
+    // delay the request
     if let Some(delay) = actions.delay {
         sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
+        // replace the request URL
         replace_path(request.uri_mut(), replace.path.as_ref())?;
 
         if let Some(md) = &replace.method {
+            // replace the request method
             *request.method_mut() = md.clone();
         }
 
         if let Some(body) = &replace.body {
+            // replace the request body
             *request.body_mut() = body.contents.clone().into();
             request.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
+        // replace request query parameters
         replace_queries(request.uri_mut(), replace.queries.as_ref())?;
 
         if let Some(hdrs) = &replace.headers {
+            // replace the request headers
             for (key, value) in hdrs {
                 request.headers_mut().insert(key, value.clone());
             }
@@ -96,7 +105,10 @@ pub async fn apply_request_action(
     }
 
     if let Some(patch) = &actions.patch {
+        // append request query parameters
         append_queries(request.uri_mut(), patch.queries.as_ref())?;
+
+        // patch request body with JSON Patch
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(request.body_mut()).await?;
@@ -106,6 +118,7 @@ pub async fn apply_request_action(
             request.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
+        // patch headers
         if let Some(hdrs) = &patch.headers {
             for (key, value) in hdrs {
                 request.headers_mut().append(key, value.clone());
@@ -183,29 +196,36 @@ fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> 
     Ok(())
 }
 
+/// apply_response_action would inject chaos actions into the given response.
+/// TODO(@STRRL): refactor this function, it is NOT extensible with more actions.
 #[instrument]
 pub async fn apply_response_action(
     mut response: Response<Body>,
     actions: &Actions,
 ) -> anyhow::Result<Response<Body>> {
+    // abort the response
     if actions.abort {
         return Err(anyhow!("Abort applied"));
     }
 
+    // delay the response
     if let Some(delay) = actions.delay {
         sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
+        // replace the response code
         if let Some(co) = replace.code {
             *response.status_mut() = co;
         }
 
+        // replace the response body
         if let Some(body) = &replace.body {
             *response.body_mut() = body.contents.clone().into();
             response.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
+        // replace the response header
         if let Some(hdrs) = &replace.headers {
             for (key, value) in hdrs {
                 response.headers_mut().insert(key, value.clone());
@@ -214,6 +234,7 @@ pub async fn apply_response_action(
     }
 
     if let Some(patch) = &actions.patch {
+        // patch response body with JSON Patch
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(response.body_mut()).await?;
@@ -222,6 +243,7 @@ pub async fn apply_response_action(
             *response.body_mut() = merged.into();
             response.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
+        // patch headers
         if let Some(hdrs) = &patch.headers {
             for (key, value) in hdrs {
                 response.headers_mut().append(key, value.clone());
