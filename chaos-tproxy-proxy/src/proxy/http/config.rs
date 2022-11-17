@@ -11,7 +11,7 @@ pub struct Config {
 
 #[derive(Clone, Debug)]
 pub struct HTTPConfig {
-    pub proxy_port: u16,
+    pub listen_port: u16,
     pub rules: Vec<Rule>,
     pub role: Option<Role>,
 }

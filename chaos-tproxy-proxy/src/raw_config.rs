@@ -197,7 +197,7 @@ impl TryFrom<RawConfig> for Config {
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(Self {
             http_config: HTTPConfig {
-                proxy_port: raw.listen_port,
+                listen_port: raw.listen_port,
                 role: raw.role,
                 rules: raw
                     .rules

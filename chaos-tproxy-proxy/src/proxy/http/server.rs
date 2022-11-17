@@ -42,7 +42,7 @@ impl HttpServer {
     }
 
     pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
+        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.listen_port));
         let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
