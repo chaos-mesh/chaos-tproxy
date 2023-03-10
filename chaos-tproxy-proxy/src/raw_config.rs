@@ -363,7 +363,7 @@ impl TryFrom<RawReplaceBody> for ReplaceBodyAction {
         Ok(Self {
             contents: match raw.contents {
                 RawReplaceBodyContents::TEXT(text) => text.into_bytes(),
-                RawReplaceBodyContents::BASE64(encoded) => base64::decode(&encoded)?,
+                RawReplaceBodyContents::BASE64(encoded) => base64::decode(encoded)?,
             },
         })
     }
