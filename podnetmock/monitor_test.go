@@ -14,7 +14,7 @@ func TestMonitor(t *testing.T) {
 	logger := klog.NewKlogr().WithName("test-monitor")
 	m := &Monitor{
 		device:  "lo",
-		timeout: time.Second * 5,
+		timeout: time.Second * 1,
 		Key: UDPPacketWithKey{
 			Key: "test-key",
 		},
@@ -31,24 +31,23 @@ func TestMonitor(t *testing.T) {
 		Port: 12345,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
 	doneChan, err := m.Monitor(ctx, raddr, "test-key")
-	if err != nil {
-		t.Skip("failed to monitor", err)
-		return
-	}
-
+	assert.Nil(t, err, "no error")
 	go func() {
-		LoopSendKey(ctx, laddr, raddr, "test-key")
+		err := LoopSendKey(ctx, laddr, raddr, "test-key")
+		if err != nil {
+			t.Error("failed to send key", err)
+			cancel()
+		}
 	}()
 
 	select {
+	case <-ctx.Done():
+		t.Error("test timeout")
 	case result := <-doneChan:
 		assert.True(t, result, "get right key")
-
-	case <-time.After(300 * time.Second):
-		t.Error("test timeout")
 	}
 }

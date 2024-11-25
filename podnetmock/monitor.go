@@ -55,7 +55,7 @@ type Monitor struct {
 }
 
 func (m *Monitor) Monitor(ctx context.Context, raddr *net.UDPAddr, key string) (chan bool, error) {
-	handle, err := pcap.OpenLive(m.device, 65536, true, time.Millisecond*5)
+	handle, err := pcap.OpenLive(m.device, 65536, true, m.timeout)
 	if err != nil {
 		return nil, err
 	}
