@@ -55,6 +55,13 @@ type Monitor struct {
 }
 
 func (m *Monitor) Monitor(ctx context.Context, raddr *net.UDPAddr, key string) (chan bool, error) {
+	// Here libpcap create socket on socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))
+	// Libpcap: a library which creates a packet socket.
+	// When a regular packet is received in the network stack,
+	// the kernel first checks to see whether there is a packet socket interested
+	// in the newly arrived packet and, if there is one,
+	// it forwards the packet to that packet socket.
+	// If the option ETH_P_ALL is chosen, then all protocols go thru the packet socket.
 	handle, err := pcap.OpenLive(m.device, 65536, true, m.timeout)
 	if err != nil {
 		return nil, err
@@ -69,6 +76,8 @@ func (m *Monitor) Monitor(ctx context.Context, raddr *net.UDPAddr, key string) (
 	packetChan := packetSource.Packets()
 	doneChan := make(chan bool, 1)
 
+	// start a goroutine to monitor the packet
+	// when a packet is received, check it and send true to doneChan if the key is matched.
 	go func() {
 		for {
 			select {
