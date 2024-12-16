@@ -2,11 +2,9 @@ name: Nightly Test
 
 on:
   push:
-    branches: [ test-ubuntu-new ]
+    branches: [ master, test-ubuntu-new ]
   pull_request:
-    branches: [ master ]
-  schedule:
-    - cron: '0 0 * * *'
+    branches: [ master, test-ubuntu-new ]
 
 env:
   CARGO_TERM_COLOR: always
