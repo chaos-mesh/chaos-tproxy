@@ -1,7 +1,7 @@
 name: Nightly Test
 
 on:
-  pull_request:
+  push:
     branches:
       - master
       - test-ubuntu-new
