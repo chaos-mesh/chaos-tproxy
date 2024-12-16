@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - master
+      - test-ubuntu-new
 
 env:
   CARGO_TERM_COLOR: always
