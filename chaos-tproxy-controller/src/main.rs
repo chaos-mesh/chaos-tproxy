@@ -22,6 +22,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", e);
             exit(1)
         }
+        
         Ok(o) => o,
     };
     tracing_subscriber::registry()
