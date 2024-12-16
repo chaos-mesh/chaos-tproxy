@@ -1,10 +1,9 @@
 name: Nightly Test
 
 on:
-  push:
-    branches: [ master, test-ubuntu-new ]
   pull_request:
-    branches: [ master, test-ubuntu-new ]
+    branches:
+      - master
 
 env:
   CARGO_TERM_COLOR: always
