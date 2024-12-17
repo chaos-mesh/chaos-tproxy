@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::future::Future;
+use std::path::PathBuf;
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -8,16 +9,17 @@ use std::task::{Context, Poll};
 use anyhow::Error;
 use futures::TryStreamExt;
 use http::{Method, Request, Response, StatusCode};
-use hyper::server::conn::{Connection, Http};
+use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::Body;
+use tokio::net::UnixListener;
 use tokio::select;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::instrument;
 
-use crate::cmd::interactive::stdio::StdStream;
+#[cfg(unix)]
 use crate::proxy::config::Config;
 use crate::proxy::exec::Proxy;
 use crate::raw_config::RawConfig;
@@ -41,24 +43,32 @@ impl ConfigServer {
         }
     }
 
-    pub fn serve_interactive(&mut self) {
+    pub fn serve_interactive(&mut self, interactive_path: PathBuf) {
         let mut rx = self.rx.take().unwrap();
-        let mut service = ConfigService(self.proxy.clone());
-        self.task = Some(tokio::spawn(async move {
+        let proxy = self.proxy.clone();
+        self.task = Some(tokio::task::spawn(async move {
             let rx_mut = &mut rx;
+            tracing::info!("ConfigServer listener try binding {:?}", interactive_path);
+            let unix_listener = UnixListener::bind(interactive_path).unwrap();
+
             loop {
-                let stream = StdStream::default();
-                let mut conn = Http::new().serve_connection(stream, &mut service);
-                let conn_mut = &mut conn;
+                let mut service = ConfigService(proxy.clone());
                 select! {
                     _ = &mut *rx_mut => {
                         tracing::trace!("catch signal in config server.");
-                        Connection::graceful_shutdown(Pin::new(conn_mut));
                         return Ok(());
                     },
-                    ret = &mut *conn_mut => if let Err(e) = ret {
-                        tracing::error!("{}",e);
-                    }
+                    stream = unix_listener.accept() => {
+                        tokio::task::spawn(async move {
+                            let (stream, _) = stream.unwrap();
+
+                            let http = Http::new();
+                            let conn = http.serve_connection(stream, &mut service);
+                            if let Err(e) = conn.await {
+                                tracing::error!("{}",e);
+                            }
+                        });
+                    },
                 };
             }
         }));
