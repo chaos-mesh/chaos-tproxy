@@ -28,7 +28,7 @@ impl UdsDataClient {
     ) -> anyhow::Result<T> {
         tracing::debug!("try connect path : {:?}", &self.path);
         let mut stream = UnixStream::connect(self.path.clone()).await?;
-        return match stream.read_to_end(buf).await {
+        match stream.read_to_end(buf).await {
             Ok(_) => {
                 tracing::debug!("Read data successfully.");
 
@@ -47,6 +47,6 @@ impl UdsDataClient {
                 tracing::debug!("Read data failed with err {:?}.", e);
                 Err(anyhow::anyhow!("{}", e))
             }
-        };
+        }
     }
 }
