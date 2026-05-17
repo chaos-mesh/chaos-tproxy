@@ -2,4 +2,5 @@ generate:
   models: true
 output-options:
   skip-prune: true
+  yaml-tags: true
 output: pkg/config/config.gen.go

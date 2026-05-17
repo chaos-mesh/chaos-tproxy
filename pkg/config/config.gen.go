@@ -106,71 +106,71 @@ func (e Target) Valid() bool {
 // Actions defines model for Actions.
 type Actions struct {
 	// Abort If true, terminate the request/response with a 502.
-	Abort *bool `json:"abort,omitempty"`
+	Abort *bool `json:"abort,omitempty" yaml:"abort,omitempty"`
 
 	// Delay Wait this long before continuing. Format is the `humantime`
 	// crate's flavor: `"100ms"`, `"3s"`, `"1m30s"`, etc.
-	Delay   *string        `json:"delay,omitempty"`
-	Patch   *PatchAction   `json:"patch,omitempty"`
-	Replace *ReplaceAction `json:"replace,omitempty"`
+	Delay   *string        `json:"delay,omitempty" yaml:"delay,omitempty"`
+	Patch   *PatchAction   `json:"patch,omitempty" yaml:"patch,omitempty"`
+	Replace *ReplaceAction `json:"replace,omitempty" yaml:"replace,omitempty"`
 }
 
 // ChaosTproxyConfig Top-level config for chaos-tproxy.
 type ChaosTproxyConfig struct {
 	// IgnoreMark Packet mark to ignore in iptables rules. Currently unused.
-	IgnoreMark *int32 `json:"ignore_mark,omitempty"`
+	IgnoreMark *int32 `json:"ignore_mark,omitempty" yaml:"ignore_mark,omitempty"`
 
 	// Interface Network interface. Currently unused.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	Interface *string `json:"interface,omitempty"`
+	Interface *string `json:"interface,omitempty" yaml:"interface,omitempty"`
 
 	// ListenPort Proxy listen port. Kept for backwards compatibility; currently unused.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	ListenPort *int32 `json:"listen_port,omitempty"`
+	ListenPort *int32 `json:"listen_port,omitempty" yaml:"listen_port,omitempty"`
 
 	// ProxyMark `SO_MARK` set on upstream sockets opened by the proxy.
 	// Used by the eBPF egress program to skip the proxy's own
 	// forward traffic and avoid redirect loops.
-	ProxyMark *int32 `json:"proxy_mark,omitempty"`
+	ProxyMark *int32 `json:"proxy_mark,omitempty" yaml:"proxy_mark,omitempty"`
 
 	// ProxyPorts TCP destination ports the chaos-tproxy will proxy.
-	ProxyPorts *[]int32 `json:"proxy_ports,omitempty"`
+	ProxyPorts *[]int32 `json:"proxy_ports,omitempty" yaml:"proxy_ports,omitempty"`
 
 	// Role If set, rules only fire when the connection's
 	// (src_ip, dst_ip) matches the configured side.
-	Role *Role `json:"role,omitempty"`
+	Role *Role `json:"role,omitempty" yaml:"role,omitempty"`
 
 	// RouteTable Routing table ID. Currently unused.
-	RouteTable *int32 `json:"route_table,omitempty"`
+	RouteTable *int32 `json:"route_table,omitempty" yaml:"route_table,omitempty"`
 
 	// Rules Chaos rules, evaluated in declaration order.
-	Rules *[]Rule `json:"rules,omitempty"`
+	Rules *[]Rule `json:"rules,omitempty" yaml:"rules,omitempty"`
 
 	// SafeMode Deprecated.
-	SafeMode *bool `json:"safe_mode,omitempty"`
+	SafeMode *bool `json:"safe_mode,omitempty" yaml:"safe_mode,omitempty"`
 
 	// Tls TLS configuration for the proxy.
-	Tls *TLSConfig `json:"tls,omitempty"`
+	Tls *TLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 }
 
 // PatchAction defines model for PatchAction.
 type PatchAction struct {
-	Body *PatchBody `json:"body,omitempty"`
+	Body *PatchBody `json:"body,omitempty" yaml:"body,omitempty"`
 
 	// Headers Headers to append. Each entry is a `[name, value]` pair;
 	// duplicate names are allowed for headers like Cookie.
-	Headers *[][]string `json:"headers,omitempty"`
+	Headers *[][]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 
 	// Queries Query parameters to append. Each entry is a `[key, value]`
 	// pair; duplicate keys are intentionally allowed (e.g.
 	// `foo=1&foo=2`), which is why this is an array of pairs
 	// rather than a map.
-	Queries *[][]string `json:"queries,omitempty"`
+	Queries *[][]string `json:"queries,omitempty" yaml:"queries,omitempty"`
 }
 
 // PatchBody defines model for PatchBody.
 type PatchBody struct {
-	Contents PatchBodyContents `json:"contents"`
+	Contents PatchBodyContents `json:"contents" yaml:"contents"`
 }
 
 // PatchBodyContents defines model for PatchBodyContents.
@@ -180,12 +180,12 @@ type PatchBodyContents struct {
 
 // PatchBodyContentsJson defines model for PatchBodyContentsJson.
 type PatchBodyContentsJson struct {
-	Type PatchBodyContentsJsonType `json:"type"`
+	Type PatchBodyContentsJsonType `json:"type" yaml:"type"`
 
 	// Value JSON value (as a string). The proxy parses this and merges
 	// it into the request/response body using RFC 7396 JSON
 	// Merge Patch semantics.
-	Value string `json:"value"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // PatchBodyContentsJsonType defines model for PatchBodyContentsJson.Type.
@@ -198,10 +198,10 @@ type RawFile struct {
 
 // RawFileContents defines model for RawFileContents.
 type RawFileContents struct {
-	Type RawFileContentsType `json:"type"`
+	Type RawFileContentsType `json:"type" yaml:"type"`
 
 	// Value Raw file contents (base64-encoded in JSON/YAML).
-	Value []byte `json:"value"`
+	Value []byte `json:"value" yaml:"value"`
 }
 
 // RawFileContentsType defines model for RawFileContents.Type.
@@ -209,10 +209,10 @@ type RawFileContentsType string
 
 // RawFilePath defines model for RawFilePath.
 type RawFilePath struct {
-	Type RawFilePathType `json:"type"`
+	Type RawFilePathType `json:"type" yaml:"type"`
 
 	// Value Absolute or relative path to the file on disk.
-	Value string `json:"value"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // RawFilePathType defines model for RawFilePath.Type.
@@ -220,27 +220,27 @@ type RawFilePathType string
 
 // ReplaceAction defines model for ReplaceAction.
 type ReplaceAction struct {
-	Body *ReplaceBody `json:"body,omitempty"`
+	Body *ReplaceBody `json:"body,omitempty" yaml:"body,omitempty"`
 
 	// Code Replace response status code. Ignored on Request rules.
-	Code *int32 `json:"code,omitempty"`
+	Code *int32 `json:"code,omitempty" yaml:"code,omitempty"`
 
 	// Headers Replace (set) request/response header values.
-	Headers *map[string]string `json:"headers,omitempty"`
+	Headers *map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 
 	// Method Replace request method. Ignored on Response rules.
-	Method *string `json:"method,omitempty"`
+	Method *string `json:"method,omitempty" yaml:"method,omitempty"`
 
 	// Path Replace request path. Ignored on Response rules.
-	Path *string `json:"path,omitempty"`
+	Path *string `json:"path,omitempty" yaml:"path,omitempty"`
 
 	// Queries Replace request query parameters with this map. Ignored on Response rules.
-	Queries *map[string]string `json:"queries,omitempty"`
+	Queries *map[string]string `json:"queries,omitempty" yaml:"queries,omitempty"`
 }
 
 // ReplaceBody defines model for ReplaceBody.
 type ReplaceBody struct {
-	Contents ReplaceBodyContents `json:"contents"`
+	Contents ReplaceBodyContents `json:"contents" yaml:"contents"`
 }
 
 // ReplaceBodyContents defines model for ReplaceBodyContents.
@@ -250,10 +250,10 @@ type ReplaceBodyContents struct {
 
 // ReplaceBodyContentsBase64 defines model for ReplaceBodyContentsBase64.
 type ReplaceBodyContentsBase64 struct {
-	Type ReplaceBodyContentsBase64Type `json:"type"`
+	Type ReplaceBodyContentsBase64Type `json:"type" yaml:"type"`
 
 	// Value Base64-encoded replacement body (decoded by the proxy at apply time).
-	Value string `json:"value"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // ReplaceBodyContentsBase64Type defines model for ReplaceBodyContentsBase64.Type.
@@ -261,10 +261,10 @@ type ReplaceBodyContentsBase64Type string
 
 // ReplaceBodyContentsText defines model for ReplaceBodyContentsText.
 type ReplaceBodyContentsText struct {
-	Type ReplaceBodyContentsTextType `json:"type"`
+	Type ReplaceBodyContentsTextType `json:"type" yaml:"type"`
 
 	// Value Literal replacement body.
-	Value string `json:"value"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // ReplaceBodyContentsTextType defines model for ReplaceBodyContentsText.Type.
@@ -278,53 +278,53 @@ type Role struct {
 // RoleClient defines model for RoleClient.
 type RoleClient struct {
 	// Client Rule fires when the connection's source ip is in this list.
-	Client []string `json:"Client"`
+	Client []string `json:"Client" yaml:"Client"`
 }
 
 // RoleServer defines model for RoleServer.
 type RoleServer struct {
 	// Server Rule fires when the connection's destination ip is in this list.
-	Server []string `json:"Server"`
+	Server []string `json:"Server" yaml:"Server"`
 }
 
 // Rule defines model for Rule.
 type Rule struct {
-	Actions  Actions  `json:"actions"`
-	Selector Selector `json:"selector"`
+	Actions  Actions  `json:"actions" yaml:"actions"`
+	Selector Selector `json:"selector" yaml:"selector"`
 
 	// Target Whether this rule matches against the HTTP request or the response.
-	Target Target `json:"target"`
+	Target Target `json:"target" yaml:"target"`
 }
 
 // Selector defines model for Selector.
 type Selector struct {
 	// Code Match only when the response status equals this. Ignored on Request rules.
-	Code *int32 `json:"code,omitempty"`
+	Code *int32 `json:"code,omitempty" yaml:"code,omitempty"`
 
 	// Method HTTP method (GET / POST / …).
-	Method *string `json:"method,omitempty"`
+	Method *string `json:"method,omitempty" yaml:"method,omitempty"`
 
 	// Path Wildcard glob against the request URI path. Syntax is the
 	// `wildmatch` crate's flavor: `?` matches one char, `*`
 	// matches zero-or-more chars. Case-sensitive.
-	Path *string `json:"path,omitempty"`
+	Path *string `json:"path,omitempty" yaml:"path,omitempty"`
 
 	// Port Match only when the original-dst port equals this.
-	Port *int32 `json:"port,omitempty"`
+	Port *int32 `json:"port,omitempty" yaml:"port,omitempty"`
 
 	// RequestHeaders Match only when every (name, value) pair appears in the request headers.
-	RequestHeaders *map[string]string `json:"request_headers,omitempty"`
+	RequestHeaders *map[string]string `json:"request_headers,omitempty" yaml:"request_headers,omitempty"`
 
 	// ResponseHeaders Match only when every (name, value) pair appears in the response headers. Ignored on Request rules.
-	ResponseHeaders *map[string]string `json:"response_headers,omitempty"`
+	ResponseHeaders *map[string]string `json:"response_headers,omitempty" yaml:"response_headers,omitempty"`
 }
 
 // TLSConfig defines model for TLSConfig.
 type TLSConfig struct {
 	// CaFile CA certificate. If absent, system roots are used.
-	CaFile   *RawFile `json:"ca_file,omitempty"`
-	CertFile RawFile  `json:"cert_file"`
-	KeyFile  RawFile  `json:"key_file"`
+	CaFile   *RawFile `json:"ca_file,omitempty" yaml:"ca_file,omitempty"`
+	CertFile RawFile  `json:"cert_file" yaml:"cert_file"`
+	KeyFile  RawFile  `json:"key_file" yaml:"key_file"`
 }
 
 // Target Whether this rule matches against the HTTP request or the response.
