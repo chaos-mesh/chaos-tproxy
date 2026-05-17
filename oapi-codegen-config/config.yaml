@@ -1,0 +1,5 @@
+generate:
+  models: true
+output-options:
+  skip-prune: true
+output: pkg/config/config.gen.go
