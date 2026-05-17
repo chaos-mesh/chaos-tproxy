@@ -1,0 +1,428 @@
+openapi: 3.0.3
+info:
+  title: chaos-tproxy config
+  version: 0.5.3
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  description: |
+    Schema for the YAML/JSON configuration consumed by the
+    chaos-tproxy. This is the wire contract between controller and proxy.
+
+paths: {}
+servers:
+  - url: ""
+
+components:
+  schemas:
+    ChaosTproxyConfig:
+      type: object
+      description: Top-level config for chaos-tproxy.
+      properties:
+        proxy_ports:
+          type: array
+          nullable: true
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 65535
+          description: TCP destination ports the chaos-tproxy will proxy.
+        safe_mode:
+          type: boolean
+          nullable: true
+          description: Deprecated.
+        rules:
+          type: array
+          nullable: true
+          description: Chaos rules, evaluated in declaration order.
+          items:
+            $ref: '#/components/schemas/Rule'
+          default: []
+        tls:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/TLSConfig'
+          nullable: true
+          description: TLS configuration for the proxy.
+        role:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/Role'
+          nullable: true
+          description: |
+            If set, rules only fire when the connection's
+            (src_ip, dst_ip) matches the configured side.
+        interface:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Network interface. Currently unused.
+        listen_port:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 65535
+          nullable: true
+          deprecated: true
+          description: Proxy listen port. Kept for backwards compatibility; currently unused.
+        proxy_mark:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: |
+            `SO_MARK` set on upstream sockets opened by the proxy.
+            Used by the eBPF egress program to skip the proxy's own
+            forward traffic and avoid redirect loops.
+        ignore_mark:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: Packet mark to ignore in iptables rules. Currently unused.
+        route_table:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 255
+          nullable: true
+          description: Routing table ID. Currently unused.
+
+    # ---------------------------------------------------------------
+    # Role: which side of a connection rules apply to
+    # ---------------------------------------------------------------
+    # Wire format (serde default for an enum with one tuple field per
+    # variant — "externally tagged"):
+    #   { "Client": ["10.0.0.1", "10.0.0.2"] }
+    #   { "Server": ["10.0.0.42"] }
+    Role:
+      oneOf:
+        - $ref: '#/components/schemas/RoleClient'
+        - $ref: '#/components/schemas/RoleServer'
+
+    RoleClient:
+      type: object
+      required: [Client]
+      additionalProperties: false
+      properties:
+        Client:
+          type: array
+          items:
+            type: string
+            format: ipv4
+          description: Rule fires when the connection's source ip is in this list.
+
+    RoleServer:
+      type: object
+      required: [Server]
+      additionalProperties: false
+      properties:
+        Server:
+          type: array
+          items:
+            type: string
+            format: ipv4
+          description: Rule fires when the connection's destination ip is in this list.
+
+    # ---------------------------------------------------------------
+    # TLS
+    # ---------------------------------------------------------------
+    TLSConfig:
+      type: object
+      required: [cert_file, key_file]
+      properties:
+        ca_file:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/RawFile'
+          nullable: true
+          description: CA certificate. If absent, system roots are used.
+        cert_file:
+          $ref: '#/components/schemas/RawFile'
+        key_file:
+          $ref: '#/components/schemas/RawFile'
+
+    # Wire format (serde `#[serde(tag = "type", content = "value")]`):
+    #   { "type": "Path",     "value": "/etc/certs/ca.pem" }
+    #   { "type": "Contents", "value": <base64 bytes> }
+    RawFile:
+      oneOf:
+        - $ref: '#/components/schemas/RawFilePath'
+        - $ref: '#/components/schemas/RawFileContents'
+      discriminator:
+        propertyName: type
+        mapping:
+          Path:     '#/components/schemas/RawFilePath'
+          Contents: '#/components/schemas/RawFileContents'
+
+    RawFilePath:
+      type: object
+      required: [type, value]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [Path]
+        value:
+          type: string
+          description: Absolute or relative path to the file on disk.
+
+    RawFileContents:
+      type: object
+      required: [type, value]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [Contents]
+        value:
+          type: string
+          format: byte
+          description: Raw file contents (base64-encoded in JSON/YAML).
+
+    # ---------------------------------------------------------------
+    # Rule
+    # ---------------------------------------------------------------
+    Rule:
+      type: object
+      required: [target, selector, actions]
+      properties:
+        target:
+          $ref: '#/components/schemas/Target'
+        selector:
+          $ref: '#/components/schemas/Selector'
+        actions:
+          $ref: '#/components/schemas/Actions'
+
+    Target:
+      type: string
+      enum: [Request, Response]
+      description: Whether this rule matches against the HTTP request or the response.
+
+    # ---------------------------------------------------------------
+    # Selector — predicates against a request or response
+    # All fields are AND-ed; absent fields mean "don't check".
+    # ---------------------------------------------------------------
+    Selector:
+      type: object
+      properties:
+        port:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 65535
+          nullable: true
+          description: Match only when the original-dst port equals this.
+        path:
+          type: string
+          nullable: true
+          description: |
+            Wildcard glob against the request URI path. Syntax is the
+            `wildmatch` crate's flavor: `?` matches one char, `*`
+            matches zero-or-more chars. Case-sensitive.
+        method:
+          type: string
+          nullable: true
+          description: HTTP method (GET / POST / …).
+        code:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          nullable: true
+          description: Match only when the response status equals this. Ignored on Request rules.
+        request_headers:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+          description: Match only when every (name, value) pair appears in the request headers.
+        response_headers:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+          description: Match only when every (name, value) pair appears in the response headers. Ignored on Request rules.
+
+    # ---------------------------------------------------------------
+    # Actions — what to do when a rule matches
+    # Multiple actions can fire on one match; they apply in this order:
+    # abort > delay > replace > patch.
+    # ---------------------------------------------------------------
+    Actions:
+      type: object
+      properties:
+        abort:
+          type: boolean
+          nullable: true
+          description: If true, terminate the request/response with a 502.
+        delay:
+          type: string
+          nullable: true
+          description: |
+            Wait this long before continuing. Format is the `humantime`
+            crate's flavor: `"100ms"`, `"3s"`, `"1m30s"`, etc.
+        replace:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/ReplaceAction'
+          nullable: true
+        patch:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/PatchAction'
+          nullable: true
+
+    # ---------------------------------------------------------------
+    # Replace — set fields wholesale
+    # ---------------------------------------------------------------
+    ReplaceAction:
+      type: object
+      properties:
+        path:
+          type: string
+          nullable: true
+          description: Replace request path. Ignored on Response rules.
+        method:
+          type: string
+          nullable: true
+          description: Replace request method. Ignored on Response rules.
+        code:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+          nullable: true
+          description: Replace response status code. Ignored on Request rules.
+        body:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/ReplaceBody'
+          nullable: true
+        queries:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+          description: Replace request query parameters with this map. Ignored on Response rules.
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+          description: Replace (set) request/response header values.
+
+    ReplaceBody:
+      type: object
+      required: [contents]
+      properties:
+        contents:
+          $ref: '#/components/schemas/ReplaceBodyContents'
+
+    # Wire format (serde `#[serde(tag = "type", content = "value")]`):
+    #   { "type": "TEXT",   "value": "<literal string>" }
+    #   { "type": "BASE64", "value": "<base64-encoded bytes>" }
+    ReplaceBodyContents:
+      oneOf:
+        - $ref: '#/components/schemas/ReplaceBodyContentsText'
+        - $ref: '#/components/schemas/ReplaceBodyContentsBase64'
+      discriminator:
+        propertyName: type
+        mapping:
+          TEXT:   '#/components/schemas/ReplaceBodyContentsText'
+          BASE64: '#/components/schemas/ReplaceBodyContentsBase64'
+
+    ReplaceBodyContentsText:
+      type: object
+      required: [type, value]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [TEXT]
+        value:
+          type: string
+          description: Literal replacement body.
+
+    ReplaceBodyContentsBase64:
+      type: object
+      required: [type, value]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [BASE64]
+        value:
+          type: string
+          description: Base64-encoded replacement body (decoded by the proxy at apply time).
+
+    # ---------------------------------------------------------------
+    # Patch — additive / merging modifications
+    # ---------------------------------------------------------------
+    PatchAction:
+      type: object
+      properties:
+        body:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/PatchBody'
+          nullable: true
+        queries:
+          type: array
+          nullable: true
+          description: |
+            Query parameters to append. Each entry is a `[key, value]`
+            pair; duplicate keys are intentionally allowed (e.g.
+            `foo=1&foo=2`), which is why this is an array of pairs
+            rather than a map.
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: string
+        headers:
+          type: array
+          nullable: true
+          description: |
+            Headers to append. Each entry is a `[name, value]` pair;
+            duplicate names are allowed for headers like Cookie.
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: string
+
+    PatchBody:
+      type: object
+      required: [contents]
+      properties:
+        contents:
+          $ref: '#/components/schemas/PatchBodyContents'
+
+    # Wire format (serde `#[serde(tag = "type", content = "value")]`):
+    #   { "type": "JSON", "value": "<json patch object as a string>" }
+    PatchBodyContents:
+      oneOf:
+        - $ref: '#/components/schemas/PatchBodyContentsJson'
+      discriminator:
+        propertyName: type
+        mapping:
+          JSON: '#/components/schemas/PatchBodyContentsJson'
+
+    PatchBodyContentsJson:
+      type: object
+      required: [type, value]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [JSON]
+        value:
+          type: string
+          description: |
+            JSON value (as a string). The proxy parses this and merges
+            it into the request/response body using RFC 7396 JSON
+            Merge Patch semantics.
