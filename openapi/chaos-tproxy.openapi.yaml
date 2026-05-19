@@ -15,10 +15,37 @@ servers:
 
 components:
   schemas:
+    ContainerRuntime:
+      type: string
+      enum: [docker, containerd, crio]
+      description: Container runtime to use for resolving the injection target.
+
+    InjectionTarget:
+      type: object
+      description: Identifies the container to inject chaos into.
+      required: [runtime, container]
+      properties:
+        runtime:
+          $ref: '#/components/schemas/ContainerRuntime'
+        container:
+          type: string
+          description: |
+            Container name or ID. For Docker, both the full ID and the
+            human-readable name (e.g. "my-app") are accepted.
+
     ChaosTproxyConfig:
       type: object
       description: Top-level config for chaos-tproxy.
       properties:
+        target:
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/InjectionTarget'
+          nullable: true
+          description: |
+            Identifies the container to inject into. When set, the controller
+            resolves the container's network namespace via the specified runtime
+            before applying chaos rules. Omit when netns is managed externally.
         proxy_ports:
           type: array
           nullable: true

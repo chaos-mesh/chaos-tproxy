@@ -211,6 +211,18 @@ impl ::std::default::Default for Actions {
 ///        "null"
 ///      ]
 ///    },
+///    "target": {
+///      "description": "Identifies the container to inject into. When set, the controller\nresolves the container's network namespace via the specified runtime\nbefore applying chaos rules. Omit when netns is managed externally.\n",
+///      "type": [
+///        "object",
+///        "null"
+///      ],
+///      "allOf": [
+///        {
+///          "$ref": "#/components/schemas/InjectionTarget"
+///        }
+///      ]
+///    },
 ///    "tls": {
 ///      "description": "TLS configuration for the proxy.",
 ///      "type": [
@@ -261,6 +273,12 @@ forward traffic and avoid redirect loops.
     ///Deprecated.
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub safe_mode: ::std::option::Option<bool>,
+    /**Identifies the container to inject into. When set, the controller
+resolves the container's network namespace via the specified runtime
+before applying chaos rules. Omit when netns is managed externally.
+*/
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub target: ::std::option::Option<InjectionTarget>,
     ///TLS configuration for the proxy.
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub tls: ::std::option::Option<TlsConfig>,
@@ -277,9 +295,124 @@ impl ::std::default::Default for ChaosTproxyConfig {
             route_table: Default::default(),
             rules: defaults::chaos_tproxy_config_rules(),
             safe_mode: Default::default(),
+            target: Default::default(),
             tls: Default::default(),
         }
     }
+}
+///Container runtime to use for resolving the injection target.
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "description": "Container runtime to use for resolving the injection target.",
+///  "type": "string",
+///  "enum": [
+///    "docker",
+///    "containerd",
+///    "crio"
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(
+    ::serde::Deserialize,
+    ::serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd
+)]
+pub enum ContainerRuntime {
+    #[serde(rename = "docker")]
+    Docker,
+    #[serde(rename = "containerd")]
+    Containerd,
+    #[serde(rename = "crio")]
+    Crio,
+}
+impl ::std::fmt::Display for ContainerRuntime {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Docker => f.write_str("docker"),
+            Self::Containerd => f.write_str("containerd"),
+            Self::Crio => f.write_str("crio"),
+        }
+    }
+}
+impl ::std::str::FromStr for ContainerRuntime {
+    type Err = self::error::ConversionError;
+    fn from_str(
+        value: &str,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "docker" => Ok(Self::Docker),
+            "containerd" => Ok(Self::Containerd),
+            "crio" => Ok(Self::Crio),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for ContainerRuntime {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &str,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for ContainerRuntime {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ContainerRuntime {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+///Identifies the container to inject chaos into.
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "description": "Identifies the container to inject chaos into.",
+///  "type": "object",
+///  "required": [
+///    "container",
+///    "runtime"
+///  ],
+///  "properties": {
+///    "container": {
+///      "description": "Container name or ID. For Docker, both the full ID and the\nhuman-readable name (e.g. \"my-app\") are accepted.\n",
+///      "type": "string"
+///    },
+///    "runtime": {
+///      "$ref": "#/components/schemas/ContainerRuntime"
+///    }
+///  }
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct InjectionTarget {
+    /**Container name or ID. For Docker, both the full ID and the
+human-readable name (e.g. "my-app") are accepted.
+*/
+    pub container: ::std::string::String,
+    pub runtime: ContainerRuntime,
 }
 ///`PatchAction`
 ///

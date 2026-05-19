@@ -10,6 +10,27 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for ContainerRuntime.
+const (
+	Containerd ContainerRuntime = "containerd"
+	Crio       ContainerRuntime = "crio"
+	Docker     ContainerRuntime = "docker"
+)
+
+// Valid indicates whether the value is a known member of the ContainerRuntime enum.
+func (e ContainerRuntime) Valid() bool {
+	switch e {
+	case Containerd:
+		return true
+	case Crio:
+		return true
+	case Docker:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PatchBodyContentsJsonType.
 const (
 	JSON PatchBodyContentsJsonType = "JSON"
@@ -149,8 +170,26 @@ type ChaosTproxyConfig struct {
 	// SafeMode Deprecated.
 	SafeMode *bool `json:"safe_mode,omitempty" yaml:"safe_mode,omitempty"`
 
+	// Target Identifies the container to inject into. When set, the controller
+	// resolves the container's network namespace via the specified runtime
+	// before applying chaos rules. Omit when netns is managed externally.
+	Target *InjectionTarget `json:"target,omitempty" yaml:"target,omitempty"`
+
 	// Tls TLS configuration for the proxy.
 	Tls *TLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
+}
+
+// ContainerRuntime Container runtime to use for resolving the injection target.
+type ContainerRuntime string
+
+// InjectionTarget Identifies the container to inject chaos into.
+type InjectionTarget struct {
+	// Container Container name or ID. For Docker, both the full ID and the
+	// human-readable name (e.g. "my-app") are accepted.
+	Container string `json:"container" yaml:"container"`
+
+	// Runtime Container runtime to use for resolving the injection target.
+	Runtime ContainerRuntime `json:"runtime" yaml:"runtime"`
 }
 
 // PatchAction defines model for PatchAction.
