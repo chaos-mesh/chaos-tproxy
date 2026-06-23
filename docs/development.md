@@ -38,11 +38,18 @@ Each feature CLI MUST:
 ## Test-First Imperative
 
 This is NON-NEGOTIABLE: All implementation MUST follow strict Test-Driven Development.
+The first TDD step is to determine the interface contract the tests will
+exercise. Before writing tests, define the target package API and, when
+applicable, the CLI command contract: names, inputs, outputs, errors, and
+behavior boundaries. Tests MUST be written against this agreed interface, not
+against an implementation invented during the test-writing step.
+
 No implementation code shall be written before:
 
-1. Unit tests or integration tests are written
-2. Tests are validated and approved by the user
-3. Tests are confirmed to FAIL (Red phase)
+1. The interface contract is determined and approved by the user
+2. Unit tests or integration tests are written against that interface
+3. Tests are validated and approved by the user
+4. Tests are confirmed to FAIL (Red phase)
 
 Integration tests MUST live under `tests/integration/<package>/` and use the
 Ginkgo framework. For example, integration tests for `pkg/runtime` MUST live
