@@ -18,13 +18,13 @@ func withNetNS(nsPath string, fn func() error) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "ptp.withNetNS get original netns")
 	}
-	defer original.Close()
+	defer func() { _ = original.Close() }()
 
 	target, err := netns.GetFromPath(nsPath)
 	if err != nil {
 		return errors.Wrapf(err, "ptp.withNetNS open %s", nsPath)
 	}
-	defer target.Close()
+	defer func() { _ = target.Close() }()
 
 	if err := netns.Set(target); err != nil {
 		return errors.Wrapf(err, "ptp.withNetNS enter %s", nsPath)

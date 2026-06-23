@@ -121,7 +121,7 @@ func createContainerPeer(plan *addPlan) error {
 	if err != nil {
 		return errors.Wrapf(err, "ptp.createContainerPeer open sandbox netns %s", plan.sandboxNetNS)
 	}
-	defer sandboxNS.Close()
+	defer func() { _ = sandboxNS.Close() }()
 
 	created := false
 	if err := withNetNS(plan.containerNetNS, func() error {
