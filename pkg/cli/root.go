@@ -38,6 +38,7 @@ func NewRootCommand(streams IOStreams) *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&opts.console, "console", "l", false, "use console log output")
 	cmd.PersistentFlags().CountVarP(&opts.verbose, "verbose", "v", "verbose level (-v, -vv, -vvv)")
 	cmd.AddCommand(newRuntimeCommand(streams))
+	cmd.AddCommand(newPTPCommand(streams))
 	return cmd
 }
 

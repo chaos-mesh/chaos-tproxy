@@ -24,11 +24,15 @@ chaos-tproxy-run: chaos-tproxy-build ## 运行 chaos-tproxy
 
 ##@ 测试
 .PHONY: test-integration
-test-integration: test-runtime ## 运行全部集成测试
+test-integration: test-runtime test-ptp ## 运行全部集成测试
 
 .PHONY: test-runtime
 test-runtime: ## 运行 pkg/runtime 集成测试
 	$(GINKGO) -r ./tests/integration/runtime
+
+.PHONY: test-ptp
+test-ptp: ## 运行 pkg/net/ptp 集成测试
+	$(GINKGO) -r ./tests/integration/ptp
 
 ##@ 构建
 .PHONY: chaos-tproxy-build
