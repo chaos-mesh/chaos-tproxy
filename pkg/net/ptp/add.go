@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 
+	"github.com/chaos-mesh/chaos-tproxy/pkg/net/netutil"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -86,7 +87,7 @@ func buildAddPlan(containerNetNS, sandboxNetNS, sandboxIfName string, opts ...Op
 		force:             o.force,
 	}
 
-	if err := withNetNS(containerNetNS, func() error {
+	if err := netutil.WithNetNS(context.Background(), containerNetNS, func() error {
 		link, err := netlink.LinkByName(containerIfName)
 		if err != nil {
 			return errors.Wrapf(err, "ptp.buildAddPlan look up container interface %s", containerIfName)
@@ -105,9 +106,9 @@ func buildAddPlan(containerNetNS, sandboxNetNS, sandboxIfName string, opts ...Op
 }
 
 func ensureSandboxPeerAbsent(sandboxNetNS, sandboxIfName string) error {
-	return withNetNS(sandboxNetNS, func() error {
+	return netutil.WithNetNS(context.Background(), sandboxNetNS, func() error {
 		if _, err := netlink.LinkByName(sandboxIfName); err != nil {
-			if isLinkNotFound(err) {
+			if netutil.IsLinkNotFound(err) {
 				return nil
 			}
 			return errors.Wrapf(err, "ptp.ensureSandboxPeerAbsent look up sandbox link %s", sandboxIfName)
@@ -124,7 +125,7 @@ func createContainerPeer(plan *addPlan) error {
 	defer func() { _ = sandboxNS.Close() }()
 
 	created := false
-	if err := withNetNS(plan.containerNetNS, func() error {
+	if err := netutil.WithNetNS(context.Background(), plan.containerNetNS, func() error {
 		veth := &netlink.Veth{
 			LinkAttrs: netlink.LinkAttrs{
 				Name:   plan.containerLinkName,
@@ -160,7 +161,7 @@ func createContainerPeer(plan *addPlan) error {
 }
 
 func configureSandboxPeer(plan *addPlan) error {
-	return withNetNS(plan.sandboxNetNS, func() error {
+	return netutil.WithNetNS(context.Background(), plan.sandboxNetNS, func() error {
 		link, err := netlink.LinkByName(plan.sandboxIfName)
 		if err != nil {
 			return errors.Wrapf(err, "ptp.configureSandboxPeer look up sandbox link %s", plan.sandboxIfName)

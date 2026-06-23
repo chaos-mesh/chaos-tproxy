@@ -39,6 +39,7 @@ func NewRootCommand(streams IOStreams) *cobra.Command {
 	cmd.PersistentFlags().CountVarP(&opts.verbose, "verbose", "v", "verbose level (-v, -vv, -vvv)")
 	cmd.AddCommand(newRuntimeCommand(streams))
 	cmd.AddCommand(newPTPCommand(streams))
+	cmd.AddCommand(newBPFCommand(streams))
 	return cmd
 }
 

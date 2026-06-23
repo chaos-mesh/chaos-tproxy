@@ -4,35 +4,18 @@ import (
 	"net"
 	"net/netip"
 
+	"github.com/chaos-mesh/chaos-tproxy/pkg/net/netutil"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )
 
 func linkGateway(link netlink.Link) (netip.Addr, error) {
-	if addr, err := firstLinkAddr(link, netlink.FAMILY_V4); err != nil {
+	if addr, err := netutil.FirstGlobalUnicastIPv4(link); err != nil {
 		return netip.Addr{}, err
 	} else if addr.IsValid() {
 		return addr, nil
 	}
 	return netip.Addr{}, errors.Wrapf(ErrInvalidConfig, "ptp.linkGateway no IPv4 address on %s", link.Attrs().Name)
-}
-
-func firstLinkAddr(link netlink.Link, family int) (netip.Addr, error) {
-	addrs, err := netlink.AddrList(link, family)
-	if err != nil {
-		return netip.Addr{}, errors.Wrapf(err, "ptp.firstLinkAddr list addresses on %s", link.Attrs().Name)
-	}
-	for _, addr := range addrs {
-		parsed, ok := netip.AddrFromSlice(addr.IP)
-		if !ok {
-			continue
-		}
-		parsed = parsed.Unmap()
-		if parsed.IsGlobalUnicast() {
-			return parsed, nil
-		}
-	}
-	return netip.Addr{}, nil
 }
 
 func replaceLinkAddr(link netlink.Link, prefix netip.Prefix) error {

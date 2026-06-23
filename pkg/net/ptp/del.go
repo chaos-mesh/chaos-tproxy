@@ -3,6 +3,7 @@ package ptp
 import (
 	"context"
 
+	"github.com/chaos-mesh/chaos-tproxy/pkg/net/netutil"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )
@@ -15,10 +16,10 @@ func (c *linkPeerToPeer) Del(ctx context.Context, containerNetNS, sandboxNetNS, 
 		return err
 	}
 
-	err := withNetNS(sandboxNetNS, func() error {
+	err := netutil.WithNetNS(ctx, sandboxNetNS, func() error {
 		link, err := netlink.LinkByName(sandboxIfName)
 		if err != nil {
-			if isLinkNotFound(err) {
+			if netutil.IsLinkNotFound(err) {
 				return nil
 			}
 			return err
@@ -28,7 +29,7 @@ func (c *linkPeerToPeer) Del(ctx context.Context, containerNetNS, sandboxNetNS, 
 		}
 		return nil
 	})
-	if isNetNSNotFound(err) {
+	if netutil.IsNetNSNotFound(err) {
 		return nil
 	}
 	return err
