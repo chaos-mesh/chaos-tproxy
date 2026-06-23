@@ -19,6 +19,14 @@ Each feature package MUST:
 Every feature MUST expose its functionality through a command-line interface.
 The CLI is the supported operational entrypoint for users and automation.
 
+CLI entrypoint code MUST live under `pkg/cli`.
+
+The `pkg/cli` package is an application entry layer. It MAY depend on feature
+packages under `pkg/`, but feature packages MUST NOT depend on `pkg/cli`.
+In application code, `pkg/cli` MUST only be imported by the main package.
+Integration tests SHOULD exercise CLI behavior through the compiled command
+instead of importing `pkg/cli` directly.
+
 Each feature CLI MUST:
 
 - Accept text as input (via stdin, arguments, or files)
@@ -36,7 +44,24 @@ No implementation code shall be written before:
 2. Tests are validated and approved by the user
 3. Tests are confirmed to FAIL (Red phase)
 
-Integration tests MUST live under `tests/` and use the Ginkgo framework.
-They SHOULD be started through Makefile targets so local development and CI use
-the same entrypoints. Feature work is not complete until the relevant Makefile
-test target passes.
+Integration tests MUST live under `tests/integration/<package>/` and use the
+Ginkgo framework. For example, integration tests for `pkg/runtime` MUST live
+under `tests/integration/runtime/`.
+
+Package integration tests MUST directly import and exercise the corresponding
+`pkg/<package>` package. They MUST NOT invoke `cmd/chaos-tproxy` or depend on
+the compiled CLI binary for package behavior coverage. CLI behavior tests are a
+separate concern and should exercise the compiled command entrypoint.
+
+Helper functions for package integration tests MUST stay in the same
+`tests/integration/<package>/` package unless they are intentionally shared by
+multiple integration packages.
+
+Every package integration suite MUST have a Makefile target named
+`test-<package>` that runs that package's Ginkgo suite directly. For example,
+`pkg/runtime` MUST be tested through `make test-runtime`, which runs
+`$(GINKGO) -r ./tests/integration/runtime`.
+
+Package integration tests MUST be started through their `test-<package>`
+Makefile target so local development and CI use the same entrypoint. Feature
+work is not complete until the relevant `test-<package>` target passes.

@@ -14,18 +14,18 @@ const (
 type ContainerInfo struct {
 	// NetNS is the path to the container's network namespace, e.g.
 	// /var/run/docker/netns/<id>. Suitable for nsenter(1) / setns(2).
-	NetNS string
+	NetNS string `json:"netns"`
 
 	// PID is the container's init process PID on the host. Zero when unavailable.
-	PID uint32
+	PID uint32 `json:"pid"`
 
 	// CgroupPath is the absolute path to the container's cgroup on the host,
 	// e.g. /sys/fs/cgroup/system.slice/docker-<id>.scope (cgroup v2).
 	// Parsed from /proc/<pid>/cgroup — runtime-agnostic and v1/v2-safe.
-	CgroupPath string
+	CgroupPath string `json:"cgroupPath"`
 
 	// CgroupVersion is the cgroup hierarchy version used by this container.
-	CgroupVersion CgroupVersion
+	CgroupVersion CgroupVersion `json:"cgroupVersion"`
 }
 
 // RuntimeClient resolves container metadata needed to inject chaos into a target.
