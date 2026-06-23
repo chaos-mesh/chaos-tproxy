@@ -1,1 +1,0 @@
-{"rules": [{"target": "Request", "selector": {"path": "/src", "method": "GET"},"actions": {"abort": false}}]}

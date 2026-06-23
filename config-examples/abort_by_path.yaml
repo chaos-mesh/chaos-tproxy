@@ -1,8 +1,0 @@
-proxy_ports: [80, 8080, 30086] # proxy will do nothing if empty
-rules:
-  - target: Request
-    selector:
-      path: /src # match all path starts with "/example"
-      method: GET
-    actions:
-      abort: true
