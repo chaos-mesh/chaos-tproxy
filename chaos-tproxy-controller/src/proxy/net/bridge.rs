@@ -1,8 +1,7 @@
 use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
-use default_net;
-use default_net::Gateway;
+use default_net::{self, Gateway};
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use rtnetlink::packet::route::Nla;
@@ -18,6 +17,9 @@ pub struct NetEnv {
     pub netns: String,
     pub device: String,
     pub ip: String,
+    gateway_ip: String,
+    gateway_mac: String,
+    gateway_mac_available: bool,
 
     bridge1: String,
     bridge2: String,
@@ -54,6 +56,13 @@ impl NetEnv {
         let ip = get_ipv4(&device).unwrap();
 
         let mut routes = get_routes_noblock(handle).await.unwrap();
+        let (gateway_ip, gateway_mac, gateway_mac_available) = match try_get_default_gateway() {
+            Ok(gateway) => gateway_snapshot(gateway),
+            Err(error) => {
+                tracing::error!("failed to capture the default gateway: {}", error);
+                (String::new(), String::new(), false)
+            }
+        };
 
         routes.reverse();
 
@@ -61,6 +70,9 @@ impl NetEnv {
             netns,
             device: device.name,
             ip,
+            gateway_ip,
+            gateway_mac,
+            gateway_mac_available,
             bridge1,
             bridge2,
             veth1,
@@ -72,13 +84,14 @@ impl NetEnv {
     }
 
     pub async fn setenv_bridge(&self, handle: &mut Handle) -> Result<()> {
-        let Gateway {
-            mac_addr: gateway_mac,
-            ip_addr: gateway_ip,
-        } = try_get_default_gateway()?;
+        if self.gateway_ip.is_empty() {
+            return Err(anyhow!(
+                "default gateway was not available before proxy setup"
+            ));
+        }
 
-        let gateway_ip_s = gateway_ip.to_string();
-        let gateway_mac_s = gateway_mac.to_string();
+        let gateway_ip_s = self.gateway_ip.clone();
+        let gateway_mac_s = self.gateway_mac.clone();
 
         let save_dns = "cp /etc/resolv.conf /etc/resolv.conf.bak";
         let net: Ipv4Network = self
@@ -251,19 +264,15 @@ impl NetEnv {
                 tracing::error!("clear routes load_routes with error {}", e);
             });
 
-        let Gateway {
-            mac_addr: gateway_mac,
-            ip_addr: gateway_ip,
-        } = try_get_default_gateway()?;
-
-        if gateway_mac.octets().iter().all(|&i| i == 0) {
+        if !self.gateway_mac_available {
             return Ok(());
         }
 
-        let gateway_ip = gateway_ip.to_string();
-        let gateway_mac = gateway_mac.to_string();
-
-        let cmdvv = vec![arp_set(&gateway_ip, &gateway_mac, self.device.as_str())];
+        let cmdvv = vec![arp_set(
+            &self.gateway_ip,
+            &self.gateway_mac,
+            self.device.as_str(),
+        )];
         execute_all_with_log_error(cmdvv)?;
         Ok(())
     }
@@ -346,6 +355,14 @@ pub fn ip_route_add<'a>(target: &'a str, gateway_ip: &'a str, device: &'a str) -
     ]
 }
 
+fn gateway_snapshot(gateway: Gateway) -> (String, String, bool) {
+    (
+        gateway.ip_addr.to_string(),
+        gateway.mac_addr.to_string(),
+        gateway.mac_addr.octets().iter().any(|&octet| octet != 0),
+    )
+}
+
 pub fn try_get_default_gateway() -> Result<Gateway> {
     let mut count = 5;
     while count > 0 {
@@ -420,4 +437,35 @@ pub fn get_default_interface() -> Result<NetworkInterface> {
         }
     }
     Err(anyhow!("no valid interface"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+
+    use default_net::interface::MacAddr;
+
+    use super::{gateway_snapshot, Gateway};
+
+    #[test]
+    fn snapshot_gateway_for_recovery() {
+        let snapshot = gateway_snapshot(Gateway {
+            ip_addr: IpAddr::V4(Ipv4Addr::new(169, 254, 1, 1)),
+            mac_addr: MacAddr::new([2, 1, 2, 3, 4, 5]),
+        });
+
+        assert_eq!(snapshot.0, "169.254.1.1");
+        assert_eq!(snapshot.1, "02:01:02:03:04:05");
+        assert!(snapshot.2);
+    }
+
+    #[test]
+    fn marks_an_unknown_gateway_mac_unavailable() {
+        let snapshot = gateway_snapshot(Gateway {
+            ip_addr: IpAddr::V4(Ipv4Addr::new(169, 254, 1, 1)),
+            mac_addr: MacAddr::new([0; 6]),
+        });
+
+        assert!(!snapshot.2);
+    }
 }
