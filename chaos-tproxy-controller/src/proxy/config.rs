@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 use std::net::Ipv4Addr;
 
+use crate::proxy::net::bridge::get_default_interface;
 use anyhow::{anyhow, Error};
+use chaos_tproxy_proxy::raw_config::{RawConfig as ProxyRawConfig, Role};
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::IpNetwork;
-use chaos_tproxy_proxy::raw_config::{RawConfig as ProxyRawConfig, Role};
-use crate::proxy::net::bridge::get_default_interface;
 
 use crate::raw_config::{RawConfig, RawRole};
 
@@ -27,18 +27,26 @@ impl Config {
         raw: RawConfig,
         find_interface: impl FnOnce() -> Result<NetworkInterface, Error>,
     ) -> Result<Self, Error> {
-        let ipv4s: Vec<Ipv4Addr> = find_interface()?
-            .ips
-            .iter()
-            .filter_map(|ips| match ips {
-                IpNetwork::V4(ipv4) => Some(ipv4),
-                _ => None,
-            })
-            .map(|ipv4| ipv4.ip())
-            .collect();
-        if ipv4s.is_empty() {
-            return Err(anyhow!("no default ipv4"));
-        }
+        let role = match raw.role {
+            Some(role) if raw.proxy_ports.is_some() => {
+                let ipv4s: Vec<Ipv4Addr> = find_interface()?
+                    .ips
+                    .iter()
+                    .filter_map(|ip| match ip {
+                        IpNetwork::V4(ipv4) => Some(ipv4.ip()),
+                        _ => None,
+                    })
+                    .collect();
+                if ipv4s.is_empty() {
+                    return Err(anyhow!("no default ipv4"));
+                }
+                Some(match role {
+                    RawRole::Client => Role::Client(ipv4s),
+                    RawRole::Server => Role::Server(ipv4s),
+                })
+            }
+            _ => None,
+        };
         Ok(Config {
             proxy_config: ProxyRawConfig {
                 proxy_ports: raw.proxy_ports.clone().map(|c| {
@@ -53,12 +61,7 @@ impl Config {
                 },
                 listen_port: get_free_port(raw.proxy_ports.clone())?,
                 rules: raw.rules.map_or(vec![], |rules| rules),
-                role: raw.role.and_then(|role| {
-                    Option::from(match role {
-                        RawRole::Client => Role::Client(ipv4s),
-                        RawRole::Server => Role::Server(ipv4s),
-                    })
-                }),
+                role,
                 tls: raw.tls,
             },
         })
@@ -173,14 +176,17 @@ mod tests {
     fn config_without_role_accepts_ipv6_only_interface() {
         let raw = serde_json::from_str(r#"{"proxy_ports":[8080]}"#).unwrap();
         let config = Config::with_interface(raw, || Ok(interface(&["fe80::1/64"]))).unwrap();
-        assert_eq!(config.proxy_config, ProxyRawConfig {
-            proxy_ports: Some("8080".into()),
-            listen_port: 1025,
-            safe_mode: false,
-            rules: vec![],
-            role: None,
-            tls: None,
-        });
+        assert_eq!(
+            config.proxy_config,
+            ProxyRawConfig {
+                proxy_ports: Some("8080".into()),
+                listen_port: 1025,
+                safe_mode: false,
+                rules: vec![],
+                role: None,
+                tls: None,
+            }
+        );
     }
 
     #[test]
@@ -207,9 +213,16 @@ mod tests {
     fn active_roles_resolve_ipv4_addresses() {
         use chaos_tproxy_proxy::raw_config::Role;
         let ip = "192.0.2.4".parse().unwrap();
-        for (role, expected) in [("Client", Role::Client(vec![ip])), ("Server", Role::Server(vec![ip]))] {
-            let raw = serde_json::from_value(serde_json::json!({"proxy_ports": [8080], "role": role})).unwrap();
-            let config = Config::with_interface(raw, || Ok(interface(&["fe80::1/64", "192.0.2.4/24"]))).unwrap();
+        for (role, expected) in [
+            ("Client", Role::Client(vec![ip])),
+            ("Server", Role::Server(vec![ip])),
+        ] {
+            let raw =
+                serde_json::from_value(serde_json::json!({"proxy_ports": [8080], "role": role}))
+                    .unwrap();
+            let config =
+                Config::with_interface(raw, || Ok(interface(&["fe80::1/64", "192.0.2.4/24"])))
+                    .unwrap();
             assert_eq!(config.proxy_config.role, Some(expected));
             assert_eq!(config.proxy_config.proxy_ports, Some("8080".into()));
         }
@@ -221,5 +234,4 @@ mod tests {
         let err = Config::with_interface(raw, || Ok(interface(&["fe80::1/64"]))).unwrap_err();
         assert_eq!(err.to_string(), "no default ipv4");
     }
-
 }
