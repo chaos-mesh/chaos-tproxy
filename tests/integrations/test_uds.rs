@@ -1,31 +1,32 @@
 use std::env;
+use std::time::Duration;
 
-use chaos_tproxy_controller_lib::proxy::uds_server::UdsDataServer;
-use chaos_tproxy_proxy::uds_client::UdsDataClient;
-use tokio::time::Duration;
+use chaos_tproxy_proxy::bootstrap::BootstrapServer;
+use chaos_tproxy_proxy::proxy_main;
+use chaos_tproxy_proxy::raw_config::{RawConfig, RawFile, TLSRawConfig};
 use uuid::Uuid;
 
 #[tokio::test]
-async fn test_uds() {
-    let uds_path = env::temp_dir()
+async fn test_uds_reports_child_config_failure() {
+    let path = env::temp_dir()
         .join(Uuid::new_v4().to_string())
         .with_extension("sock");
-    let data = Uuid::new_v4().to_string();
-
-    let uds_server = UdsDataServer::new(data.clone(), uds_path.clone());
-    let listener = uds_server.bind().unwrap();
-    let server = uds_server.clone();
-
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::new(5, 0)).await;
-        let _ = server
-            .listen(listener)
-            .await
-            .map_err(|e| tracing::error!("{:?}", e));
-    });
-
-    let client = UdsDataClient::new(uds_path.clone());
-    let mut buf: Vec<u8> = vec![];
-    let data_o: String = client.read_into(&mut buf).await.unwrap();
-    assert_eq!(data, data_o);
+    let config = RawConfig {
+        tls: Some(TLSRawConfig {
+            cert_file: RawFile::Path(path.with_extension("missing")),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let server = BootstrapServer::bind(path.clone(), &config).unwrap();
+    let child = tokio::spawn(proxy_main(path.clone()));
+    let error = server.wait_ready(Duration::from_secs(2)).await.unwrap_err();
+    assert!(
+        error.to_string().contains("No such file or directory"),
+        "{:#}",
+        error
+    );
+    assert!(child.await.unwrap().is_err());
+    server.clear().unwrap();
+    assert!(!path.exists());
 }

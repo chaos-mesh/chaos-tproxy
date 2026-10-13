@@ -4,7 +4,7 @@ chaos-tproxy injects faults into HTTP requests and responses without changing ap
 
 ## Prepare a Linux environment
 
-Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller changes bridges, interface addresses, routes, resolver files, and firewall rules in its network namespace. Cleanup currently flushes that namespace's entire ebtables NAT table. Avoid running it in your host network namespace.
+Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller changes bridges, interface addresses, routes, resolver files, and firewall rules in its network namespace. Cleanup removes its own outer ebtables NAT rule and restores routes displaced by setup. Current routes take precedence over saved routes. Avoid running it in your host network namespace.
 
 The runtime needs these commands on `PATH`.
 
@@ -163,7 +163,7 @@ Content-Length: 106
 {"proxy_ports":[8080],"rules":[{"target":"Request","selector":{"method":"GET"},"actions":{"delay":"5s"}}]}
 ```
 
-A successful controller reload returns `HTTP/1.1 200 OK`. Configuration parse errors return 400. Other HTTP methods return 405. A 200 response does not confirm that the proxy subprocess has finished TLS validation or started listening.
+A successful reload returns `HTTP/1.1 200 OK` after the proxy subprocess validates its configuration, including TLS files, and binds its listener. Configuration parse errors return 400. Startup or cleanup failures return 500 with an error body. Startup waits at most ten seconds for readiness, then stops the child and rolls back networking on failure. Other HTTP methods return 405.
 
 To stop interception while keeping the interactive controller alive, send this request. The body is two bytes.
 
@@ -197,7 +197,7 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo +nightly fmt --all -- --check
 ```
 
-The focused proxy, controller configuration, and interface-selection tests run during `make image`. The ignored HTTP content-length test needs the Python fixture on port 8080. Start the fixture from `tests/` in one terminal.
+The proxy and controller library tests run during `make image`. The ignored HTTP content-length test needs the Python fixture on port 8080. Start the fixture from `tests/` in one terminal.
 
 ```sh
 cd tests
@@ -213,6 +213,15 @@ cargo test --locked --release --test integration -- --ignored test_http_action::
 
 The ignored route test deletes routes. Run it only in a disposable Linux environment. For the Go package, install libpcap headers and run `go test ./...` on Linux with packet capture permissions. Its test uses the `lo` interface.
 
-These checks do not verify transparent interception or network restoration. Verify those flows separately in the prepared Linux environment.
+The Cargo checks do not verify transparent interception or network restoration. Run the lifecycle suite in disposable Linux containers through Docker.
+
+```sh
+make image
+docker build -f tests/integrations/Dockerfile.lifecycle \
+  --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
+sh tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test
+```
+
+The suite creates a dedicated Docker network and HTTP backend, then uses a separate privileged container for each case. It checks startup failures, normal and safe-mode stop, SIGINT and SIGTERM, preservation of unrelated NAT rules and route changes, and HTTP connectivity before, during, and after interception. It prints the directory containing per-case logs and removes its containers and network on exit. It does not use the host network namespace.
 
 `make build` produces `target/debug/chaos-tproxy`. To run that build, use `sudo ./target/debug/chaos-tproxy -v example.yaml`. The current `make run` target points to `target/debug/tproxy`, which Cargo does not produce.

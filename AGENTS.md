@@ -1,9 +1,15 @@
 # Working on chaos-tproxy
 
+## Commits
+
+Every commit must include a `Signed-off-by` trailer that matches the author's name and email. Use `git commit --signoff` for new commits. To add a missing sign-off to the latest commit, use `git commit --amend --no-edit --signoff`.
+
+Preserve existing sign-offs when rebasing. Before pushing a PR, verify that every commit in the PR has the required sign-off so the DCO check can pass.
+
 ## Project map
 
 - `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and serves interactive configuration over standard input and output.
-- `chaos-tproxy-proxy/` handles transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket configuration client.
+- `chaos-tproxy-proxy/` handles transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket startup exchange.
 - `tests/` contains Rust integration tests and a Python HTTP fixture.
 - `podnetmock/` is a separate Go package for UDP probes and packet capture. Cargo does not test it.
 - `config-examples/` contains user configuration examples.
@@ -37,7 +43,7 @@ cargo test --locked -p chaos-tproxy-controller --lib proxy::config::tests
 cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests
 ```
 
-`make image` runs those focused tests and builds release binaries in Docker. `make release` copies the binary to `./tproxy`. A native Cargo build produces `target/debug/chaos-tproxy`. The current `make run` target expects `target/debug/tproxy`, so invoke the Cargo binary directly.
+`make image` runs all nonignored proxy and controller library tests and builds release binaries in Docker. `make release` copies the binary to `./tproxy`. A native Cargo build produces `target/debug/chaos-tproxy`. The current `make run` target expects `target/debug/tproxy`, so invoke the Cargo binary directly.
 
 For Go changes, install the libpcap headers and run `go test ./...` on Linux with packet capture permissions. `TestMonitor` uses the Linux `lo` interface. The Rust CI workflow does not run the Go tests.
 
@@ -62,6 +68,8 @@ Stop the fixture afterward. `tests/exec.py` starts it but does not stop it or pr
 
 ## Network verification
 
-Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It changes addresses, bridges, routes, firewall rules, and resolver files in its network namespace. Cleanup currently flushes the entire ebtables NAT table there. Do not test interception in the host network namespace.
+Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It changes addresses, bridges, routes, firewall rules, and resolver files in its network namespace. Cleanup removes only the run's outer NAT rule and restores routes displaced by setup without replacing current routes. Do not test interception in the host network namespace.
+
+`tests/integrations/run_lifecycle.sh` runs the lifecycle suite in separate disposable privileged containers with a dedicated network and HTTP backend. Build its runtime image using `tests/integrations/Dockerfile.lifecycle` after `make image`. See README for the commands. The Python suite requires Linux root and `CHAOS_TPROXY_TEST_ISOLATED=1` to prevent accidental direct execution.
 
 For lifecycle changes, verify apply, reload, failed startup, stop, and restoration on that Linux environment. For HTTP changes, send real requests through the proxy. Library tests and Docker builds do not verify network interception or restoration. Report the checks actually run and any environment limits.

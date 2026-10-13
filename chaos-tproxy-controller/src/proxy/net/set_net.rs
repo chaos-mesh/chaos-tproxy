@@ -1,6 +1,4 @@
-use std::option::Option::Some;
-
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use libarp::interfaces::Interface;
 use rtnetlink::Handle;
 
@@ -12,7 +10,7 @@ use crate::proxy::net::ping::try_ping;
 #[cfg(target_os = "linux")]
 pub async fn set_net(
     handle: &mut Handle,
-    net_env: &NetEnv,
+    net_env: &mut NetEnv,
     proxy_ports: Option<String>,
     listen_port: u16,
     safe: bool,
@@ -20,25 +18,27 @@ pub async fn set_net(
     net_env.setenv_bridge(handle).await?;
     let port = listen_port.to_string();
     let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
-    let device_interface = get_interface(net_env.veth4.clone()).unwrap();
-    let device_mac = device_interface.mac.unwrap().to_string();
+    let device_interface = get_interface(net_env.veth4.clone())?;
+    let device_mac = device_interface
+        .mac
+        .context("proxy veth has no MAC address")?
+        .to_string();
 
-    let arp_interface = Interface::new_by_name(net_env.veth4.clone().as_str()).unwrap();
+    let arp_interface = Interface::new_by_name(net_env.veth4.clone().as_str())
+        .context("proxy veth not found for ARP")?;
     gratuitous_arp(
         arp_interface.clone(),
-        arp_interface.get_ip().unwrap(),
+        arp_interface
+            .get_ip()
+            .context("proxy veth has no IPv4 address")?,
         arp_interface.get_mac(),
     );
 
-    if let Some(ref proxy_ports) = proxy_ports {
-        execute_all(set_iptables(net_env, Some(proxy_ports), &port, &device_mac))?;
-    } else {
-        execute_all(set_iptables(net_env, None, &port, &device_mac))?;
-    }
-
+    execute_all(set_iptables(&net_env.netns, proxy_ports.as_deref(), &port))?;
     if safe {
-        execute_all(set_iptables_safe(net_env, &device_mac))?;
+        execute_all(set_iptables_safe(&net_env.netns, &net_env.ip))?;
     }
+    net_env.install_outer_nat(device_mac)?;
     let _ = execute(bash_c(restore_dns));
 
     let gateway = default_net::get_default_gateway().map_err(|e| anyhow!(e))?;
