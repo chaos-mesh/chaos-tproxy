@@ -30,6 +30,8 @@ WORKDIR /tproxy-build
 RUN --mount=type=cache,id=tproxy-target-${TARGETARCH},target=/tproxy-build/target \
     --mount=type=cache,target=/root/.cargo/registry \
     cargo test --locked -p chaos-tproxy-proxy --lib && \
+    cargo test --locked -p chaos-tproxy-controller --lib proxy::config::tests && \
+    cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests && \
     cargo build --locked --release --all
 
 RUN --mount=type=cache,id=tproxy-target-${TARGETARCH},target=/tproxy-build/target \
