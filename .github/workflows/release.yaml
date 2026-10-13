@@ -20,18 +20,23 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Create draft release
+      - name: Check existing release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if is_draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft'); then
-            if [ "$is_draft" != true ]; then
-              echo "Refusing to modify published release $GITHUB_REF_NAME" >&2
-              exit 1
-            fi
-          else
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Release $GITHUB_REF_NAME" --draft --verify-tag
+          release_pages=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100")
+          is_published=$(jq --arg tag "$GITHUB_REF_NAME" 'any(.[][]; .tag_name == $tag and .draft == false)' <<< "$release_pages")
+          if [ "$is_published" = true ]; then
+            echo "Refusing to modify published release $GITHUB_REF_NAME" >&2
+            exit 1
           fi
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: true
+          prerelease: false
   upload_release:
     name: Upload Release (${{ matrix.arch }})
     needs: create_release
@@ -59,13 +64,19 @@ jobs:
           docker run -v "$PWD:/opt/mount:z" --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
           test "$(./tproxy --version | awk '{print $NF}')" = "${GITHUB_REF_NAME#v}"
           tar -czvf "./tproxy-$ARCH.tar.gz" ./tproxy
-      - name: Upload release asset
+      - name: Check draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARCH: ${{ matrix.arch }}
         run: |
           if [ "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" != true ]; then
             echo "Refusing to modify published release $GITHUB_REF_NAME" >&2
             exit 1
           fi
-          gh release upload "$GITHUB_REF_NAME" "./tproxy-$ARCH.tar.gz" --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: tproxy-${{ matrix.arch }}.tar.gz
+          fail_on_unmatched_files: true
+          overwrite_files: true
