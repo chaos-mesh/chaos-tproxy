@@ -41,3 +41,26 @@ jobs:
         run: cargo test --locked --workspace
       - name: HTTP integration test
         run: bash tests/http/run_http_test.sh
+
+  lifecycle:
+    name: Lifecycle integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build lifecycle images
+        run: |
+          make image
+          docker build -f tests/integrations/Dockerfile.lifecycle \
+            --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
+      - name: Run lifecycle tests
+        run: sh tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test "${{ runner.temp }}/lifecycle-results"
+      - name: Upload lifecycle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifecycle-results
+          path: ${{ runner.temp }}/lifecycle-results
+          retention-days: 7

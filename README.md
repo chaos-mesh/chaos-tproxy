@@ -224,4 +224,6 @@ sh tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test
 
 The suite creates a dedicated Docker network and HTTP backend, then uses a separate privileged container for each case. It checks startup failures, normal and safe-mode stop, SIGINT and SIGTERM, preservation of unrelated NAT rules and route changes, and HTTP connectivity before, during, and after interception. It prints the directory containing per-case logs and removes its containers and network on exit. It does not use the host network namespace.
 
+The CI test workflow runs this suite as the independent `Lifecycle integration tests` job for pull requests, pushes to `master`, and manual runs. It saves the per-case logs and `results.tsv` as the `lifecycle-results` artifact for seven days, including when a test fails.
+
 `make build` produces `target/debug/chaos-tproxy`. To run that build, use `sudo ./target/debug/chaos-tproxy -v example.yaml`. The current `make run` target points to `target/debug/tproxy`, which Cargo does not produce.
