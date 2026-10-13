@@ -12,7 +12,6 @@ use rustls::OwnedTrustAnchor;
 use rustls_pemfile::{certs, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
-use tokio_rustls::webpki;
 use wildmatch::WildMatch;
 
 use crate::handler::http::action::{
@@ -233,15 +232,9 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
         let mut root_cert_store = rustls::RootCertStore::empty();
         if let Some(cafile) = raw.ca_file {
             let certs = rustls_pemfile::certs(&mut &*Vec::<u8>::try_from(cafile)?)?;
-            let trust_anchors = certs.iter().map(|cert| {
-                let ta = webpki::TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            });
-            root_cert_store.add_server_trust_anchors(trust_anchors);
+            for cert in certs {
+                root_cert_store.add(&Certificate(cert))?;
+            }
         } else {
             root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
                 |ta| {
@@ -385,5 +378,46 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
             queries: raw.queries,
             headers: try_from_hash_map(raw.headers)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+
+    use super::{RawFile, TLSConfig, TLSRawConfig};
+
+    const CERT: &[u8] = include_bytes!("../testdata/tls.crt");
+    const KEY: &[u8] = include_bytes!("../testdata/tls-pkcs1.key");
+    const INVALID_CA: &[u8] = b"-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n";
+
+    fn tls_raw_config(ca: Option<Vec<u8>>) -> TLSRawConfig {
+        TLSRawConfig {
+            ca_file: ca.map(RawFile::Contents),
+            cert_file: RawFile::Contents(CERT.to_vec()),
+            key_file: RawFile::Contents(KEY.to_vec()),
+        }
+    }
+
+    #[test]
+    fn tls_config_accepts_valid_ca_with_pkcs1_key() {
+        assert!(TLSConfig::try_from(tls_raw_config(Some(CERT.to_vec()))).is_ok());
+    }
+
+    #[test]
+    fn tls_config_rejects_ca_with_invalid_der() {
+        assert!(TLSConfig::try_from(tls_raw_config(Some(INVALID_CA.to_vec()))).is_err());
+    }
+
+    #[test]
+    fn tls_config_rejects_mixed_valid_and_invalid_ca_bundle() {
+        for bundle in [[CERT, INVALID_CA].concat(), [INVALID_CA, CERT].concat()].iter() {
+            assert!(TLSConfig::try_from(tls_raw_config(Some(bundle.clone()))).is_err());
+        }
+    }
+
+    #[test]
+    fn tls_config_accepts_absent_ca() {
+        assert!(TLSConfig::try_from(tls_raw_config(None)).is_ok());
     }
 }
