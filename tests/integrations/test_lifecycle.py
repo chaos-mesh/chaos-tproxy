@@ -14,10 +14,23 @@ import urllib.request
 
 
 BINARY = os.environ.get("TPROXY_BINARY", "/tproxy")
+NAT_RULE_CHAINS = ("OUTPUT", "PREROUTING")
 
 
 def run(*args):
     return subprocess.check_output(args, text=True).strip()
+
+
+def proxy_config(marker, safe_mode=False):
+    return {
+        "proxy_ports": [18080],
+        "safe_mode": safe_mode,
+        "rules": [{
+            "target": "Request",
+            "selector": {"method": "GET"},
+            "actions": {"replace": {"headers": {"X-Tproxy-Test": marker}}},
+        }],
+    }
 
 
 class LifecycleTests(unittest.TestCase):
@@ -31,16 +44,17 @@ class LifecycleTests(unittest.TestCase):
         self.logs = tempfile.TemporaryFile()
         self.addCleanup(self.logs.close)
         self.process = None
+        self.addCleanup(self.cleanup)
         self.baseline_addresses = self.addresses()
         self.baseline_default = run("ip", "-4", "route", "show", "default")
         self.baseline_dns = Path("/etc/resolv.conf").read_bytes()
         self.baseline_links = self.links()
         self.baseline_namespaces = run("ip", "netns", "list")
-        run("ebtables", "-t", "nat", "-A", "OUTPUT", "-p", "IPv4",
-            "--ip-proto", "17", "--ip-dport", "65000", "-j", "ACCEPT")
+        for chain in NAT_RULE_CHAINS:
+            run("ebtables", "-t", "nat", "-A", chain, "-p", "IPv4",
+                "--ip-proto", "17", "--ip-dport", "65000", "-j", "ACCEPT")
         self.baseline_nat = run("ebtables", "-t", "nat", "-L")
         self.assert_connectivity()
-        self.addCleanup(self.cleanup)
 
     def links(self):
         return {item["ifname"] for item in json.loads(run("ip", "-j", "link", "show"))}
@@ -90,13 +104,14 @@ class LifecycleTests(unittest.TestCase):
             body += chunk
         return int(header.split()[1]), body.decode(errors="replace")
 
-    def assert_connectivity(self):
+    def assert_connectivity(self, expected_marker="direct"):
         url = os.environ.get("TPROXY_TEST_URL")
-        if url:
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(url, timeout=5) as response:
-                self.assertEqual(response.status, 200)
-                self.assertEqual(response.read(), b"network-ok\n")
+        self.assertTrue(url, "TPROXY_TEST_URL is required for the HTTP connectivity check")
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.read(), b"network-ok\n")
+            self.assertEqual(response.headers.get("X-Tproxy-Test"), expected_marker)
 
     def assert_restored(self, expected_default=None):
         self.assertEqual(self.addresses(), self.baseline_addresses)
@@ -124,9 +139,10 @@ class LifecycleTests(unittest.TestCase):
                     self.process.wait(timeout=2)
             for stream in (self.process.stdin, self.process.stdout):
                 stream.close()
-        subprocess.run(["ebtables", "-t", "nat", "-D", "OUTPUT", "-p", "IPv4",
-                        "--ip-proto", "17", "--ip-dport", "65000", "-j", "ACCEPT"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for chain in NAT_RULE_CHAINS:
+            subprocess.run(["ebtables", "-t", "nat", "-D", chain, "-p", "IPv4",
+                            "--ip-proto", "17", "--ip-dport", "65000", "-j", "ACCEPT"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def test_invalid_method_rolls_back_and_accepts_next_config(self):
         self.start()
@@ -204,39 +220,40 @@ class LifecycleTests(unittest.TestCase):
 
     def test_success_means_listener_bound_and_stop_preserves_nat(self):
         self.start()
-        self.assertEqual(self.put({"proxy_ports": [18080]})[0], 200)
+        self.assertEqual(self.put(proxy_config("proxy-ready"))[0], 200)
         namespaces = run("ip", "netns", "list").splitlines()
         self.assertEqual(len(namespaces), 1)
         listeners = run("ip", "netns", "exec", namespaces[0].split()[0], "ss", "-ltnH")
         self.assertIn(":1025", listeners, "success returned before the listener bound")
-        self.assert_connectivity()
+        self.assert_connectivity("proxy-ready")
         self.assertEqual(self.put({})[0], 200)
         self.assert_restored()
 
     def test_safe_mode_stop_preserves_nat(self):
         self.start()
-        self.assertEqual(self.put({"proxy_ports": [8080], "safe_mode": True})[0], 200)
+        self.assertEqual(self.put(proxy_config("proxy-safe", safe_mode=True))[0], 200)
+        self.assert_connectivity("proxy-safe")
         self.assertEqual(self.put({})[0], 200)
         self.assert_restored()
 
     def test_active_reload_and_failed_reload_restore_network(self):
         self.start()
-        self.assertEqual(self.put({"proxy_ports": [18080]})[0], 200)
+        self.assertEqual(self.put(proxy_config("proxy-a"))[0], 200)
         old_namespace = run("ip", "netns", "list").split()[0]
         old_links = self.links() - self.baseline_links
-        self.assert_connectivity()
-        self.assertEqual(self.put({"proxy_ports": [18080], "safe_mode": True})[0], 200)
+        self.assert_connectivity("proxy-a")
+        self.assertEqual(self.put(proxy_config("proxy-b", safe_mode=True))[0], 200)
         namespaces = run("ip", "netns", "list").splitlines()
         self.assertEqual(len(namespaces), 1)
         self.assertNotEqual(namespaces[0].split()[0], old_namespace)
         self.assertTrue(old_links.isdisjoint(self.links()))
-        self.assert_connectivity()
+        self.assert_connectivity("proxy-b")
         status, _ = self.put({"proxy_ports": [18080], "rules": [
             {"target": "Request", "selector": {"method": "BAD METHOD"}, "actions": {}}]})
         self.assertEqual(status, 500)
         self.assert_restored()
-        self.assertEqual(self.put({"proxy_ports": [18080]})[0], 200)
-        self.assert_connectivity()
+        self.assertEqual(self.put(proxy_config("proxy-retry"))[0], 200)
+        self.assert_connectivity("proxy-retry")
         self.assertEqual(self.put({})[0], 200)
         self.assert_restored()
 

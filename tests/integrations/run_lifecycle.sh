@@ -8,6 +8,19 @@ run_id="chaos-tproxy-lifecycle-$$"
 network="$run_id"
 backend="${run_id}-backend"
 current=""
+cases=$(docker run --rm --entrypoint python3 "$image" -c '
+import ast
+module = ast.parse(open("/tests/test_lifecycle.py").read())
+for node in module.body:
+    if isinstance(node, ast.ClassDef) and node.name == "LifecycleTests":
+        for member in node.body:
+            if isinstance(member, ast.FunctionDef) and member.name.startswith("test_"):
+                print(member.name)
+')
+if [ -z "$cases" ]; then
+    printf 'No lifecycle tests found in %s\n' "$image" >&2
+    exit 1
+fi
 cleanup() {
     if [ -n "$current" ]; then docker rm -f "$current" >/dev/null 2>&1 || true; fi
     docker rm -f "$backend" >/dev/null 2>&1 || true
@@ -28,15 +41,6 @@ for attempt in range(100):
 else:
     raise RuntimeError("HTTP fixture did not become ready")
 '
-cases=$(docker run --rm --entrypoint python3 "$image" -c '
-import ast
-module = ast.parse(open("/tests/test_lifecycle.py").read())
-for node in module.body:
-    if isinstance(node, ast.ClassDef) and node.name == "LifecycleTests":
-        for member in node.body:
-            if isinstance(member, ast.FunctionDef) and member.name.startswith("test_"):
-                print(member.name)
-')
 failed=0
 for case in $cases; do
     current="${run_id}-${case}"

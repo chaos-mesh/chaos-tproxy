@@ -6,6 +6,7 @@ class Handler(BaseHTTPRequestHandler):
         body = b"network-ok\n"
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Tproxy-Test", self.headers.get("X-Tproxy-Test", "direct"))
         self.end_headers()
         self.wfile.write(body)
 
