@@ -259,10 +259,7 @@ impl HttpService {
             .iter()
             .find(|(header_name, _)| **header_name == HOST)
         {
-            None => match self.target.to_string().parse() {
-                Ok(o) => Some(o),
-                Err(_) => None,
-            },
+            None => self.target.to_string().parse().ok(),
             Some((_, value)) => Some(value.as_bytes().try_into()?),
         };
         trace!("authority: {:?}", parts.authority);

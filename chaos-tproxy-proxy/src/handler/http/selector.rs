@@ -100,7 +100,7 @@ mod tests {
             response_headers: None,
         };
         let req = Request::builder().body(Body::empty()).unwrap();
-        assert_eq!(select_request(port, &req, &selector), true);
+        assert!(select_request(port, &req, &selector));
 
         let mut selector = Selector {
             port: None,
@@ -114,18 +114,18 @@ mod tests {
             .uri("http://www.google.com/src/")
             .body(Body::empty())
             .unwrap();
-        assert_eq!(select_request(0, &req, &selector), false);
+        assert!(!select_request(0, &req, &selector));
 
         selector.path = Some(wildmatch::WildMatch::new("src"));
-        assert_eq!(select_request(0, &req, &selector), false);
+        assert!(!select_request(0, &req, &selector));
 
         selector.path = Some(wildmatch::WildMatch::new("/src/"));
-        assert_eq!(select_request(0, &req, &selector), true);
+        assert!(select_request(0, &req, &selector));
 
         selector.path = Some(wildmatch::WildMatch::new("/src*"));
-        assert_eq!(select_request(0, &req, &selector), true);
+        assert!(select_request(0, &req, &selector));
 
         selector.path = Some(wildmatch::WildMatch::new("/src?"));
-        assert_eq!(select_request(0, &req, &selector), true);
+        assert!(select_request(0, &req, &selector));
     }
 }

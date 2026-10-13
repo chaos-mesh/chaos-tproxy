@@ -1,8 +1,7 @@
 use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
-use default_net;
-use default_net::Gateway;
+use default_net::{self, Gateway};
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use rtnetlink::packet::route::Nla;
@@ -86,12 +85,12 @@ impl NetEnv {
             .parse()
             .context(format!("ip {} parsed error", self.ip))?;
         let net_ip32 = net.ip().to_string() + "/32";
-        let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
-        let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
-        let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
-        let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.bridge1);
-        let arp_filter_v1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.veth1);
-        let arp_filter_dev = format!("net.ipv4.conf.{}.arp_filter=1", &self.device);
+        let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", self.bridge2);
+        let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", self.veth2);
+        let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", self.veth3);
+        let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", self.bridge1);
+        let arp_filter_v1 = format!("net.ipv4.conf.{}.arp_filter=1", self.veth1);
+        let arp_filter_dev = format!("net.ipv4.conf.{}.arp_filter=1", self.device);
         let cmdvv = vec![
             bash_c(save_dns),
             ip_netns_add(&self.netns),
@@ -438,8 +437,9 @@ fn select_default_interface(
 
 #[cfg(test)]
 mod tests {
-    use super::select_default_interface;
     use pnet::datalink::NetworkInterface;
+
+    use super::select_default_interface;
 
     fn interface(index: u32, name: &str, ips: &[&str], flags: u32) -> NetworkInterface {
         NetworkInterface {
