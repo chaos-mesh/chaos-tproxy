@@ -5,6 +5,9 @@ on:
 
 name: Create Release
 
+permissions:
+  contents: write
+
 jobs:
   create_release:
     name: Create Release
@@ -18,9 +21,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: true
           prerelease: false
   upload_release:
     name: Upload Release
@@ -28,23 +31,23 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64]
-    runs-on: ${{ fromJson('{"x86_64":"ubuntu-latest", "aarch64":["self-hosted", "Linux", "ARM64"]}')[matrix.arch] }}
+    runs-on: ${{ fromJson('{"x86_64":"ubuntu-24.04", "aarch64":"ubuntu-24.04-arm"}')[matrix.arch] }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Build
         run: |
           DOCKER_BUILDKIT=1 docker build --build-arg HTTP_PROXY=${HTTP_PROXY} --build-arg HTTPS_PROXY=${HTTPS_PROXY} . -t chaos-mesh/tproxy
           docker run -v ${PWD}:/opt/mount:z --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
+          test "$(./tproxy --version | awk '{print $NF}')" = "${GITHUB_REF_NAME#v}"
           tar -czvf ./tproxy-${{ matrix.arch }}.tar.gz ./tproxy
       - name: Upload Release Asset
-        id: upload-release-asset 
+        id: upload-release-asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }} 
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
           asset_path: ./tproxy-${{ matrix.arch }}.tar.gz
           asset_name: tproxy-${{ matrix.arch }}.tar.gz
-          asset_content_type: application/zip
- 
+          asset_content_type: application/gzip
