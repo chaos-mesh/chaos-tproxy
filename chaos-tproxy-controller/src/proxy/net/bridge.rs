@@ -413,11 +413,62 @@ pub fn get_interface(name: String) -> Result<NetworkInterface> {
 }
 
 pub fn get_default_interface() -> Result<NetworkInterface> {
-    let interfaces = pnet::datalink::interfaces();
+    select_default_interface(pnet::datalink::interfaces())
+}
+
+fn select_default_interface(interfaces: Vec<NetworkInterface>) -> Result<NetworkInterface> {
     for interface in interfaces {
         if !interface.is_loopback() && interface.is_up() && !interface.ips.is_empty() {
             return Ok(interface);
         }
     }
     Err(anyhow!("no valid interface"))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::select_default_interface;
+    use pnet::datalink::NetworkInterface;
+
+    fn interface(name: &str, ips: &[&str], flags: u32) -> NetworkInterface {
+        NetworkInterface {
+            name: name.into(),
+            description: String::new(),
+            index: 1,
+            mac: None,
+            ips: ips.iter().map(|ip| ip.parse().unwrap()).collect(),
+            flags,
+        }
+    }
+
+    #[test]
+    fn select_interface_skips_ipv6_only_interface() {
+        let up = libc::IFF_UP as u32;
+        let selected = select_default_interface(vec![
+            interface("eth0", &["fe80::1/64"], up),
+            interface("veth", &["192.0.2.4/24"], up),
+        ]).unwrap();
+        assert_eq!(selected.name, "veth");
+        assert_eq!(selected.ips, vec!["192.0.2.4/24".parse().unwrap()]);
+    }
+
+    #[test]
+    fn select_interface_skips_down_and_loopback_interfaces() {
+        let selected = select_default_interface(vec![
+            interface("down", &["192.0.2.1/24"], 0),
+            interface("lo", &["127.0.0.1/8"], (libc::IFF_UP | libc::IFF_LOOPBACK) as u32),
+            interface("eth0", &["192.0.2.4/24", "fe80::1/64"], libc::IFF_UP as u32),
+        ]).unwrap();
+        assert_eq!(selected.name, "eth0");
+        assert_eq!(selected.ips, vec!["192.0.2.4/24".parse().unwrap(), "fe80::1/64".parse().unwrap()]);
+    }
+
+    #[test]
+    fn select_interface_rejects_missing_ipv4() {
+        let err = select_default_interface(vec![
+            interface("eth0", &["fe80::1/64"], libc::IFF_UP as u32),
+        ]).unwrap_err();
+        assert_eq!(err.to_string(), "no valid interface");
+    }
 }
