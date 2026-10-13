@@ -47,7 +47,7 @@ The ignored HTTP content-length test needs `tests/integrations/checker.py` liste
 cargo test --locked --release --test integration -- --ignored test_http_action::test_http_content_length_replace
 ```
 
-Stop the fixture afterward. `tests/exec.py` starts it but does not stop it or propagate the Cargo exit status. Do not use that script's exit status as proof of success. The ignored route test deletes routes. Run it only in a disposable Linux environment.
+Stop the fixture afterward. Alternatively, run `bash tests/integrations/run_http_test.sh` from the repository root to start the fixture, run the HTTP test, and stop the fixture automatically. The ignored route test deletes routes. Run it only in a disposable Linux environment.
 
 ## Change constraints
 
