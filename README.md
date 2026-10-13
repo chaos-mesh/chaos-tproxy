@@ -201,7 +201,7 @@ The focused proxy, controller configuration, and interface-selection tests run d
 
 ```sh
 cd tests
-python3 integrations/checker.py
+python3 http/checker.py
 ```
 
 In another terminal, run the test from `tests/` and stop the fixture afterward.

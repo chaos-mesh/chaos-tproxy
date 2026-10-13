@@ -41,13 +41,13 @@ cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests
 
 For Go changes, install the libpcap headers and run `go test ./...` on Linux with packet capture permissions. `TestMonitor` uses the Linux `lo` interface. The Rust CI workflow does not run the Go tests.
 
-The ignored HTTP content-length test needs `tests/integrations/checker.py` listening on port 8080. Start that fixture separately, then run the test from `tests/`.
+The ignored HTTP content-length test needs `tests/http/checker.py` listening on port 8080. Start that fixture separately, then run the test from `tests/`.
 
 ```sh
 cargo test --locked --release --test integration -- --ignored test_http_action::test_http_content_length_replace
 ```
 
-Stop the fixture afterward. Alternatively, run `bash tests/integrations/run_http_test.sh` from the repository root to start the fixture, run the HTTP test, and stop the fixture automatically. The ignored route test deletes routes. Run it only in a disposable Linux environment.
+Stop the fixture afterward. Alternatively, run `bash tests/http/run_http_test.sh` from the repository root to start the fixture, run the HTTP test, and stop the fixture automatically. The ignored route test deletes routes. Run it only in a disposable Linux environment.
 
 ## Change constraints
 

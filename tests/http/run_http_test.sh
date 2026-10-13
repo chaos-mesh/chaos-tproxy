@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-python3 integrations/checker.py &
+python3 http/checker.py &
 fixture_pid=$!
 trap 'kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true' EXIT
 

@@ -42,4 +42,4 @@ jobs:
       - name: Test
         run: cargo test --locked --workspace
       - name: HTTP integration test
-        run: bash tests/integrations/run_http_test.sh
+        run: bash tests/http/run_http_test.sh
