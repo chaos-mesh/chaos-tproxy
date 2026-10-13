@@ -387,3 +387,44 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+
+    use super::{RawFile, TLSConfig, TLSRawConfig};
+
+    const CERT: &[u8] = include_bytes!("../testdata/tls.crt");
+    const KEY: &[u8] = include_bytes!("../testdata/tls-pkcs1.key");
+    const INVALID_CA: &[u8] = b"-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n";
+
+    fn tls_raw_config(ca: Option<Vec<u8>>) -> TLSRawConfig {
+        TLSRawConfig {
+            ca_file: ca.map(RawFile::Contents),
+            cert_file: RawFile::Contents(CERT.to_vec()),
+            key_file: RawFile::Contents(KEY.to_vec()),
+        }
+    }
+
+    #[test]
+    fn tls_config_accepts_valid_ca_with_pkcs1_key() {
+        assert!(TLSConfig::try_from(tls_raw_config(Some(CERT.to_vec()))).is_ok());
+    }
+
+    #[test]
+    fn tls_config_rejects_ca_with_invalid_der() {
+        assert!(TLSConfig::try_from(tls_raw_config(Some(INVALID_CA.to_vec()))).is_err());
+    }
+
+    #[test]
+    fn tls_config_rejects_mixed_valid_and_invalid_ca_bundle() {
+        for bundle in [[CERT, INVALID_CA].concat(), [INVALID_CA, CERT].concat()].iter() {
+            assert!(TLSConfig::try_from(tls_raw_config(Some(bundle.clone()))).is_err());
+        }
+    }
+
+    #[test]
+    fn tls_config_accepts_absent_ca() {
+        assert!(TLSConfig::try_from(tls_raw_config(None)).is_ok());
+    }
+}
