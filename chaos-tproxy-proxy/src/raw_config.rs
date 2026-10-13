@@ -12,7 +12,6 @@ use rustls::OwnedTrustAnchor;
 use rustls_pemfile::{certs, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
-use tokio_rustls::webpki;
 use wildmatch::WildMatch;
 
 use crate::handler::http::action::{
@@ -233,15 +232,9 @@ impl TryFrom<TLSRawConfig> for TLSConfig {
         let mut root_cert_store = rustls::RootCertStore::empty();
         if let Some(cafile) = raw.ca_file {
             let certs = rustls_pemfile::certs(&mut &*Vec::<u8>::try_from(cafile)?)?;
-            let trust_anchors = certs.iter().map(|cert| {
-                let ta = webpki::TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            });
-            root_cert_store.add_server_trust_anchors(trust_anchors);
+            for cert in certs {
+                root_cert_store.add(&Certificate(cert))?;
+            }
         } else {
             root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
                 |ta| {
