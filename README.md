@@ -201,7 +201,7 @@ The proxy and controller library tests run during `make image`. The ignored HTTP
 
 ```sh
 cd tests
-python3 integrations/checker.py
+python3 http/checker.py
 ```
 
 In another terminal, run the test from `tests/` and stop the fixture afterward.

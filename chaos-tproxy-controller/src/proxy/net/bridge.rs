@@ -102,12 +102,12 @@ impl NetEnv {
             .parse()
             .context(format!("ip {} parsed error", self.ip))?;
         let net_ip32 = net.ip().to_string() + "/32";
-        let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.bridge2);
-        let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth2);
-        let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", &self.veth3);
-        let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.bridge1);
-        let arp_filter_v1 = format!("net.ipv4.conf.{}.arp_filter=1", &self.veth1);
-        let arp_filter_dev = format!("net.ipv4.conf.{}.arp_filter=1", &self.device);
+        let rp_filter_br2 = format!("net.ipv4.conf.{}.rp_filter=0", self.bridge2);
+        let rp_filter_v2 = format!("net.ipv4.conf.{}.rp_filter=0", self.veth2);
+        let rp_filter_v3 = format!("net.ipv4.conf.{}.rp_filter=0", self.veth3);
+        let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", self.bridge1);
+        let arp_filter_v1 = format!("net.ipv4.conf.{}.arp_filter=1", self.veth1);
+        let arp_filter_dev = format!("net.ipv4.conf.{}.arp_filter=1", self.device);
         execute(bash_c(save_dns))?;
         self.restore.dns_saved = true;
         execute(ip_netns_add(&self.netns))?;
@@ -537,6 +537,8 @@ fn select_default_interface(
 
 #[cfg(test)]
 mod tests {
+    use pnet::datalink::NetworkInterface;
+
     use super::{cleanup_command, execute, select_default_interface};
 
     #[test]
@@ -558,8 +560,6 @@ mod tests {
         assert!(!pending);
         assert_eq!(errors.len(), 1);
     }
-    use pnet::datalink::NetworkInterface;
-
     fn interface(index: u32, name: &str, ips: &[&str], flags: u32) -> NetworkInterface {
         NetworkInterface {
             name: name.into(),

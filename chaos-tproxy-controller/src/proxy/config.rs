@@ -1,12 +1,12 @@
 use std::convert::TryFrom;
 use std::net::Ipv4Addr;
 
-use crate::proxy::net::bridge::get_default_interface;
 use anyhow::{anyhow, Error};
 use chaos_tproxy_proxy::raw_config::{RawConfig as ProxyRawConfig, Role};
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::IpNetwork;
 
+use crate::proxy::net::bridge::get_default_interface;
 use crate::raw_config::{RawConfig, RawRole};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -60,7 +60,7 @@ impl Config {
                     None => false,
                 },
                 listen_port: get_free_port(raw.proxy_ports.clone())?,
-                rules: raw.rules.map_or(vec![], |rules| rules),
+                rules: raw.rules.unwrap_or_default(),
                 role,
                 tls: raw.tls,
             },
