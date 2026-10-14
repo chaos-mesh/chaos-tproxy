@@ -46,7 +46,7 @@ cargo test --locked -p chaos-tproxy-controller --lib proxy::config::tests
 cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests
 ```
 
-`make image` runs all nonignored proxy and controller library tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`. Invoke that binary directly because `make run` references `target/debug/tproxy`.
+`make image` runs all nonignored proxy and controller library tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`; `make run` invokes that binary.
 
 ### HTTP integration test
 
