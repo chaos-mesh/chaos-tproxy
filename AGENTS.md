@@ -1,4 +1,6 @@
-# Working on chaos-tproxy
+# AI agent instructions for chaos-tproxy
+
+Use these instructions when inspecting, modifying, or validating this repository. Keep user-facing installation and configuration guidance in `README.md`.
 
 ## Commits
 
@@ -6,22 +8,23 @@ Every commit must include a `Signed-off-by` trailer that matches the author's na
 
 Preserve existing sign-offs when rebasing. Before pushing a PR, verify that every commit in the PR has the required sign-off so the DCO check can pass.
 
-## Project map
+## Repository map
 
-- `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and serves interactive configuration over standard input and output.
-- `chaos-tproxy-proxy/` handles transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket startup exchange.
-- `tests/` contains Rust integration tests and a Python HTTP fixture.
-- `podnetmock/` is a separate Go package for UDP probes and packet capture. Cargo does not test it.
+- `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and handles configuration over standard input and output.
+- `chaos-tproxy-proxy/` implements transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket startup exchange.
+- `tests/` contains Rust integration tests and the Python HTTP fixture.
+- `podnetmock/` contains Go UDP probes and packet capture code. It is outside the Cargo workspace.
 - `config-examples/` contains user configuration examples.
-- The root Cargo package builds `chaos-tproxy` from the controller's `src/main.rs`. The controller package also builds `chaos-tproxy-controller-bin` from that file. Check both entry points when changing the CLI.
 
-## Build and checks
+The root package builds `chaos-tproxy` from `chaos-tproxy-controller/src/main.rs`. The controller package builds `chaos-tproxy-controller-bin` from the same file. Check both binaries when changing the CLI.
 
-Run Rust checks on Linux. The controller uses Linux netlink and network namespaces. The transparent socket implementation uses IPv4 and `IP_TRANSPARENT`.
+## Select and run checks
 
-`rust-toolchain` selects nightly. The Dockerfile pins Rust 1.94.1. `rustfmt.toml` uses nightly formatting options. Keep these differences in mind when comparing local, Docker, and CI results.
+Run Rust checks on Linux from the repository root. The controller depends on Linux netlink and network namespaces. Transparent sockets use IPv4 and `IP_TRANSPARENT`.
 
-Run checks appropriate to the change from the repository root.
+The repository selects nightly Rust. The Dockerfile pins Rust 1.94.1. Formatting requires nightly because `rustfmt.toml` enables unstable options.
+
+Run the following checks as appropriate for the change.
 
 ```sh
 cargo build --locked --workspace
@@ -36,40 +39,59 @@ For HTTP actions, selectors, or TLS parsing, run the proxy library tests.
 cargo test --locked -p chaos-tproxy-proxy --lib
 ```
 
-For controller configuration or network command generation, run the tests that do not change networking.
+For controller configuration or network command generation, run the following tests. These tests do not modify networking.
 
 ```sh
 cargo test --locked -p chaos-tproxy-controller --lib proxy::config::tests
 cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests
 ```
 
-`make image` runs all nonignored proxy and controller library tests and builds release binaries in Docker. `make release` copies the binary to `./tproxy`. A native Cargo build produces `target/debug/chaos-tproxy`. The current `make run` target expects `target/debug/tproxy`, so invoke the Cargo binary directly.
+`make image` runs all nonignored proxy and controller library tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`. Invoke that binary directly because `make run` references `target/debug/tproxy`.
 
-For Go changes, install the libpcap headers and run `go test ./...` on Linux with packet capture permissions. `TestMonitor` uses the Linux `lo` interface. The Rust CI workflow does not run the Go tests.
+### HTTP integration test
 
-The ignored HTTP content-length test needs `tests/http/checker.py` listening on port 8080. Start that fixture separately, then run the test from `tests/`.
+Run the following command from the repository root. The script starts the Python fixture on port 8080, runs the ignored content-length test, and stops the fixture on exit.
 
 ```sh
-cargo test --locked --release --test integration -- --ignored test_http_action::test_http_content_length_replace
+bash tests/http/run_http_test.sh
 ```
 
-Stop the fixture afterward. Alternatively, run `bash tests/http/run_http_test.sh` from the repository root to start the fixture, run the HTTP test, and stop the fixture automatically. The ignored route test deletes routes. Run it only in a disposable Linux environment.
+The ignored route test deletes routes. Run it only in a disposable Linux environment.
+
+### Lifecycle integration test
+
+Run the following commands from the repository root with Docker available.
+
+```sh
+make image
+docker build -f tests/integrations/Dockerfile.lifecycle \
+  --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
+bash tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test
+```
+
+The suite creates a dedicated Docker network and HTTP backend, then uses a separate privileged Linux container for each case. It checks startup failures, apply, reload, normal and safe-mode stop, SIGINT and SIGTERM, preservation of unrelated NAT rules and route changes, and real HTTP interception and restoration. It prints the results directory and removes its containers and network on exit. It does not use the host network namespace. The Python suite requires Linux root and `CHAOS_TPROXY_TEST_ISOLATED=1` to prevent accidental direct execution.
+
+The CI test workflow runs the suite as the independent `Lifecycle integration tests` job for pull requests, pushes to `master`, and manual runs. It saves per-case logs and `results.tsv` as the `lifecycle-results` artifact for seven days, including when a test fails.
+
+### Go tests
+
+For changes to `podnetmock/`, install libpcap headers and run `go test ./...` from that directory on Linux with packet capture permissions. `TestMonitor` uses the `lo` interface. The Rust CI workflow does not run Go tests.
 
 ## Change constraints
 
-- Keep user-facing `RawConfig` in the controller distinct from the proxy's internal `RawConfig`. The controller converts a port array into a comma-separated string for the subprocess.
-- File input accepts `.json` and `.yaml`. Interactive input accepts JSON in HTTP `PUT` requests over standard input, with responses on standard output. Logs belong on standard error.
-- Preserve configuration behavior deliberately. Omitting `proxy_ports` or setting it to `null` stops interception. An empty array currently attempts network setup and is not a stop command.
-- `interface`, `listen_port`, `proxy_mark`, `ignore_mark`, and `route_table` are accepted compatibility fields but ignored. Do not document them as effective settings.
-- Keep selectors, rule ordering, HTTP framing, raw TCP fallback, and TLS behavior consistent across configuration conversion and runtime handling. Update examples and tests when changing these contracts.
-- Body replacement and JSON merge remove `Content-Length`. There is no supported `update_content_length` option. TLS key parsing currently accepts PEM RSA PKCS#1 keys.
-- Cargo dependencies include Git forks of Hyper and hyper-rustls. The proxy uses fork-specific APIs. Do not replace those dependencies with upstream crates without checking callers and behavior.
-- Preserve `Cargo.lock` unless a dependency change requires an update.
+- Keep the controller's user-facing `RawConfig` separate from the proxy's internal `RawConfig`. The controller converts the port array to a comma-separated string for the subprocess.
+- Preserve `.json` and `.yaml` file input and JSON configuration through HTTP `PUT` requests over standard input. Write interactive responses to standard output and logs to standard error.
+- Preserve stop semantics. An omitted or `null` `proxy_ports` value stops interception. An empty array attempts network setup and does not stop interception.
+- Treat `interface`, `listen_port`, `proxy_mark`, `ignore_mark`, and `route_table` as ignored compatibility fields. Do not describe them as effective settings.
+- Keep selector behavior, rule order, HTTP framing, raw TCP fallback, and TLS behavior consistent between configuration conversion and runtime handling. Update examples and tests when changing these contracts.
+- Preserve removal of `Content-Length` after body replacement or JSON merge. The `update_content_length` option is not supported. TLS key parsing accepts PEM RSA PKCS#1 keys.
+- Retain the Git forks of Hyper and hyper-rustls unless replacing them is part of the change. Verify fork-specific callers and behavior before using upstream crates.
+- Update `Cargo.lock` only when a dependency change requires it.
 
-## Network verification
+## Verify network behavior
 
-Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It changes addresses, bridges, routes, firewall rules, and resolver files in its network namespace. Cleanup removes only the run's outer NAT rule and restores routes displaced by setup without replacing current routes. Do not test interception in the host network namespace.
+Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes only the run's outer NAT rule and restores routes displaced by setup without replacing current routes. Do not test interception in the host network namespace.
 
-`tests/integrations/run_lifecycle.sh` runs the lifecycle suite in separate disposable privileged containers with a dedicated network and HTTP backend. Build its runtime image using `tests/integrations/Dockerfile.lifecycle` after `make image`. See README for the commands. The Python suite requires Linux root and `CHAOS_TPROXY_TEST_ISOLATED=1` to prevent accidental direct execution.
+For lifecycle changes, verify configuration apply, reload, failed startup, stop, and network restoration. For HTTP changes, send real requests through the proxy. Library tests and Docker builds do not verify interception or restoration.
 
-For lifecycle changes, verify apply, reload, failed startup, stop, and restoration on that Linux environment. For HTTP changes, send real requests through the proxy. Library tests and Docker builds do not verify network interception or restoration. Report the checks actually run and any environment limits.
+When reporting completed work, state which checks ran, their results, and which checks remain unverified because of environment limits.
