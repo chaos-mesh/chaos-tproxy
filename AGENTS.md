@@ -62,6 +62,15 @@ The ignored route test deletes routes. Run it only in a disposable Linux environ
 
 Run the following commands from the repository root with Docker available.
 
+Load the required networking modules on the disposable Linux Docker host before running the suite. Test containers share its kernel and do not contain its module files. The lifecycle CI job loads these modules explicitly before building the images.
+
+```sh
+for module in ebtable_nat ebtable_broute ebt_ip ebt_dnat ebt_redirect \
+  iptable_mangle xt_socket xt_TPROXY xt_multiport xt_tcpudp xt_mark; do
+  sudo modprobe "$module"
+done
+```
+
 ```sh
 make image
 docker build -f tests/integrations/Dockerfile.lifecycle \

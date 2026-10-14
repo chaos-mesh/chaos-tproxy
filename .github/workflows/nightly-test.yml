@@ -50,6 +50,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Load lifecycle kernel modules
+        run: |
+          for module in ebtable_nat ebtable_broute ebt_ip ebt_dnat ebt_redirect \
+            iptable_mangle xt_socket xt_TPROXY xt_multiport xt_tcpudp xt_mark; do
+            sudo modprobe "$module"
+          done
       - name: Build lifecycle images
         run: |
           make image
