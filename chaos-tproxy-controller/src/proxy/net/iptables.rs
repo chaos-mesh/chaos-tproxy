@@ -190,21 +190,50 @@ pub fn set_iptables_safe<'a>(netns: &'a str, ip: &'a str) -> Vec<Vec<&'a str>> {
 }
 
 #[derive(Debug)]
-pub(super) struct OuterNatRule {
+pub(super) struct OuterNatChain {
+    pub chain: String,
     pub device: String,
-    pub destination_mac: String,
+    pub linked: bool,
 }
 
-impl OuterNatRule {
-    pub fn append(&self) -> Vec<&str> {
-        self.command("-A")
+impl OuterNatChain {
+    pub fn create_command(chain: &str) -> Vec<&str> {
+        vec!["ebtables", "-t", "nat", "-N", chain]
     }
 
-    pub fn delete(&self) -> Vec<&str> {
-        self.command("-D")
+    pub fn append_dnat<'a>(&'a self, destination_mac: &'a str) -> Vec<&'a str> {
+        vec![
+            "ebtables",
+            "-t",
+            "nat",
+            "-A",
+            &self.chain,
+            "-j",
+            "dnat",
+            "--to-dst",
+            destination_mac,
+            "--dnat-target",
+            "ACCEPT",
+        ]
     }
 
-    fn command<'a>(&'a self, operation: &'a str) -> Vec<&'a str> {
+    pub fn append_jump(&self) -> Vec<&str> {
+        self.jump_command("-A")
+    }
+
+    pub fn delete_jump(&self) -> Vec<&str> {
+        self.jump_command("-D")
+    }
+
+    pub fn flush(&self) -> Vec<&str> {
+        vec!["ebtables", "-t", "nat", "-F", &self.chain]
+    }
+
+    pub fn delete_chain(&self) -> Vec<&str> {
+        vec!["ebtables", "-t", "nat", "-X", &self.chain]
+    }
+
+    fn jump_command<'a>(&'a self, operation: &'a str) -> Vec<&'a str> {
         vec![
             "ebtables",
             "-t",
@@ -214,11 +243,7 @@ impl OuterNatRule {
             "-i",
             &self.device,
             "-j",
-            "dnat",
-            "--to-dst",
-            &self.destination_mac,
-            "--dnat-target",
-            "ACCEPT",
+            &self.chain,
         ]
     }
 }
@@ -228,17 +253,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normal_and_safe_modes_install_only_one_owned_outer_rule() {
-        let rule = OuterNatRule {
+    fn normal_and_safe_modes_install_one_jump_to_the_owned_chain() {
+        let chain = OuterNatChain {
+            chain: "tproxy-owned-ns".into(),
             device: "eth0".into(),
-            destination_mac: "02:00:00:00:00:04".into(),
+            linked: false,
         };
         for safe in [false, true] {
             let mut commands = set_iptables("owned-ns", Some("8080"), "12345");
             if safe {
                 commands.extend(set_iptables_safe("owned-ns", "192.0.2.4/24"));
             }
-            commands.push(rule.append());
+            commands.extend([
+                OuterNatChain::create_command(&chain.chain),
+                chain.append_dnat("02:00:00:00:00:04"),
+                chain.append_jump(),
+            ]);
             let outer: Vec<_> = commands
                 .iter()
                 .filter(|cmd| cmd[0] == "ebtables")
@@ -246,26 +276,46 @@ mod tests {
                 .collect();
             assert_eq!(
                 outer,
-                vec![vec![
-                    "ebtables",
-                    "-t",
-                    "nat",
-                    "-A",
-                    "PREROUTING",
-                    "-i",
-                    "eth0",
-                    "-j",
-                    "dnat",
-                    "--to-dst",
-                    "02:00:00:00:00:04",
-                    "--dnat-target",
-                    "ACCEPT"
-                ]]
+                vec![
+                    vec!["ebtables", "-t", "nat", "-N", "tproxy-owned-ns"],
+                    vec![
+                        "ebtables",
+                        "-t",
+                        "nat",
+                        "-A",
+                        "tproxy-owned-ns",
+                        "-j",
+                        "dnat",
+                        "--to-dst",
+                        "02:00:00:00:00:04",
+                        "--dnat-target",
+                        "ACCEPT"
+                    ],
+                    vec![
+                        "ebtables",
+                        "-t",
+                        "nat",
+                        "-A",
+                        "PREROUTING",
+                        "-i",
+                        "eth0",
+                        "-j",
+                        "tproxy-owned-ns"
+                    ]
+                ]
             );
-            assert_eq!(commands.len(), if safe { 11 } else { 7 });
         }
+    }
+
+    #[test]
+    fn cleanup_commands_target_only_the_owned_chain_and_jump() {
+        let chain = OuterNatChain {
+            chain: "tproxy-owned-ns".into(),
+            device: "eth0".into(),
+            linked: true,
+        };
         assert_eq!(
-            rule.delete(),
+            chain.delete_jump(),
             vec![
                 "ebtables",
                 "-t",
@@ -275,12 +325,16 @@ mod tests {
                 "-i",
                 "eth0",
                 "-j",
-                "dnat",
-                "--to-dst",
-                "02:00:00:00:00:04",
-                "--dnat-target",
-                "ACCEPT"
+                "tproxy-owned-ns"
             ]
+        );
+        assert_eq!(
+            chain.flush(),
+            vec!["ebtables", "-t", "nat", "-F", "tproxy-owned-ns"]
+        );
+        assert_eq!(
+            chain.delete_chain(),
+            vec!["ebtables", "-t", "nat", "-X", "tproxy-owned-ns"]
         );
     }
 }

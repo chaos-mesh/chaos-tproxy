@@ -166,7 +166,7 @@ pub(crate) fn try_from_vec(
     t.map(|headers| -> Result<_, anyhow::Error> {
         let mut map = HeaderMap::new();
         for (key, value) in headers {
-            map.insert(key.parse::<HeaderName>()?, value.parse()?);
+            map.append(key.parse::<HeaderName>()?, value.parse()?);
         }
         Ok(map)
     })
@@ -385,7 +385,40 @@ impl TryFrom<RawReplaceAction> for ReplaceAction {
 mod tests {
     use std::convert::TryFrom;
 
-    use super::{RawFile, TLSConfig, TLSRawConfig};
+    use super::{PatchAction, RawFile, RawPatchAction, TLSConfig, TLSRawConfig};
+
+    #[test]
+    fn patch_headers_preserve_case_insensitive_duplicates() {
+        let raw = RawPatchAction {
+            body: None,
+            queries: None,
+            headers: Some(vec![
+                ("X-Tag".into(), "first".into()),
+                ("x-other".into(), "other".into()),
+                ("x-tag".into(), "second".into()),
+            ]),
+        };
+        let headers = PatchAction::try_from(raw).unwrap().headers.unwrap();
+
+        assert_eq!(
+            headers.get_all("x-tag").iter().collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert_eq!(headers["x-other"], "other");
+    }
+
+    #[test]
+    fn patch_headers_reject_invalid_names_and_values() {
+        for (name, value) in [("bad name", "value"), ("x-tag", "bad\nvalue")] {
+            let raw = RawPatchAction {
+                body: None,
+                queries: None,
+                headers: Some(vec![(name.into(), value.into())]),
+            };
+
+            assert!(PatchAction::try_from(raw).is_err());
+        }
+    }
 
     const CERT: &[u8] = include_bytes!("../testdata/tls.crt");
     const KEY: &[u8] = include_bytes!("../testdata/tls-pkcs1.key");

@@ -47,21 +47,35 @@ impl ConfigServer {
         self.task = Some(tokio::spawn(async move {
             let rx_mut = &mut rx;
             loop {
-                let stream = StdStream::default();
-                let mut conn = Http::new().serve_connection(stream, &mut service);
-                let conn_mut = &mut conn;
-                select! {
-                    _ = &mut *rx_mut => {
-                        tracing::trace!("catch signal in config server.");
-                        Connection::graceful_shutdown(Pin::new(conn_mut));
-                        return Ok(());
-                    },
-                    ret = &mut *conn_mut => if let Err(e) = ret {
-                        tracing::error!("{}",e);
-                    }
-                };
+                let (stream, mut eof_receiver) = StdStream::new();
+                {
+                    let mut conn = Http::new().serve_connection(stream, &mut service);
+                    let conn_mut = &mut conn;
+                    select! {
+                        _ = &mut *rx_mut => {
+                            tracing::trace!("catch signal in config server.");
+                            Connection::graceful_shutdown(Pin::new(conn_mut));
+                            return Ok(());
+                        },
+                        ret = &mut *conn_mut => if let Err(e) = ret {
+                            tracing::error!("{}",e);
+                        }
+                    };
+                }
+                if eof_receiver.try_recv().is_ok() {
+                    return Ok(());
+                }
             }
         }));
+    }
+
+    pub async fn wait(&mut self) -> anyhow::Result<()> {
+        let result = match self.task.as_mut() {
+            Some(task) => task.await,
+            None => return Ok(()),
+        };
+        self.task.take();
+        result?
     }
 
     pub async fn stop(mut self) -> anyhow::Result<()> {

@@ -133,6 +133,10 @@ fn same_route(left: &RouteMessage, right: &RouteMessage) -> bool {
             .all(|nla| right_attributes.contains(nla))
 }
 
+fn same_route_value(left: &RouteMessage, right: &RouteMessage) -> bool {
+    left.header.flags == right.header.flags && same_route(left, right)
+}
+
 pub(super) fn retain_displaced_routes(originals: &mut Vec<RouteMessage>, current: &[RouteMessage]) {
     originals.retain(|original| !current.iter().any(|route| same_route(original, route)));
 }
@@ -191,18 +195,61 @@ pub(super) async fn remove_generated_address_route(
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum RestorationDecision {
+    Add,
+    Present,
+    Superseded,
+}
+
+fn restoration_decision(
+    original: &RouteMessage,
+    current: &[RouteMessage],
+    baseline: &[RouteMessage],
+    restored: &[RouteMessage],
+) -> RestorationDecision {
+    if current
+        .iter()
+        .any(|route| same_route_value(original, route))
+    {
+        return RestorationDecision::Present;
+    }
+    if current.iter().any(|route| {
+        RouteSlot::from(original) == RouteSlot::from(route)
+            && !baseline
+                .iter()
+                .any(|before| same_route_value(before, route))
+            && !restored.iter().any(|owned| same_route_value(owned, route))
+    }) {
+        RestorationDecision::Superseded
+    } else {
+        RestorationDecision::Add
+    }
+}
+
+fn record_restored_route(restored: &mut Vec<RouteMessage>, route: RouteMessage) {
+    if !restored.iter().any(|owned| same_route_value(owned, &route)) {
+        restored.push(route);
+    }
+}
+
 fn restoration_plan(
     displaced: &[RouteMessage],
     current: &[RouteMessage],
-    restored: &[RouteMessage],
+    baseline: &[RouteMessage],
+    restored: &mut Vec<RouteMessage>,
 ) -> Vec<RouteMessage> {
+    for original in displaced {
+        if restoration_decision(original, current, baseline, restored)
+            == RestorationDecision::Present
+        {
+            record_restored_route(restored, original.clone());
+        }
+    }
     let mut plan: Vec<_> = displaced
         .iter()
         .filter(|original| {
-            !current.iter().any(|route| {
-                RouteSlot::from(*original) == RouteSlot::from(route)
-                    && !restored.iter().any(|owned| same_route(owned, route))
-            })
+            restoration_decision(original, current, baseline, restored) == RestorationDecision::Add
         })
         .cloned()
         .collect();
@@ -217,6 +264,7 @@ fn restoration_plan(
 
 pub async fn restore_routes(
     handle: &mut Handle,
+    baseline: &[RouteMessage],
     displaced: &mut Vec<RouteMessage>,
     restored: &mut Vec<RouteMessage>,
 ) -> Result<()> {
@@ -224,7 +272,7 @@ pub async fn restore_routes(
         return Ok(());
     }
     let current = get_routes_noblock(handle).await?;
-    let plan = restoration_plan(displaced, &current, restored);
+    let plan = restoration_plan(displaced, &current, baseline, restored);
     let mut failed = Vec::new();
     let mut errors = Vec::new();
     for route in plan {
@@ -241,21 +289,21 @@ pub async fn restore_routes(
             );
             if exists {
                 match get_routes_noblock(handle).await {
-                    Ok(routes)
-                        if routes
-                            .iter()
-                            .any(|current| RouteSlot::from(current) == RouteSlot::from(&route)) =>
-                    {
-                        continue
-                    }
+                    Ok(routes) => match restoration_decision(&route, &routes, baseline, restored) {
+                        RestorationDecision::Present => {
+                            record_restored_route(restored, route);
+                            continue;
+                        }
+                        RestorationDecision::Superseded => continue,
+                        RestorationDecision::Add => {}
+                    },
                     Err(recheck) => errors.push(format!("recheck route conflict: {recheck:#}")),
-                    _ => {}
                 }
             }
             errors.push(format!("restore route {route:?}: {error:#}"));
             failed.push(route);
         } else {
-            restored.push(route);
+            record_restored_route(restored, route);
         }
     }
     *displaced = failed;
@@ -267,7 +315,8 @@ pub async fn restore_routes(
 }
 
 pub async fn load_routes(handle: &mut Handle, mut msgs: Vec<RouteMessage>) -> Result<()> {
-    restore_routes(handle, &mut msgs, &mut Vec::new()).await
+    let baseline = msgs.clone();
+    restore_routes(handle, &baseline, &mut msgs, &mut Vec::new()).await
 }
 
 #[cfg(test)]
@@ -335,7 +384,10 @@ mod test {
                 let removal = address_route_to_remove(&mut pending, &current);
                 assert_eq!(removal, Some(connected.clone()));
                 current.retain(|route| Some(route) != removal.as_ref());
-                assert_eq!(restoration_plan(&originals, &current, &[]), originals);
+                assert_eq!(
+                    restoration_plan(&originals, &current, &originals, &mut Vec::new()),
+                    originals
+                );
             }
         }
     }
@@ -357,7 +409,12 @@ mod test {
         );
         assert_eq!(generated_address_route(&[recreated], address, 2), None);
         assert_eq!(
-            restoration_plan(from_ref(&connected), from_ref(&connected), &[]),
+            restoration_plan(
+                from_ref(&connected),
+                from_ref(&connected),
+                from_ref(&connected),
+                &mut Vec::new(),
+            ),
             Vec::<RouteMessage>::new()
         );
     }
@@ -374,11 +431,21 @@ mod test {
         current.retain(|route| Some(route) != removal.as_ref());
         assert_eq!(current, vec![foreign]);
         assert_eq!(
-            restoration_plan(from_ref(&alternative), &current, &[]),
+            restoration_plan(
+                from_ref(&alternative),
+                &current,
+                from_ref(&alternative),
+                &mut Vec::new(),
+            ),
             Vec::<RouteMessage>::new()
         );
         assert_eq!(
-            restoration_plan(from_ref(&alternative), &[], &[]),
+            restoration_plan(
+                from_ref(&alternative),
+                &[],
+                from_ref(&alternative),
+                &mut Vec::new(),
+            ),
             vec![alternative]
         );
     }
@@ -445,15 +512,19 @@ mod test {
             .collect();
         assert_eq!(displaced, vec![original.clone(), surviving.clone()]);
         retain_displaced_routes(&mut displaced, &[surviving, unrelated]);
-        assert_eq!(restoration_plan(&displaced, &[], &[]), vec![original]);
+        assert_eq!(
+            restoration_plan(&displaced, &[], &displaced, &mut Vec::new()),
+            vec![original]
+        );
     }
 
     #[test]
     fn connected_route_is_restored_before_multipath_gateways() {
         let multipath = multipath_route(&[(2, 1), (2, 2)]);
         let connected = connected_route();
+        let baseline = vec![multipath.clone(), connected.clone()];
         assert_eq!(
-            restoration_plan(&[multipath.clone(), connected.clone()], &[], &[]),
+            restoration_plan(&baseline, &[], &baseline, &mut Vec::new()),
             vec![connected, multipath]
         );
     }
@@ -474,9 +545,202 @@ mod test {
         let first = route([0; 4], 0, 2, 0);
         let second = route([0; 4], 0, 2, 100);
         let unrelated = route([203, 0, 113, 0], 24, 3, 0);
+        let baseline = vec![first.clone(), second.clone(), unrelated.clone()];
         assert_eq!(
-            restoration_plan(&[first.clone(), second.clone()], &[unrelated], &[]),
+            restoration_plan(
+                &[first.clone(), second.clone()],
+                &[unrelated],
+                &baseline,
+                &mut Vec::new(),
+            ),
             vec![first, second]
+        );
+    }
+
+    #[test]
+    fn unchanged_backup_allows_restoration_without_restoring_unrelated_baseline_routes() {
+        let original = route([0; 4], 0, 2, 0);
+        let backup = route([0; 4], 0, 7, 500);
+        let unrelated = route([203, 0, 113, 0], 24, 3, 0);
+        let baseline = vec![original.clone(), backup.clone(), unrelated];
+        let mut current = backup;
+        current.header.table = 0;
+        current.nlas.push(Nla::Table(254));
+        current.nlas.push(Nla::CacheInfo(vec![1, 2, 3]));
+        current.nlas.push(Nla::Pad(vec![0]));
+        current.nlas.reverse();
+        assert_eq!(
+            restoration_plan(from_ref(&original), &[current], &baseline, &mut Vec::new()),
+            vec![original]
+        );
+    }
+
+    #[test]
+    fn changed_backup_and_new_default_win_over_missing_originals() {
+        let original = route([0; 4], 0, 2, 0);
+        let backup = route([0; 4], 0, 7, 500);
+        let baseline = vec![original.clone(), backup.clone()];
+        let metric = route([0; 4], 0, 7, 600);
+        let device = route([0; 4], 0, 8, 500);
+        let mut gateway = backup.clone();
+        gateway.nlas.push(Nla::Gateway(vec![192, 0, 2, 8]));
+        let mut protocol = backup.clone();
+        protocol.header.protocol = 4;
+        let mut scope = backup.clone();
+        scope.header.scope = 253;
+        let mut kind = backup.clone();
+        kind.header.kind = 6;
+        for changed in [metric, device, gateway, protocol, scope, kind] {
+            assert_eq!(
+                restoration_decision(&original, &[changed], &baseline, &[]),
+                RestorationDecision::Superseded
+            );
+        }
+        let new_default = route([0; 4], 0, 2, 222);
+        assert_eq!(
+            restoration_plan(
+                from_ref(&original),
+                &[backup.clone(), new_default],
+                &baseline,
+                &mut Vec::new(),
+            ),
+            Vec::<RouteMessage>::new()
+        );
+        assert_eq!(
+            restoration_plan(from_ref(&original), &[backup], &baseline, &mut Vec::new()),
+            vec![original]
+        );
+    }
+
+    #[test]
+    fn exact_presence_records_one_receipt_even_with_a_new_same_slot_route() {
+        let original = route([0; 4], 0, 2, 0);
+        let replacement = route([0; 4], 0, 7, 222);
+        let mut equivalent = original.clone();
+        equivalent.header.table = 0;
+        equivalent.nlas = vec![Nla::Table(254), Nla::Oif(2), Nla::CacheInfo(vec![1, 2, 3])];
+        let current = vec![equivalent, replacement];
+        let mut restored = Vec::new();
+        for _ in 0..2 {
+            assert_eq!(
+                restoration_plan(
+                    from_ref(&original),
+                    &current,
+                    from_ref(&original),
+                    &mut restored,
+                ),
+                Vec::<RouteMessage>::new()
+            );
+            assert_eq!(restored, vec![original.clone()]);
+        }
+        assert_eq!(
+            restoration_plan(from_ref(&original), &[], from_ref(&original), &mut restored),
+            vec![original]
+        );
+    }
+
+    #[test]
+    fn late_captured_present_routes_are_recorded_before_missing_alternatives_are_planned() {
+        let pending = route([0; 4], 0, 2, 0);
+        let late = route([0; 4], 0, 2, 100);
+        for displaced in [
+            vec![pending.clone(), late.clone()],
+            vec![late.clone(), pending.clone()],
+        ] {
+            let mut restored = Vec::new();
+            assert_eq!(
+                restoration_plan(
+                    &displaced,
+                    from_ref(&late),
+                    from_ref(&pending),
+                    &mut restored,
+                ),
+                vec![pending.clone()]
+            );
+            assert_eq!(restored, vec![late.clone()]);
+            assert_eq!(
+                restoration_plan(
+                    from_ref(&pending),
+                    from_ref(&late),
+                    from_ref(&pending),
+                    &mut restored,
+                ),
+                vec![pending.clone()]
+            );
+            assert_eq!(restored, vec![late.clone()]);
+        }
+    }
+
+    #[test]
+    fn retry_keeps_the_full_baseline_after_a_partial_restore() {
+        let original = route([0; 4], 0, 2, 0);
+        let pending = route([0; 4], 0, 2, 100);
+        let backup = route([0; 4], 0, 7, 500);
+        let baseline = vec![original.clone(), pending.clone(), backup.clone()];
+        let mut restored = vec![original.clone()];
+        assert_eq!(
+            restoration_plan(
+                from_ref(&pending),
+                &[original, backup],
+                &baseline,
+                &mut restored,
+            ),
+            vec![pending]
+        );
+    }
+
+    #[test]
+    fn represented_header_flags_and_multipath_changes_are_new_route_values() {
+        let original = route([0; 4], 0, 2, 0);
+        let mut flagged = original.clone();
+        flagged.header.flags = !flagged.header.flags;
+        assert!(same_route(&original, &flagged));
+        assert!(!same_route_value(&original, &flagged));
+        assert_eq!(
+            restoration_decision(&original, from_ref(&flagged), from_ref(&original), &[]),
+            RestorationDecision::Superseded
+        );
+        assert_eq!(
+            restoration_decision(&original, &[flagged], &[], from_ref(&original)),
+            RestorationDecision::Superseded
+        );
+
+        let original = multipath_route(&[(2, 1), (2, 2)]);
+        let backup = multipath_route(&[(7, 1), (7, 2)]);
+        let baseline = vec![original.clone(), backup.clone()];
+        assert_eq!(
+            restoration_decision(&original, &[backup], &baseline, &[]),
+            RestorationDecision::Add
+        );
+        let changed = multipath_route(&[(7, 1), (7, 3)]);
+        assert_eq!(
+            restoration_decision(&original, &[changed], &baseline, &[]),
+            RestorationDecision::Superseded
+        );
+    }
+
+    #[test]
+    fn conflict_recheck_requires_exact_presence_or_a_new_replacement() {
+        let original = route([0; 4], 0, 2, 0);
+        let backup = route([0; 4], 0, 7, 500);
+        let baseline = vec![original.clone(), backup.clone()];
+        assert_eq!(
+            restoration_decision(&original, from_ref(&backup), &baseline, &[]),
+            RestorationDecision::Add
+        );
+        assert_eq!(
+            restoration_decision(
+                &original,
+                &[backup.clone(), original.clone()],
+                &baseline,
+                &[]
+            ),
+            RestorationDecision::Present
+        );
+        let replacement = route([0; 4], 0, 7, 222);
+        assert_eq!(
+            restoration_decision(&original, &[backup, replacement], &baseline, &[]),
+            RestorationDecision::Superseded
         );
     }
 
@@ -485,12 +749,22 @@ mod test {
         let restored = route([0; 4], 0, 2, 0);
         let pending = route([0; 4], 0, 2, 100);
         assert_eq!(
-            restoration_plan(from_ref(&pending), from_ref(&restored), from_ref(&restored)),
+            restoration_plan(
+                from_ref(&pending),
+                from_ref(&restored),
+                from_ref(&pending),
+                &mut vec![restored.clone()],
+            ),
             vec![pending.clone()]
         );
         let replacement = route([0; 4], 0, 2, 222);
         assert_eq!(
-            restoration_plan(&[pending], &[replacement], &[restored]),
+            restoration_plan(
+                from_ref(&pending),
+                &[replacement],
+                from_ref(&pending),
+                &mut vec![restored],
+            ),
             Vec::<RouteMessage>::new()
         );
     }
@@ -503,11 +777,21 @@ mod test {
         replacement.header.protocol = 4;
         replacement.nlas.push(Nla::Gateway(vec![192, 0, 2, 8]));
         assert_eq!(
-            restoration_plan(from_ref(&original), &[replacement], &[]),
+            restoration_plan(
+                from_ref(&original),
+                &[replacement],
+                from_ref(&original),
+                &mut Vec::new(),
+            ),
             Vec::<RouteMessage>::new()
         );
         assert_eq!(
-            restoration_plan(from_ref(&original), &[], &[]),
+            restoration_plan(
+                from_ref(&original),
+                &[],
+                from_ref(&original),
+                &mut Vec::new(),
+            ),
             vec![original]
         );
     }
@@ -522,7 +806,12 @@ mod test {
         let mut tos = original.clone();
         tos.header.tos = 4;
         assert_eq!(
-            restoration_plan(from_ref(&original), &[extended_table, prefix, tos], &[]),
+            restoration_plan(
+                from_ref(&original),
+                &[extended_table, prefix, tos],
+                from_ref(&original),
+                &mut Vec::new(),
+            ),
             vec![original.clone()]
         );
         let mut equivalent = original.clone();
@@ -530,7 +819,12 @@ mod test {
         equivalent.nlas = vec![Nla::Table(254), Nla::Oif(2)];
         assert!(same_route(&original, &equivalent));
         assert_eq!(
-            restoration_plan(&[original], &[equivalent], &[]),
+            restoration_plan(
+                from_ref(&original),
+                &[equivalent],
+                from_ref(&original),
+                &mut Vec::new(),
+            ),
             Vec::<RouteMessage>::new()
         );
     }

@@ -4,7 +4,7 @@ chaos-tproxy is a transparent HTTP fault injection proxy for Linux. It uses TPRO
 
 ## Requirements
 
-Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own outer ebtables NAT rule and restores routes displaced by setup. Current routes take precedence over saved routes. Do not run it in the host network namespace.
+Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own ebtables NAT jump and chain and restores routes displaced by setup. Routes added or changed during interception take precedence over saved routes. Existing backup routes do not prevent restoration. Do not run it in the host network namespace.
 
 The following commands must be available on `PATH`.
 
@@ -172,7 +172,7 @@ Content-Length: 106
 
 A successful reload returns `200 OK` after the proxy subprocess validates its configuration, including TLS files, and binds its listener. Body read, configuration parsing, or conversion errors return `400 Bad Request`. Startup or cleanup failures return `500 Internal Server Error` with an error body. Startup waits at most ten seconds for readiness, then stops the child and rolls back networking on failure. Other methods return `405 Method Not Allowed`.
 
-To stop interception without exiting interactive mode, send a PUT with body `{}` and `Content-Length: 2`. Press Ctrl-C or send SIGTERM to exit and trigger cleanup. Closing standard input does not guarantee network restoration.
+To stop interception without exiting interactive mode, send a PUT with body `{}` and `Content-Length: 2`. Close standard input, press Ctrl-C, or send SIGTERM to exit and trigger cleanup.
 
 ## Development
 

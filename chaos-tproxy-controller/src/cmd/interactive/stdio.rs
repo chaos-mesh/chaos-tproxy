@@ -3,19 +3,26 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, Stdin, Stdout};
+use tokio::sync::oneshot;
 
 #[derive(Debug)]
 pub struct StdStream {
     stdin: Stdin,
     stdout: Stdout,
+    eof_sender: Option<oneshot::Sender<()>>,
 }
 
 impl StdStream {
-    fn new() -> Self {
-        Self {
-            stdin: tokio::io::stdin(),
-            stdout: tokio::io::stdout(),
-        }
+    pub(super) fn new() -> (Self, oneshot::Receiver<()>) {
+        let (eof_sender, eof_receiver) = oneshot::channel();
+        (
+            Self {
+                stdin: tokio::io::stdin(),
+                stdout: tokio::io::stdout(),
+                eof_sender: Some(eof_sender),
+            },
+            eof_receiver,
+        )
     }
 }
 
@@ -25,7 +32,15 @@ impl AsyncRead for StdStream {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stdin).poll_read(cx, buf)
+        let remaining = buf.remaining();
+        let filled = buf.filled().len();
+        let result = Pin::new(&mut self.stdin).poll_read(cx, buf);
+        if matches!(result, Poll::Ready(Ok(()))) && remaining > 0 && buf.filled().len() == filled {
+            if let Some(sender) = self.eof_sender.take() {
+                let _ = sender.send(());
+            }
+        }
+        result
     }
 }
 
@@ -47,11 +62,5 @@ impl AsyncWrite for StdStream {
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.stdout).poll_shutdown(cx)
-    }
-}
-
-impl Default for StdStream {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -46,13 +46,17 @@ async fn main() -> anyhow::Result<()> {
 
     if opt.interactive {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         config_server.serve_interactive();
 
-        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
-        signals.wait().await?;
+        let wait_result = tokio::select! {
+            result = signals.wait() => result,
+            result = config_server.wait() => result,
+        };
         config_server.stop().await?;
+        wait_result?;
 
-        // Currently we cannot graceful shutdown the config server.
+        // Tokio cannot cancel a pending blocking stdin read during runtime shutdown.
         exit(0);
     }
     Ok(())
