@@ -10,6 +10,7 @@ use tokio::process::{Child, Command};
 use uuid::Uuid;
 
 use crate::proxy::net::bridge::NetEnv;
+use crate::proxy::net::ping::GatewayPing;
 use crate::proxy::net::set_net::set_net;
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -27,6 +28,7 @@ struct Run {
     net: NetEnv,
     child: Option<Child>,
     bootstrap: Option<BootstrapServer>,
+    ping: Option<GatewayPing>,
 }
 
 impl Proxy {
@@ -57,6 +59,7 @@ impl Proxy {
             net: NetEnv::new()?,
             child: None,
             bootstrap: None,
+            ping: None,
         });
         let result = self
             .run
@@ -86,14 +89,16 @@ impl Run {
             .join(Uuid::new_v4().to_string())
             .with_extension("sock");
         self.bootstrap = Some(BootstrapServer::bind(ipc_path.clone(), &config)?);
-        set_net(
-            handle,
-            &mut self.net,
-            config.proxy_ports,
-            config.listen_port,
-            config.safe_mode,
-        )
-        .await?;
+        self.ping = Some(
+            set_net(
+                handle,
+                &mut self.net,
+                config.proxy_ports,
+                config.listen_port,
+                config.safe_mode,
+            )
+            .await?,
+        );
 
         let mut command = Command::new("ip");
         command
@@ -124,6 +129,12 @@ impl Run {
 
     async fn stop(&mut self, handle: &mut Handle) -> Result<()> {
         let mut errors = Vec::new();
+        if let Some(ping) = self.ping.as_mut() {
+            if let Err(error) = ping.stop().await {
+                errors.push(format!("stop gateway ping: {error:#}"));
+            }
+            self.ping = None;
+        }
         if let Some(child) = self.child.as_mut() {
             match stop_child(child).await {
                 Ok(()) => self.child = None,

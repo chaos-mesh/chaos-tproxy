@@ -2,27 +2,40 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use bytes::{Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, Stdin, Stdout};
-use tokio::sync::oneshot;
 
 #[derive(Debug)]
 pub struct StdStream {
     stdin: Stdin,
     stdout: Stdout,
-    eof_sender: Option<oneshot::Sender<()>>,
+    pending: Bytes,
+    eof: bool,
 }
 
 impl StdStream {
-    pub(super) fn new() -> (Self, oneshot::Receiver<()>) {
-        let (eof_sender, eof_receiver) = oneshot::channel();
-        (
-            Self {
-                stdin: tokio::io::stdin(),
-                stdout: tokio::io::stdout(),
-                eof_sender: Some(eof_sender),
-            },
-            eof_receiver,
-        )
+    pub(super) fn new() -> Self {
+        Self {
+            stdin: tokio::io::stdin(),
+            stdout: tokio::io::stdout(),
+            pending: Bytes::new(),
+            eof: false,
+        }
+    }
+
+    pub(super) fn prepend(&mut self, prefix: Bytes) {
+        if self.pending.is_empty() {
+            self.pending = prefix;
+        } else if !prefix.is_empty() {
+            let mut pending = BytesMut::with_capacity(prefix.len() + self.pending.len());
+            pending.extend_from_slice(&prefix);
+            pending.extend_from_slice(&self.pending);
+            self.pending = pending.freeze();
+        }
+    }
+
+    pub(super) fn is_exhausted(&self) -> bool {
+        self.eof && self.pending.is_empty()
     }
 }
 
@@ -33,12 +46,21 @@ impl AsyncRead for StdStream {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         let remaining = buf.remaining();
+        if remaining == 0 {
+            return Poll::Ready(Ok(()));
+        }
+        if !self.pending.is_empty() {
+            let len = remaining.min(self.pending.len());
+            buf.put_slice(&self.pending.split_to(len));
+            return Poll::Ready(Ok(()));
+        }
+        if self.eof {
+            return Poll::Ready(Ok(()));
+        }
         let filled = buf.filled().len();
         let result = Pin::new(&mut self.stdin).poll_read(cx, buf);
-        if matches!(result, Poll::Ready(Ok(()))) && remaining > 0 && buf.filled().len() == filled {
-            if let Some(sender) = self.eof_sender.take() {
-                let _ = sender.send(());
-            }
+        if matches!(result, Poll::Ready(Ok(()))) && buf.filled().len() == filled {
+            self.eof = true;
         }
         result
     }

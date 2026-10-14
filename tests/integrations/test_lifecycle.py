@@ -5,6 +5,8 @@ from pathlib import Path
 import select
 import shlex
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -73,18 +75,24 @@ class LifecycleTests(unittest.TestCase):
             config_file = Path(self.directory.name) / "config.json"
             config_file.write_text(json.dumps(file_config))
             args.append(str(config_file))
+        self.response_buffer = b""
         self.process = subprocess.Popen(args, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=self.logs,
                                         start_new_session=True, env=env)
         return self.process
 
-    def put(self, config, connection_close=False):
-        body = json.dumps(config, separators=(",", ":")).encode()
-        request = (b"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Length: "
+    def request(self, config, connection_close=False, padding=0):
+        body = b" " * padding + json.dumps(config, separators=(",", ":")).encode()
+        return (b"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Length: "
                    + str(len(body)).encode() + (b"\r\nConnection: close\r\n\r\n" if connection_close else b"\r\n\r\n") + body)
-        self.process.stdin.write(request)
+
+    def put(self, config, connection_close=False):
+        self.process.stdin.write(self.request(config, connection_close))
         self.process.stdin.flush()
-        response = b""
+        return self.read_response()
+
+    def read_response(self):
+        response = self.response_buffer
         deadline = time.monotonic() + 20
         while b"\r\n\r\n" not in response:
             remaining = deadline - time.monotonic()
@@ -103,7 +111,83 @@ class LifecycleTests(unittest.TestCase):
             chunk = os.read(self.process.stdout.fileno(), 65536)
             self.assertTrue(chunk, "configuration response body was truncated")
             body += chunk
-        return int(header.split()[1]), body.decode(errors="replace")
+        self.response_buffer = body[length:]
+        return int(header.split()[1]), body[:length].decode(errors="replace")
+
+    def gateway_ping_observer(self):
+        route = json.loads(run("ip", "-j", "-4", "route", "show", "default"))[0]
+        watch = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
+        self.addCleanup(watch.close)
+        watch.bind((route["dev"], 0))
+        watch.setblocking(False)
+        return watch, socket.inet_aton(route["gateway"])
+
+    def gateway_pings(self, observer, duration=2.25):
+        watch, gateway = observer
+        while True:
+            try:
+                watch.recv(65535)
+            except BlockingIOError:
+                break
+        deadline = time.monotonic() + duration
+        packets = []
+        while time.monotonic() < deadline:
+            if not select.select([watch], [], [], max(0, deadline - time.monotonic()))[0]:
+                break
+            frame = watch.recv(65535)
+            if len(frame) < 42 or frame[12:14] != b"\x08\x00":
+                continue
+            ip = frame[14:]
+            if ip[9] != 1 or ip[16:20] != gateway:
+                continue
+            icmp = ip[(ip[0] & 15) * 4:]
+            if len(icmp) >= 8 and icmp[0] == 8:
+                packets.append(struct.unpack("!HH", icmp[4:8]))
+        return packets
+
+    def assert_one_gateway_ping(self, observer):
+        packets = self.gateway_pings(observer)
+        self.assertGreaterEqual(len(packets), 2, "gateway echo requests were not observed")
+        self.assertEqual(len({identifier for identifier, _ in packets}), 1, packets)
+        sequences = [sequence for _, sequence in packets]
+        self.assertTrue(all(current == (previous + 1) % 65536
+                            for previous, current in zip(sequences, sequences[1:])), sequences)
+
+    def assert_gateway_ping_reload_and_stop(self, safe_mode):
+        observer = self.gateway_ping_observer()
+        self.assertEqual(self.gateway_pings(observer, duration=0.1), [])
+        self.start()
+        for index in range(4):
+            marker = "proxy-ping-" + str(index)
+            self.assertEqual(self.put(proxy_config(marker, safe_mode=safe_mode))[0], 200)
+            self.assert_connectivity(marker)
+            self.assert_one_gateway_ping(observer)
+        self.assertEqual(self.put({})[0], 200)
+        self.assertIsNone(self.process.poll())
+        self.assertEqual(self.gateway_pings(observer), [])
+        self.assert_restored()
+
+    def test_gateway_ping_reload_and_stop(self):
+        self.assert_gateway_ping_reload_and_stop(False)
+
+    def test_gateway_ping_safe_reload_and_stop(self):
+        self.assert_gateway_ping_reload_and_stop(True)
+
+    def test_gateway_ping_failed_start_stops(self):
+        observer = self.gateway_ping_observer()
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-ping-before-failure"))[0], 200)
+        self.assert_one_gateway_ping(observer)
+        self.assertEqual(self.put({"proxy_ports": [18080], "rules": [
+            {"target": "Request", "selector": {"method": "BAD METHOD"}, "actions": {}}]})[0], 500)
+        self.assertIsNone(self.process.poll())
+        self.assertEqual(self.gateway_pings(observer), [])
+        self.assert_restored()
+        self.assertEqual(self.put(proxy_config("proxy-ping-recovered"))[0], 200)
+        self.assert_one_gateway_ping(observer)
+        self.assertEqual(self.put({})[0], 200)
+        self.assertEqual(self.gateway_pings(observer), [])
+        self.assert_restored()
 
     def assert_connectivity(self, expected_marker="direct"):
         url = os.environ.get("TPROXY_TEST_URL")
@@ -387,11 +471,14 @@ class LifecycleTests(unittest.TestCase):
         self.assert_restored()
 
     def test_review_nat_jump_cleanup_can_retry(self):
+        observer = self.gateway_ping_observer()
         self.start(env=self.nat_failure_environment("-D", "jump", once=True))
         self.assertEqual(self.put(proxy_config("proxy-nat-retry"))[0], 200)
         self.assert_connectivity("proxy-nat-retry")
+        self.assert_one_gateway_ping(observer)
         self.assertEqual(self.put({})[0], 500)
         self.assertIn("-j dnat", run("ebtables", "-t", "nat", "-L", "--Lx"))
+        self.assertEqual(self.gateway_pings(observer), [])
         self.assertEqual(self.put({})[0], 200)
         self.assert_restored()
 
@@ -555,6 +642,82 @@ class LifecycleTests(unittest.TestCase):
             {"target": "Request", "selector": {"method": "BAD METHOD"}, "actions": {}}]})[0], 500)
         self.process.stdin.close()
         self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_connection_close_accepts_reload_and_stop(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-close-first"), connection_close=True)[0], 200)
+        self.assert_connectivity("proxy-close-first")
+        time.sleep(0.2)
+        self.assertEqual(self.put(proxy_config("proxy-close-reloaded"), connection_close=True)[0], 200)
+        self.assert_connectivity("proxy-close-reloaded")
+        time.sleep(0.2)
+        self.assertEqual(self.put({})[0], 200)
+        self.assertIsNone(self.process.poll())
+        self.assert_restored()
+
+    def test_connection_close_batched_reload_and_stop(self):
+        self.start()
+        self.process.stdin.write(
+            self.request(proxy_config("proxy-close-batch-first"), connection_close=True)
+            + self.request(proxy_config("proxy-close-batch-reloaded"), connection_close=True)
+            + self.request({}))
+        self.process.stdin.flush()
+        self.assertEqual([self.read_response()[0] for _ in range(3)], [200, 200, 200])
+        self.assertIsNone(self.process.poll())
+        self.assert_restored()
+
+    def test_connection_close_repeated_in_batch(self):
+        self.start()
+        requests = [self.request({}, connection_close=True) for _ in range(8)]
+        requests.append(self.request(proxy_config("proxy-close-repeated")))
+        self.process.stdin.write(b"".join(requests))
+        self.process.stdin.flush()
+        self.assertEqual([self.read_response()[0] for _ in requests], [200] * 9)
+        self.assert_connectivity("proxy-close-repeated")
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
+    def test_connection_close_batch_crosses_read_buffer(self):
+        self.start()
+        requests = [self.request({}, connection_close=True),
+                    self.request(proxy_config("proxy-close-large"), connection_close=True,
+                                 padding=256 * 1024)]
+        requests.extend(self.request({}, connection_close=True, padding=4096) for _ in range(8))
+        requests.append(self.request(proxy_config("proxy-close-after-large")))
+        self.process.stdin.write(b"".join(requests))
+        self.process.stdin.flush()
+        self.assertEqual([self.read_response()[0] for _ in requests], [200] * 11)
+        self.assert_connectivity("proxy-close-after-large")
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
+    def test_connection_close_batch_before_eof(self):
+        self.start()
+        self.process.stdin.write(
+            self.request(proxy_config("proxy-close-eof-first"), connection_close=True)
+            + self.request(proxy_config("proxy-close-eof-last"), connection_close=True)
+            + self.request({}, connection_close=True))
+        self.process.stdin.close()
+        self.assertEqual([self.read_response()[0] for _ in range(3)], [200, 200, 200])
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_connection_close_preserves_error_responses(self):
+        self.start()
+        invalid = {"proxy_ports": [18080], "rules": [
+            {"target": "Request", "selector": {"method": "BAD METHOD"}, "actions": {}}]}
+        self.process.stdin.write(
+            self.request("not a configuration", connection_close=True)
+            + self.request(invalid, connection_close=True)
+            + self.request(proxy_config("proxy-close-errors")))
+        self.process.stdin.flush()
+        responses = [self.read_response() for _ in range(3)]
+        self.assertEqual([status for status, _ in responses], [400, 500, 200])
+        self.assertIn("invalid type", responses[0][1])
+        self.assertIn("invalid HTTP method", responses[1][1])
+        self.assert_connectivity("proxy-close-errors")
+        self.assertEqual(self.put({})[0], 200)
         self.assert_restored()
 
     def test_connection_close_waits_for_stdin_eof(self):

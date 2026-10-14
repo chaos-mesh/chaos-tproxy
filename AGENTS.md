@@ -13,6 +13,7 @@ Preserve existing sign-offs when rebasing. Before pushing a PR, verify that ever
 - `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and handles configuration over standard input and output.
 - `chaos-tproxy-proxy/` implements transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket startup exchange.
 - `tests/` contains Rust integration tests and the Python HTTP fixture.
+- `test-support/` contains shared CLI and stdio process tests for both Rust binaries.
 - `podnetmock/` contains Go UDP probes and packet capture code. It is outside the Cargo workspace.
 - `config-examples/` contains user configuration examples.
 
@@ -46,7 +47,7 @@ cargo test --locked -p chaos-tproxy-controller --lib proxy::config::tests
 cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests
 ```
 
-`make image` runs all nonignored proxy and controller library tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`. Invoke that binary directly because `make run` references `target/debug/tproxy`.
+`make image` runs all nonignored proxy and controller library tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`; `make run` invokes that binary.
 
 ### HTTP integration test
 

@@ -19,7 +19,10 @@ pub mod raw_config;
 async fn main() -> anyhow::Result<()> {
     let opt = match Opt::from_args_checked() {
         Err(e) => {
-            println!("{}", e);
+            if let Some(error) = e.downcast_ref::<clap::Error>() {
+                error.exit();
+            }
+            eprintln!("{}", e);
             exit(1)
         }
         Ok(o) => o,
