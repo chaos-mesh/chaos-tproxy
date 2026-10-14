@@ -17,10 +17,6 @@ pub struct Opt {
     #[structopt(name = "FILE", parse(from_os_str))]
     pub input: Option<PathBuf>,
 
-    /// Allows applying json config by stdin/stdout
-    #[structopt(short, long)]
-    pub interactive: bool,
-
     // The number of occurrences of the `v/verbose` flag
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
@@ -33,6 +29,10 @@ pub struct Opt {
     /// ipc path for sub proxy.
     #[structopt(long)]
     pub ipc_path: Option<PathBuf>,
+
+    /// ipc path to communicate with chaos-mesh.
+    #[structopt(long = "interactive-path")]
+    pub interactive_path: Option<PathBuf>,
 }
 
 impl Opt {
@@ -50,7 +50,7 @@ impl Opt {
     }
 
     fn checked(self) -> Result<Self> {
-        if !self.interactive && !self.proxy && self.input.is_none() {
+        if self.interactive_path.is_none() && !self.proxy && self.input.is_none() {
             return Err(anyhow!("config file is required when interactive mode and daemon mode is all disabled, use `-h | --help` for more details"));
         }
         Ok(self)

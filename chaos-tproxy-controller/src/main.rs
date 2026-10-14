@@ -44,15 +44,18 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if opt.interactive {
+    if let Some(path) = opt.interactive_path {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
-        config_server.serve_interactive();
+        config_server.serve_interactive(path.clone());
 
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         signals.wait().await?;
+        // Currently we cannot graceful shutdown the config server.
         config_server.stop().await?;
 
-        // Currently we cannot graceful shutdown the config server.
+        // delete the unix socket file
+        std::fs::remove_file(path.clone())?;
+
         exit(0);
     }
     Ok(())
