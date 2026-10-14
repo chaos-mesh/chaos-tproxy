@@ -166,7 +166,7 @@ pub(crate) fn try_from_vec(
     t.map(|headers| -> Result<_, anyhow::Error> {
         let mut map = HeaderMap::new();
         for (key, value) in headers {
-            map.insert(key.parse::<HeaderName>()?, value.parse()?);
+            map.append(key.parse::<HeaderName>()?, value.parse()?);
         }
         Ok(map)
     })

@@ -172,7 +172,7 @@ Content-Length: 106
 
 A successful reload returns `200 OK` after the proxy subprocess validates its configuration, including TLS files, and binds its listener. Body read, configuration parsing, or conversion errors return `400 Bad Request`. Startup or cleanup failures return `500 Internal Server Error` with an error body. Startup waits at most ten seconds for readiness, then stops the child and rolls back networking on failure. Other methods return `405 Method Not Allowed`.
 
-To stop interception without exiting interactive mode, send a PUT with body `{}` and `Content-Length: 2`. Press Ctrl-C or send SIGTERM to exit and trigger cleanup. Closing standard input does not guarantee network restoration.
+To stop interception without exiting interactive mode, send a PUT with body `{}` and `Content-Length: 2`. Close standard input, press Ctrl-C, or send SIGTERM to exit and trigger cleanup.
 
 ## Development
 

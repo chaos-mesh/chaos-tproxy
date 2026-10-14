@@ -172,20 +172,24 @@ fn replace_path<S: AsRef<str>>(uri: &mut Uri, raw_path: Option<S>) -> anyhow::Re
 
 fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> anyhow::Result<()> {
     if let Some(qs) = queries {
+        if qs.is_empty() {
+            return Ok(());
+        }
         let mut parts = uri.clone().into_parts();
         let old_query = parts
             .path_and_query
             .as_ref()
             .and_then(|paq| paq.query())
             .unwrap_or("");
-        let mut query_map: HashMap<String, String> = serde_urlencoded::from_str(old_query)?;
-        query_map.extend(qs.clone());
+        let mut query_pairs: Vec<(String, String)> = serde_urlencoded::from_str(old_query)?;
+        query_pairs.retain(|(key, _)| !qs.contains_key(key));
+        query_pairs.extend(qs.iter().map(|(key, value)| (key.clone(), value.clone())));
         let path = parts
             .path_and_query
             .as_ref()
             .map(|paq| paq.path())
             .unwrap_or("/");
-        let paq = match serde_urlencoded::to_string(&query_map)?.as_str() {
+        let paq = match serde_urlencoded::to_string(&query_pairs)?.as_str() {
             "" => path.parse()?,
             q => format!("{}?{}", path, q).parse()?,
         };

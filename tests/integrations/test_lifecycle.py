@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 import urllib.request
+from urllib.parse import parse_qsl, urlsplit
 
 
 BINARY = os.environ.get("TPROXY_BINARY", "/tproxy")
@@ -77,10 +78,10 @@ class LifecycleTests(unittest.TestCase):
                                         start_new_session=True, env=env)
         return self.process
 
-    def put(self, config):
+    def put(self, config, connection_close=False):
         body = json.dumps(config, separators=(",", ":")).encode()
         request = (b"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Length: "
-                   + str(len(body)).encode() + b"\r\n\r\n" + body)
+                   + str(len(body)).encode() + (b"\r\nConnection: close\r\n\r\n" if connection_close else b"\r\n\r\n") + body)
         self.process.stdin.write(request)
         self.process.stdin.flush()
         response = b""
@@ -335,6 +336,97 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.put({"proxy_ports": [8080]})[0], 200)
         self.assertEqual(self.put({})[0], 200)
         self.assertEqual(run("ip", "-4", "route", "show", destination), original)
+        self.assert_restored()
+
+    def test_patch_preserves_duplicate_headers(self):
+        self.start()
+        config = {"proxy_ports": [18080], "rules": [
+            {"target": "Request", "selector": {}, "actions": {"patch": {
+                "headers": [["X-Repeated", "first"], ["x-repeated", "second"]]}}},
+            {"target": "Response", "selector": {}, "actions": {"patch": {
+                "headers": [["Set-Cookie", "one=1"], ["set-cookie", "two=2"]]}}},
+        ]}
+        self.assertEqual(self.put(config)[0], 200)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(os.environ["TPROXY_TEST_URL"] + "echo", timeout=5) as response:
+            self.assertEqual(json.loads(response.read())["headers"], ["first", "second"])
+            self.assertEqual(response.headers.get_all("Set-Cookie"), ["one=1", "two=2"])
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
+    def test_query_replacement_preserves_other_duplicates(self):
+        self.start()
+        config = {"proxy_ports": [18080], "rules": [
+            {"target": "Request", "selector": {}, "actions": {"replace": {
+                "queries": {"replace": "new value"}}}},
+        ]}
+        self.assertEqual(self.put(config)[0], 200)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(os.environ["TPROXY_TEST_URL"] +
+                         "echo?tag=a&replace=old&tag=b&empty=&replace=older", timeout=5) as response:
+            path = json.loads(response.read())["path"]
+            self.assertEqual(parse_qsl(urlsplit(path).query, keep_blank_values=True),
+                             [("tag", "a"), ("tag", "b"), ("empty", ""), ("replace", "new value")])
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
+    def test_stdin_eof_before_configuration(self):
+        self.start()
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_stdin_eof_restores_network(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-eof"))[0], 200)
+        self.assert_connectivity("proxy-eof")
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_stdin_eof_safe_mode_restores_network(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-eof-safe", safe_mode=True))[0], 200)
+        self.assert_connectivity("proxy-eof-safe")
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_stdin_eof_during_request_restores_network(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-eof-partial"))[0], 200)
+        self.assert_connectivity("proxy-eof-partial")
+        self.process.stdin.write(b"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n{")
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_stdin_eof_during_header_restores_network(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-eof-header"))[0], 200)
+        self.assert_connectivity("proxy-eof-header")
+        self.process.stdin.write(b"PUT / HTTP/1.1\r\nHost:")
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_stdin_eof_after_failed_reload(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-eof-failure"))[0], 200)
+        self.assert_connectivity("proxy-eof-failure")
+        self.assertEqual(self.put({"proxy_ports": [18080], "rules": [
+            {"target": "Request", "selector": {"method": "BAD METHOD"}, "actions": {}}]})[0], 500)
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
+        self.assert_restored()
+
+    def test_connection_close_waits_for_stdin_eof(self):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-close"), connection_close=True)[0], 200)
+        self.assert_connectivity("proxy-close")
+        self.assertIsNone(self.process.poll())
+        self.process.stdin.close()
+        self.assertEqual(self.process.wait(timeout=10), 0)
         self.assert_restored()
 
     def test_sigterm_restores_network(self):
