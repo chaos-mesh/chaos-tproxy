@@ -157,7 +157,7 @@ func TestMonitor(t *testing.T) {
 }
 
 func TestMonitorCancellation(t *testing.T) {
-	for _, timeout := range []time.Duration{20 * time.Millisecond, 0, pcap.BlockForever, time.Hour} {
+	for _, timeout := range []time.Duration{20 * time.Millisecond, 500 * time.Microsecond, 0, pcap.BlockForever, time.Hour} {
 		t.Run(timeout.String(), func(t *testing.T) {
 			for i := 0; i < 3; i++ {
 				receiver := listenUDP(t)
