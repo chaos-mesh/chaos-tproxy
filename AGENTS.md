@@ -2,10 +2,16 @@
 
 Use these instructions when inspecting, modifying, or validating this repository. Keep user-facing installation and configuration guidance in `README.md`.
 
+## Commits
+
+Every commit must include a `Signed-off-by` trailer that matches the author's name and email. Use `git commit --signoff` for new commits. To add a missing sign-off to the latest commit, use `git commit --amend --no-edit --signoff`.
+
+Preserve existing sign-offs when rebasing. Before pushing a PR, verify that every commit in the PR has the required sign-off so the DCO check can pass.
+
 ## Repository map
 
 - `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and handles configuration over standard input and output.
-- `chaos-tproxy-proxy/` implements transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket configuration client.
+- `chaos-tproxy-proxy/` implements transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket startup exchange.
 - `tests/` contains Rust integration tests and the Python HTTP fixture.
 - `podnetmock/` contains Go UDP probes and packet capture code. It is outside the Cargo workspace.
 - `config-examples/` contains user configuration examples.
@@ -40,7 +46,7 @@ cargo test --locked -p chaos-tproxy-controller --lib proxy::config::tests
 cargo test --locked -p chaos-tproxy-controller --lib proxy::net::bridge::tests
 ```
 
-`make image` runs these focused tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`. Invoke that binary directly because `make run` references `target/debug/tproxy`.
+`make image` runs all nonignored proxy and controller library tests and builds the release binaries in Docker. `make release` copies the main binary to `./tproxy`. Native debug builds produce `target/debug/chaos-tproxy`. Invoke that binary directly because `make run` references `target/debug/tproxy`.
 
 ### HTTP integration test
 
@@ -51,6 +57,30 @@ bash tests/http/run_http_test.sh
 ```
 
 The ignored route test deletes routes. Run it only in a disposable Linux environment.
+
+### Lifecycle integration test
+
+Run the following commands from the repository root with Docker available.
+
+Load the required networking modules on the disposable Linux Docker host before running the suite. Test containers share its kernel and do not contain its module files. The lifecycle CI job loads these modules explicitly before building the images.
+
+```sh
+for module in ebtable_nat ebtable_broute ebt_ip ebt_dnat ebt_redirect \
+  iptable_mangle xt_socket xt_TPROXY xt_multiport xt_tcpudp xt_mark; do
+  sudo modprobe "$module"
+done
+```
+
+```sh
+make image
+docker build -f tests/integrations/Dockerfile.lifecycle \
+  --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
+bash tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test
+```
+
+The suite creates a dedicated Docker network and HTTP backend, then uses a separate privileged Linux container for each case. It checks startup failures, apply, reload, normal and safe-mode stop, SIGINT and SIGTERM, preservation of unrelated NAT rules and route changes, and real HTTP interception and restoration. It prints the results directory and removes its containers and network on exit. It does not use the host network namespace. The Python suite requires Linux root and `CHAOS_TPROXY_TEST_ISOLATED=1` to prevent accidental direct execution.
+
+The CI test workflow runs the suite as the independent `Lifecycle integration tests` job for pull requests, pushes to `master`, and manual runs. It saves per-case logs and `results.tsv` as the `lifecycle-results` artifact for seven days, including when a test fails.
 
 ### Go tests
 
@@ -69,7 +99,7 @@ For changes to `podnetmock/`, install libpcap headers and run `go test ./...` fr
 
 ## Verify network behavior
 
-Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup flushes the entire ebtables NAT table in its network namespace. Do not test interception in the host network namespace.
+Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes only the run's outer NAT rule and restores routes displaced by setup without replacing current routes. Do not test interception in the host network namespace.
 
 For lifecycle changes, verify configuration apply, reload, failed startup, stop, and network restoration. For HTTP changes, send real requests through the proxy. Library tests and Docker builds do not verify interception or restoration.
 

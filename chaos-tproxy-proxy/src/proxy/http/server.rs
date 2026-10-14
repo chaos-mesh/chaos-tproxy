@@ -34,23 +34,24 @@ use crate::proxy::tcp::transparent_socket::TransparentSocket;
 /// connection from the iptables tproxy, and then let [HttpService] to handle the connection.
 pub struct HttpServer {
     config: Config,
+    listener: TcpListener,
 }
 
 impl HttpServer {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn bind(config: Config) -> Result<Self> {
+        let addr = SocketAddr::from(([0, 0, 0, 0], config.http_config.listen_port));
+        let listener = TcpListener::bind(addr)?;
+        Ok(Self { config, listener })
     }
 
     pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.listen_port));
-        let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
         let rx_mut = &mut rx;
 
         loop {
             let stream = select! {
-                stream = listener.accept() => {
+                stream = self.listener.accept() => {
                     stream
                 },
                 _ = &mut *rx_mut => {

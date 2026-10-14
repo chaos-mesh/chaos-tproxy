@@ -110,7 +110,12 @@ impl ConfigService {
             Ok(c) => c,
         };
 
-        proxy.reload(config.proxy_config).await?;
+        if let Err(error) = proxy.reload(config.proxy_config).await {
+            tracing::error!("proxy reload failed: {error:#}");
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(format!("{error:#}").into())?);
+        }
 
         Ok(Response::builder()
             .status(StatusCode::OK)

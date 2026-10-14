@@ -4,7 +4,7 @@ chaos-tproxy is a transparent HTTP fault injection proxy for Linux. It uses TPRO
 
 ## Requirements
 
-Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup flushes the entire ebtables NAT table in the controller's network namespace. Do not run it in the host network namespace.
+Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own outer ebtables NAT rule and restores routes displaced by setup. Current routes take precedence over saved routes. Do not run it in the host network namespace.
 
 The following commands must be available on `PATH`.
 
@@ -36,7 +36,7 @@ To build with Docker and copy the executable to `./tproxy`, run the following co
 make release
 ```
 
-The Dockerfile uses Rust 1.94.1 and runs the focused library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
+The Dockerfile uses Rust 1.94.1 and runs the nonignored proxy and controller library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
 
 The examples below use `./tproxy`. For a native source build, use `./target/release/chaos-tproxy` instead.
 
@@ -170,7 +170,7 @@ Content-Length: 106
 {"proxy_ports":[8080],"rules":[{"target":"Request","selector":{"method":"GET"},"actions":{"delay":"5s"}}]}
 ```
 
-A successful controller reload returns `200 OK`. Body read, configuration parsing, or conversion errors return `400 Bad Request`. Other methods return `405 Method Not Allowed`. A 200 response does not confirm that the subprocess has completed TLS validation or started listening.
+A successful reload returns `200 OK` after the proxy subprocess validates its configuration, including TLS files, and binds its listener. Body read, configuration parsing, or conversion errors return `400 Bad Request`. Startup or cleanup failures return `500 Internal Server Error` with an error body. Startup waits at most ten seconds for readiness, then stops the child and rolls back networking on failure. Other methods return `405 Method Not Allowed`.
 
 To stop interception without exiting interactive mode, send a PUT with body `{}` and `Content-Length: 2`. Press Ctrl-C or send SIGTERM to exit and trigger cleanup. Closing standard input does not guarantee network restoration.
 
