@@ -1,4 +1,4 @@
 const BINARY: &str = env!("CARGO_BIN_EXE_chaos-tproxy");
 
-#[path = "support/stdio.rs"]
+#[path = "../test-support/stdio.rs"]
 mod stdio;

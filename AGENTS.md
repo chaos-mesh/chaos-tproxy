@@ -13,6 +13,7 @@ Preserve existing sign-offs when rebasing. Before pushing a PR, verify that ever
 - `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and handles configuration over standard input and output.
 - `chaos-tproxy-proxy/` implements transparent TCP connections, HTTP selectors and actions, TLS, and the Unix socket startup exchange.
 - `tests/` contains Rust integration tests and the Python HTTP fixture.
+- `test-support/` contains shared CLI and stdio process tests for both Rust binaries.
 - `podnetmock/` contains Go UDP probes and packet capture code. It is outside the Cargo workspace.
 - `config-examples/` contains user configuration examples.
 
