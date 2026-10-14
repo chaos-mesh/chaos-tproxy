@@ -338,6 +338,143 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(run("ip", "-4", "route", "show", destination), original)
         self.assert_restored()
 
+    def assert_duplicate_nat_preserved(self, safe_mode):
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-owned-nat", safe_mode=safe_mode))[0], 200)
+        self.assert_connectivity("proxy-owned-nat")
+        original_device = self.baseline_default.split(" dev ")[1].split()[0]
+        commands = run("ebtables", "-t", "nat", "-L", "--Lx").splitlines()
+        owned = next(shlex.split(line) for line in commands if "-j dnat" in line)
+        suffix = owned[owned.index("-j"):]
+        foreign = ["ebtables", "-t", "nat", "-I", "PREROUTING", "1",
+                   "-i", original_device] + suffix + ["-c", "17", "1700"]
+        run(*foreign)
+        foreign_spec = run("ebtables", "-t", "nat", "-L", "PREROUTING", "--Lx").splitlines()[0]
+        self.assertEqual(self.put({})[0], 200)
+        current = run("ebtables", "-t", "nat", "-L", "PREROUTING", "--Lx", "--Lc").splitlines()
+        rule, counters = current[0].split("-c ")
+        self.assertEqual(rule.strip(), foreign_spec.strip())
+        packets, size = map(int, counters.split())
+        self.assertGreaterEqual(packets, 17)
+        self.assertGreaterEqual(size, 1700)
+        run("ebtables", "-t", "nat", "-D", "PREROUTING", "-i", original_device, *suffix)
+        self.assert_restored()
+
+    def nat_failure_environment(self, operation, chain, once=False):
+        wrapper = Path(self.directory.name) / "ebtables"
+        marker = Path(self.directory.name) / "nat-failure"
+        wrapper.write_text("#!/usr/bin/env python3\nimport os,sys\nfrom pathlib import Path\n"
+                           "args=sys.argv[1:]\n"
+                           "operation=" + repr(operation) + "\nchain=" + repr(chain) + "\n"
+                           "marker=Path(" + repr(str(marker)) + ")\n"
+                           "if operation in args:\n"
+                           "    target=args[args.index(operation)+1]\n"
+                           "    match=(target == 'PREROUTING') if chain == 'jump' else target not in ('PREROUTING','OUTPUT','POSTROUTING')\n"
+                           "    if match and (" + repr(not once) + " or not marker.exists()):\n"
+                           "        marker.touch()\n        sys.exit(42)\n"
+                           "os.execv('/usr/sbin/ebtables-legacy',['ebtables-legacy']+args)\n")
+        wrapper.chmod(0o755)
+        return dict(os.environ, PATH=self.directory.name + ":" + os.environ["PATH"])
+
+    def test_review_nat_chain_rule_failure_rolls_back(self):
+        self.start(env=self.nat_failure_environment("-A", "chain"))
+        self.assertEqual(self.put(proxy_config("proxy-nat-failure"))[0], 500)
+        self.assert_restored()
+
+    def test_review_nat_jump_failure_rolls_back(self):
+        self.start(env=self.nat_failure_environment("-A", "jump"))
+        self.assertEqual(self.put(proxy_config("proxy-nat-failure"))[0], 500)
+        self.assert_restored()
+
+    def test_review_nat_jump_cleanup_can_retry(self):
+        self.start(env=self.nat_failure_environment("-D", "jump", once=True))
+        self.assertEqual(self.put(proxy_config("proxy-nat-retry"))[0], 200)
+        self.assert_connectivity("proxy-nat-retry")
+        self.assertEqual(self.put({})[0], 500)
+        self.assertIn("-j dnat", run("ebtables", "-t", "nat", "-L", "--Lx"))
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
+    def test_review_nat_chain_cleanup_can_retry(self):
+        self.start(env=self.nat_failure_environment("-X", "chain", once=True))
+        self.assertEqual(self.put(proxy_config("proxy-nat-retry"))[0], 200)
+        self.assert_connectivity("proxy-nat-retry")
+        self.assertEqual(self.put({})[0], 500)
+        self.assertNotIn("-j dnat", run("ebtables", "-t", "nat", "-L", "--Lx"))
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
+    def test_review_duplicate_nat_normal_stop(self):
+        self.assert_duplicate_nat_preserved(False)
+
+    def test_review_duplicate_nat_safe_stop(self):
+        self.assert_duplicate_nat_preserved(True)
+
+    def add_backup_default(self):
+        run("ip", "link", "add", "backup0", "type", "dummy")
+        run("ip", "address", "add", "192.0.2.10/24", "dev", "backup0")
+        run("ip", "link", "set", "backup0", "up")
+        run("ip", "route", "add", "default", "via", "192.0.2.1", "dev", "backup0", "metric", "1000")
+        self.baseline_addresses = self.addresses()
+        self.baseline_links = self.links()
+        self.baseline_default = run("ip", "-4", "route", "show", "default")
+        return run("ip", "-4", "route", "show")
+
+    def test_review_preserves_preexisting_backup_default(self):
+        routes = self.add_backup_default()
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-backup-route"))[0], 200)
+        self.assert_connectivity("proxy-backup-route")
+        self.assertEqual(self.put({})[0], 200)
+        self.assertEqual(run("ip", "-4", "route", "show"), routes)
+        self.assert_restored()
+
+    def test_review_failed_start_preserves_backup_default(self):
+        routes = self.add_backup_default()
+        self.start()
+        self.assertEqual(self.put({"proxy_ports": [18080], "rules": [
+            {"target": "Request", "selector": {"method": "BAD METHOD"}, "actions": {}}]})[0], 500)
+        self.assertEqual(run("ip", "-4", "route", "show"), routes)
+        self.assert_restored()
+
+    def test_review_new_default_wins_with_backup(self):
+        original = json.loads(run("ip", "-j", "-4", "route", "show", "default"))[0]
+        self.add_backup_default()
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-backup-new-route"))[0], 200)
+        self.assert_connectivity("proxy-backup-new-route")
+        run("ip", "route", "add", "default", "via", original["gateway"],
+            "dev", original["dev"], "onlink", "metric", "222")
+        self.baseline_default = "\n".join(
+            line for line in run("ip", "-4", "route", "show", "default").splitlines()
+            if " dev " + original["dev"] + " " in line or " dev backup0 " in line)
+        self.assertEqual(self.put({})[0], 200)
+        defaults = json.loads(run("ip", "-j", "-4", "route", "show", "default"))
+        self.assertEqual([(route["dev"], route.get("metric", 0)) for route in defaults],
+                         [(original["dev"], 222), ("backup0", 1000)])
+        self.assert_restored()
+
+    def test_review_existing_nat_chain_is_not_owned(self):
+        wrapper = Path(self.directory.name) / "ebtables"
+        marker = Path(self.directory.name) / "foreign-chain"
+        wrapper.write_text("#!/usr/bin/env python3\nimport os,sys,subprocess\nfrom pathlib import Path\n"
+                           "args=sys.argv[1:]\n"
+                           "if '-N' in args:\n"
+                           "    chain=args[args.index('-N')+1]\n"
+                           "    subprocess.check_call(['/usr/sbin/ebtables-legacy']+args)\n"
+                           "    subprocess.check_call(['/usr/sbin/ebtables-legacy','-t','nat','-A',chain,'-j','ACCEPT','-c','17','1700'])\n"
+                           "    Path(" + repr(str(marker)) + ").write_text(chain)\n"
+                           "os.execv('/usr/sbin/ebtables-legacy',['ebtables-legacy']+args)\n")
+        wrapper.chmod(0o755)
+        self.start(env=dict(os.environ, PATH=self.directory.name + ":" + os.environ["PATH"]))
+        self.assertEqual(self.put(proxy_config("proxy-chain-collision"))[0], 500)
+        chain = marker.read_text()
+        foreign = run("ebtables", "-t", "nat", "-L", chain, "--Lx", "--Lc")
+        self.assertIn("-j ACCEPT -c 17 1700", foreign)
+        run("ebtables", "-t", "nat", "-F", chain)
+        run("ebtables", "-t", "nat", "-X", chain)
+        self.assert_restored()
+
     def test_patch_preserves_duplicate_headers(self):
         self.start()
         config = {"proxy_ports": [18080], "rules": [

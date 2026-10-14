@@ -10,7 +10,7 @@ use rtnetlink::packet::RouteMessage;
 use rtnetlink::Handle;
 use uuid::Uuid;
 
-use crate::proxy::net::iptables::OuterNatRule;
+use crate::proxy::net::iptables::OuterNatChain;
 use crate::proxy::net::routes::{
     generated_address_route, get_routes_noblock, remove_generated_address_route, restore_routes,
     retain_displaced_routes, route_uses_device,
@@ -36,10 +36,11 @@ pub struct NetEnv {
 
 #[derive(Debug, Default)]
 struct RestoreState {
+    baseline_routes: Vec<RouteMessage>,
     displaced_routes: Vec<RouteMessage>,
     restored_routes: Vec<RouteMessage>,
     generated_address_route: Option<RouteMessage>,
-    outer_nat_rule: Option<OuterNatRule>,
+    outer_nat_chain: Option<OuterNatChain>,
     gateway: Option<(String, String)>,
     dns_saved: bool,
     address_removed: bool,
@@ -108,6 +109,7 @@ impl NetEnv {
         let arp_filter_br1 = format!("net.ipv4.conf.{}.arp_filter=1", self.bridge1);
         let arp_filter_v1 = format!("net.ipv4.conf.{}.arp_filter=1", self.veth1);
         let arp_filter_dev = format!("net.ipv4.conf.{}.arp_filter=1", self.device);
+        self.restore.baseline_routes = get_routes_noblock(handle).await?;
         execute(bash_c(save_dns))?;
         self.restore.dns_saved = true;
         execute(ip_netns_add(&self.netns))?;
@@ -260,22 +262,40 @@ impl NetEnv {
     }
 
     pub fn install_outer_nat(&mut self, destination_mac: String) -> Result<()> {
-        let rule = OuterNatRule {
+        if self.restore.outer_nat_chain.is_some() {
+            return Err(anyhow!("outer NAT chain is already installed"));
+        }
+        let name = format!("tproxy-{}", self.netns);
+        execute(OuterNatChain::create_command(&name))?;
+        let chain = self.restore.outer_nat_chain.insert(OuterNatChain {
+            chain: name,
             device: self.device.clone(),
-            destination_mac,
+            linked: false,
+        });
+        execute(chain.append_dnat(&destination_mac))?;
+        execute(chain.append_jump())?;
+        chain.linked = true;
+        Ok(())
+    }
+
+    fn clear_outer_nat(&mut self) -> Result<()> {
+        let Some(chain) = self.restore.outer_nat_chain.as_mut() else {
+            return Ok(());
         };
-        execute(rule.append())?;
-        self.restore.outer_nat_rule = Some(rule);
+        if chain.linked {
+            execute(chain.delete_jump())?;
+            chain.linked = false;
+        }
+        execute(chain.flush())?;
+        execute(chain.delete_chain())?;
+        self.restore.outer_nat_chain = None;
         Ok(())
     }
 
     pub async fn clear_bridge(&mut self, handle: &mut Handle) -> Result<()> {
         let mut errors = Vec::new();
-        if let Some(rule) = self.restore.outer_nat_rule.as_ref() {
-            match execute(rule.delete()) {
-                Ok(()) => self.restore.outer_nat_rule = None,
-                Err(error) => errors.push(format!("remove outer NAT rule: {error:#}")),
-            }
+        if let Err(error) = self.clear_outer_nat() {
+            errors.push(format!("remove outer NAT: {error:#}"));
         }
         if self.restore.namespace_created {
             if std::path::Path::new("/var/run/netns")
@@ -336,6 +356,7 @@ impl NetEnv {
         {
             if let Err(error) = restore_routes(
                 handle,
+                &self.restore.baseline_routes,
                 &mut self.restore.displaced_routes,
                 &mut self.restore.restored_routes,
             )

@@ -4,7 +4,7 @@ chaos-tproxy is a transparent HTTP fault injection proxy for Linux. It uses TPRO
 
 ## Requirements
 
-Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own outer ebtables NAT rule and restores routes displaced by setup. Current routes take precedence over saved routes. Do not run it in the host network namespace.
+Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own ebtables NAT jump and chain and restores routes displaced by setup. Routes added or changed during interception take precedence over saved routes. Existing backup routes do not prevent restoration. Do not run it in the host network namespace.
 
 The following commands must be available on `PATH`.
 

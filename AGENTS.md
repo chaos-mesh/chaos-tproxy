@@ -99,7 +99,7 @@ For changes to `podnetmock/`, install libpcap headers and run `go test ./...` fr
 
 ## Verify network behavior
 
-Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes only the run's outer NAT rule and restores routes displaced by setup without replacing current routes. Do not test interception in the host network namespace.
+Run the controller only in a disposable Linux VM or container with an IPv4 default interface and the required privileges. It modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes only the run's NAT jump and chain and restores routes displaced by setup. Preserve unchanged baseline alternatives, and let routes added or changed during the run take precedence. Do not test interception in the host network namespace.
 
 For lifecycle changes, verify configuration apply, reload, failed startup, stop, and network restoration. For HTTP changes, send real requests through the proxy. Library tests and Docker builds do not verify interception or restoration.
 
