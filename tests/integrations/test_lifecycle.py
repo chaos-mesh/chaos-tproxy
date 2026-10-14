@@ -164,7 +164,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_child_exec_failure_rolls_back(self):
         wrapper = Path(self.directory.name) / "ip"
-        wrapper.write_text("#!/bin/sh\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
+        wrapper.write_text("#!/usr/bin/env bash\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
                            + shlex.quote(BINARY) + " ]; then exit 42; fi\nexec /sbin/ip \"$@\"\n")
         wrapper.chmod(0o755)
         env = dict(os.environ, PATH=self.directory.name + ":" + os.environ["PATH"])
@@ -175,7 +175,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_network_setup_failure_rolls_back(self):
         wrapper = Path(self.directory.name) / "ip"
-        wrapper.write_text("#!/bin/sh\nif [ \"$1\" = route ] && [ \"$2\" = add ] && [ \"$3\" = default ]; "
+        wrapper.write_text("#!/usr/bin/env bash\nif [ \"$1\" = route ] && [ \"$2\" = add ] && [ \"$3\" = default ]; "
                            "then exit 42; fi\nexec /sbin/ip \"$@\"\n")
         wrapper.chmod(0o755)
         self.start(env=dict(os.environ, PATH=self.directory.name + ":" + os.environ["PATH"]))
@@ -192,7 +192,7 @@ class LifecycleTests(unittest.TestCase):
                            "listener.listen()\n"
                            "sys.exit(subprocess.call(sys.argv[1:]))\n")
         wrapper = Path(self.directory.name) / "ip"
-        wrapper.write_text("#!/bin/sh\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
+        wrapper.write_text("#!/usr/bin/env bash\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
                            + shlex.quote(BINARY) + " ]; then namespace=\"$3\"; shift 3; exec /sbin/ip netns exec \"$namespace\" python3 "
                            + shlex.quote(str(blocker)) + " \"$@\"; fi\nexec /sbin/ip \"$@\"\n")
         wrapper.chmod(0o755)
@@ -204,7 +204,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_readiness_timeout_rolls_back(self):
         wrapper = Path(self.directory.name) / "ip"
-        wrapper.write_text("#!/bin/sh\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
+        wrapper.write_text("#!/usr/bin/env bash\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
                            + shlex.quote(BINARY) + " ]; then exec sleep 60; fi\nexec /sbin/ip \"$@\"\n")
         wrapper.chmod(0o755)
         self.start(env=dict(os.environ, PATH=self.directory.name + ":" + os.environ["PATH"]))

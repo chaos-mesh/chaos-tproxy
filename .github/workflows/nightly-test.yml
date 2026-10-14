@@ -56,7 +56,7 @@ jobs:
           docker build -f tests/integrations/Dockerfile.lifecycle \
             --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
       - name: Run lifecycle tests
-        run: sh tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test "${{ runner.temp }}/lifecycle-results"
+        run: bash tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test "${{ runner.temp }}/lifecycle-results"
       - name: Upload lifecycle logs
         if: always()
         uses: actions/upload-artifact@v4

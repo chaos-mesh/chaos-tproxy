@@ -219,7 +219,7 @@ The Cargo checks do not verify transparent interception or network restoration. 
 make image
 docker build -f tests/integrations/Dockerfile.lifecycle \
   --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
-sh tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test
+bash tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test
 ```
 
 The suite creates a dedicated Docker network and HTTP backend, then uses a separate privileged container for each case. It checks startup failures, normal and safe-mode stop, SIGINT and SIGTERM, preservation of unrelated NAT rules and route changes, and HTTP connectivity before, during, and after interception. It prints the directory containing per-case logs and removes its containers and network on exit. It does not use the host network namespace.

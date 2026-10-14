@@ -1,5 +1,5 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
 image="${1:-chaos-tproxy-lifecycle-test}"
 results="${2:-$(mktemp -d)}"
 mkdir -p "$results"
