@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::Error;
+use futures::future::poll_fn;
 use futures::TryStreamExt;
 use http::{Method, Request, Response, StatusCode};
 use hyper::server::conn::{Connection, Http};
@@ -46,23 +47,28 @@ impl ConfigServer {
         let mut service = ConfigService(self.proxy.clone());
         self.task = Some(tokio::spawn(async move {
             let rx_mut = &mut rx;
+            let mut stream = StdStream::new();
             loop {
-                let (stream, mut eof_receiver) = StdStream::new();
-                {
-                    let mut conn = Http::new().serve_connection(stream, &mut service);
-                    let conn_mut = &mut conn;
-                    select! {
-                        _ = &mut *rx_mut => {
-                            tracing::trace!("catch signal in config server.");
-                            Connection::graceful_shutdown(Pin::new(conn_mut));
-                            return Ok(());
-                        },
-                        ret = &mut *conn_mut => if let Err(e) = ret {
-                            tracing::error!("{}",e);
-                        }
-                    };
+                let mut conn = Http::new()
+                    .http1_half_close(true)
+                    .serve_connection(&mut stream, &mut service);
+                let result = select! {
+                    _ = &mut *rx_mut => {
+                        tracing::trace!("catch signal in config server.");
+                        Connection::graceful_shutdown(Pin::new(&mut conn));
+                        return Ok(());
+                    },
+                    ret = poll_fn(|cx| conn.poll_without_shutdown(cx)) => ret,
+                };
+                if let Some(parts) = conn.try_into_parts() {
+                    if result.is_ok() {
+                        parts.io.prepend(parts.read_buf);
+                    }
                 }
-                if eof_receiver.try_recv().is_ok() {
+                if let Err(error) = result {
+                    tracing::error!("{}", error);
+                }
+                if stream.is_exhausted() {
                     return Ok(());
                 }
             }

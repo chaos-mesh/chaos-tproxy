@@ -5,16 +5,16 @@ use rtnetlink::Handle;
 use crate::proxy::net::arp::gratuitous_arp;
 use crate::proxy::net::bridge::{bash_c, execute, execute_all, get_interface, NetEnv};
 use crate::proxy::net::iptables::{set_iptables, set_iptables_safe};
-use crate::proxy::net::ping::try_ping;
+use crate::proxy::net::ping::GatewayPing;
 
 #[cfg(target_os = "linux")]
-pub async fn set_net(
+pub(crate) async fn set_net(
     handle: &mut Handle,
     net_env: &mut NetEnv,
     proxy_ports: Option<String>,
     listen_port: u16,
     safe: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<GatewayPing> {
     net_env.setenv_bridge(handle).await?;
     let port = listen_port.to_string();
     let restore_dns = "cp /etc/resolv.conf.bak /etc/resolv.conf";
@@ -42,9 +42,7 @@ pub async fn set_net(
     let _ = execute(bash_c(restore_dns));
 
     let gateway = default_net::get_default_gateway().map_err(|e| anyhow!(e))?;
-    try_ping(gateway.ip_addr).await;
-
-    Ok(())
+    GatewayPing::start(gateway.ip_addr).await
 }
 
 #[cfg(target_os = "windows")]
