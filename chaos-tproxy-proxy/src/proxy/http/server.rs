@@ -105,6 +105,10 @@ pub async fn serve_https(
         stream.peer_addr()?,
         stream.local_addr()?
     );
+
+    let span = span!(Level::TRACE, "TLS Stream", "{}", &log_key);
+    let _guard = span.enter();
+
     let mut tls_stream = acceptor.accept(stream).await?;
     loop {
         let (r, parts) = Http::new()
@@ -228,7 +232,9 @@ impl HttpService {
     /// handle would execute the core inject and forward logic.
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
-        debug!("{} : Proxy is handling http request", log_key);
+        let span = span!(Level::TRACE, "handle HTTP Request", "{}", &log_key);
+        let _guard = span.enter();
+        debug!("Proxy is handling http request");
 
         let role_ok = self.role_ok();
         let request_rules: Vec<_> = self
@@ -244,7 +250,7 @@ impl HttpService {
 
         // inject chaos into request
         for rule in request_rules {
-            debug!("{} : request matched, rule({:?})", log_key, rule);
+            debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
         }
 
@@ -294,7 +300,7 @@ impl HttpService {
         let mut response = match rsp_fut.await {
             Ok(resp) => resp,
             Err(err) => {
-                error!("{} : fail to forward request: {}", log_key, err);
+                error!("fail to forward request: {}", err);
                 Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .body(Body::empty())?
@@ -321,7 +327,7 @@ impl HttpService {
 
         // inject chaos into response
         for rule in response_rules {
-            debug!("{} : response matched", log_key);
+            debug!("response matched");
             response = apply_response_action(response, &rule.actions).await?;
         }
         Ok(response)
