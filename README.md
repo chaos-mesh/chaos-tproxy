@@ -28,7 +28,7 @@ To build from source, run the following command on Linux from the repository roo
 cargo build --locked --release --workspace
 ```
 
-The executable is `target/release/chaos-tproxy`. The repository selects nightly Rust through `rust-toolchain`.
+The executable is `target/release/chaos-tproxy`. The repository selects Rust 1.99.1 through `rust-toolchain`.
 
 To build with Docker and copy the executable to `./tproxy`, run the following command.
 
@@ -36,7 +36,7 @@ To build with Docker and copy the executable to `./tproxy`, run the following co
 make release
 ```
 
-The Dockerfile uses Rust 1.94.1 and runs the nonignored proxy and controller library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
+The Dockerfile uses Rust 1.99.1 and runs the nonignored proxy and controller library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
 
 The examples below use `./tproxy`. For a native source build, use `./target/release/chaos-tproxy` instead.
 
@@ -177,5 +177,7 @@ To stop interception without exiting interactive mode, send a PUT with body `{}`
 ## Development
 
 The Rust workspace contains the controller, proxy library, and integration tests. `podnetmock/` is a separate Go package for UDP probes and packet capture.
+
+CI uses Rust 1.99.1 to build, test, lint, and format. Run `cargo fmt --all -- --check` to check formatting.
 
 See [AGENTS.md](AGENTS.md) for AI agent instructions, the repository map, and verification commands. Rust checks require Linux. Library tests and Docker builds do not verify network interception or restoration.

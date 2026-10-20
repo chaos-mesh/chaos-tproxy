@@ -23,7 +23,7 @@ The root package builds `chaos-tproxy` from `chaos-tproxy-controller/src/main.rs
 
 Run Rust checks on Linux from the repository root. The controller depends on Linux netlink and network namespaces. Transparent sockets use IPv4 and `IP_TRANSPARENT`.
 
-The repository selects nightly Rust. The Dockerfile pins Rust 1.94.1. Formatting requires nightly because `rustfmt.toml` enables unstable options.
+The repository, CI builds and tests, and Dockerfile use Rust 1.99.1. CI also runs Clippy and rustfmt with Rust 1.99.1.
 
 Run the following checks as appropriate for the change.
 
@@ -31,7 +31,7 @@ Run the following checks as appropriate for the change.
 cargo build --locked --workspace
 cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
-cargo +nightly fmt --all -- --check
+cargo fmt --all -- --check
 ```
 
 For HTTP actions, selectors, or TLS parsing, run the proxy library tests.

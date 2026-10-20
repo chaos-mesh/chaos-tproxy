@@ -1,7 +1,7 @@
 build: 
 	cargo build --all
 fmt:
-	cargo +nightly fmt
+	cargo fmt
 run: 
 	RUST_LOG=trace ./target/debug/chaos-tproxy $(config)
 test:
