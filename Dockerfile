@@ -16,9 +16,9 @@ ENV https_proxy $HTTPS_PROXY
 RUN sed -i 's|deb.debian.org|archive.debian.org|g; /buster-updates/d' /etc/apt/sources.list && \
     apt-get update && apt-get install build-essential $CC curl git pkg-config -y && rm -rf /var/lib/apt/lists/*
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain 1.94.1 -y
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain 1.99.1 -y
 ENV PATH "/root/.cargo/bin:${PATH}"
-ENV RUSTUP_TOOLCHAIN=1.94.1
+ENV RUSTUP_TOOLCHAIN=1.99.1
 
 RUN if [ -n "$HTTP_PROXY" ]; then echo "[http]\n\
 proxy = \"${HTTP_PROXY}\"\n\
