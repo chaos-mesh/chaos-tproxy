@@ -20,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, error, span, trace, Level};
+use tracing::{debug, error, trace};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -95,6 +95,12 @@ impl HttpServer {
 }
 
 /// serve_https would make the HttpService resolving the resolve TLS stream.
+#[tracing::instrument(
+    name = "TLS Stream",
+    level = "error",
+    skip_all,
+    fields(peer = %service.remote, local = %service.target)
+)]
 pub async fn serve_https(
     stream: TcpStream,
     service: &HttpService,
@@ -105,9 +111,6 @@ pub async fn serve_https(
         stream.peer_addr()?,
         stream.local_addr()?
     );
-
-    let span = span!(Level::TRACE, "TLS Stream", "{}", &log_key);
-    let _guard = span.enter();
 
     let mut tls_stream = acceptor.accept(stream).await?;
     loop {
@@ -133,17 +136,16 @@ pub async fn serve_https(
 ///  serve_http_with_error_return would make the HttpService resolve the incoming TCP stream.
 ///
 /// TODO(@STRRL): rename it to `serve_http` to keep naming consistent with `serve_https`
+#[tracing::instrument(
+    name = "Stream",
+    level = "error",
+    skip_all,
+    fields(peer = %service.remote, local = %service.target)
+)]
 pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
-    let log_key = format!(
-        "{{ peer={},local={} }}",
-        stream.peer_addr()?,
-        stream.local_addr()?
-    );
-    let span = span!(Level::TRACE, "Stream", "{}", &log_key);
-    let _guard = span.enter();
     loop {
         let (r, parts) = Http::new()
             .error_return(true)
@@ -230,10 +232,13 @@ impl HttpService {
     }
 
     /// handle would execute the core inject and forward logic.
+    #[tracing::instrument(
+        name = "handle HTTP Request",
+        level = "error",
+        skip_all,
+        fields(remote = %self.remote, target = %self.target)
+    )]
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
-        let span = span!(Level::TRACE, "handle HTTP Request", "{}", &log_key);
-        let _guard = span.enter();
         debug!("Proxy is handling http request");
 
         let role_ok = self.role_ok();
