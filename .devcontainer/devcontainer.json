@@ -1,15 +1,23 @@
 {
-	"name": "Debian",
-	"image": "mcr.microsoft.com/devcontainers/base:bullseye",
+	"name": "chaos-tproxy",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
 	"features": {
-		"ghcr.io/devcontainers/features/git:1": {
-			"ppa": true,
-			"version": "os-provided"
+		"ghcr.io/devcontainers/features/rust:1": {
+			"version": "1.99.1",
+			"components": "rust-analyzer,rust-src,rustfmt,clippy"
 		},
 		"ghcr.io/devcontainers/features/go:1": {
-			"version": "latest"
+			"version": "1.27.3"
 		}
 	},
+	"mounts": [
+		"source=devcontainers-cargo-registry,target=/usr/local/cargo/registry,type=volume",
+		"source=devcontainers-cargo-git,target=/usr/local/cargo/git,type=volume",
+		"source=devcontainers-go-mod,target=/go/pkg/mod,type=volume",
+		"source=devcontainers-go-build,target=/root/.cache/go-build,type=volume"
+	],
 	"remoteUser": "root",
 	"privileged": true
 }

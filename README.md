@@ -180,4 +180,8 @@ The Rust workspace contains the controller, proxy library, and integration tests
 
 CI uses Rust 1.99.1 to build, test, lint, and format. Run `cargo fmt --all -- --check` to check formatting.
 
+To use the development container, open the repository in VS Code with the Dev Containers extension and select **Dev Containers: Rebuild and Reopen in Container**. It provides Debian Trixie, Rust 1.99.1 with rustfmt and Clippy, Go 1.27.3, libpcap headers, and the networking tools listed above. Cargo downloads and Go module and build caches use shared Docker volumes across container rebuilds.
+
+The development container runs as root in privileged mode. Network interception still requires the Docker host's Linux kernel to provide the required networking modules. Run interception only inside the disposable container, using its own network namespace.
+
 See [AGENTS.md](AGENTS.md) for AI agent instructions, the repository map, and verification commands. Rust checks require Linux. Library tests and Docker builds do not verify network interception or restoration.
