@@ -1,8 +1,5 @@
 {
-  "listen_port": 58080,
   "proxy_ports": [80, 8080, 30086],
-  "proxy_mark": 1,
-  "ignore_mark": 255,
   "rules": [
     {
       "target": "Request",

@@ -1,50 +1,82 @@
+name: Create Release
+
 on:
   push:
     tags:
       - 'v*'
 
-name: Create Release
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   create_release:
     name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Check existing release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          release_pages=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100")
+          is_published=$(jq --arg tag "$GITHUB_REF_NAME" 'any(.[][]; .tag_name == $tag and .draft == false)' <<< "$release_pages")
+          if [ "$is_published" = true ]; then
+            echo "Refusing to modify published release $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: true
           prerelease: false
   upload_release:
-    name: Upload Release
+    name: Upload Release (${{ matrix.arch }})
     needs: create_release
+    permissions:
+      contents: write
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
-    runs-on: ${{ fromJson('{"x86_64":"ubuntu-latest", "aarch64":["self-hosted", "Linux", "ARM64"]}')[matrix.arch] }}
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Build
-        run: |
-          DOCKER_BUILDKIT=1 docker build --build-arg HTTP_PROXY=${HTTP_PROXY} --build-arg HTTPS_PROXY=${HTTPS_PROXY} . -t chaos-mesh/tproxy
-          docker run -v ${PWD}:/opt/mount:z --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
-          tar -czvf ./tproxy-${{ matrix.arch }}.tar.gz ./tproxy
-      - name: Upload Release Asset
-        id: upload-release-asset 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/checkout@v7
         with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }} 
-          asset_path: ./tproxy-${{ matrix.arch }}.tar.gz
-          asset_name: tproxy-${{ matrix.arch }}.tar.gz
-          asset_content_type: application/zip
- 
+          persist-credentials: false
+      - name: Build
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          DOCKER_BUILDKIT=1 docker build --build-arg "HTTP_PROXY=${HTTP_PROXY:-}" --build-arg "HTTPS_PROXY=${HTTPS_PROXY:-}" . -t chaos-mesh/tproxy
+          docker run -v "$PWD:/opt/mount:z" --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
+          test "$(./tproxy --version | awk '{print $NF}')" = "${GITHUB_REF_NAME#v}"
+          tar -czvf "./tproxy-$ARCH.tar.gz" ./tproxy
+      - name: Check draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" != true ]; then
+            echo "Refusing to modify published release $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: tproxy-${{ matrix.arch }}.tar.gz
+          fail_on_unmatched_files: true
+          overwrite_files: true

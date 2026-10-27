@@ -1,8 +1,8 @@
-proxy_ports: [80, 8080, 30086] # proxy will do nothing if empty
+proxy_ports: [80, 8080, 30086] # Omitted or null stops interception; an empty array attempts setup.
 rules:
   - target: Request
     selector:
-      path: /src # match all path starts with "/example"
+      path: /src # Match this exact path.
       method: GET
     actions:
       abort: true

@@ -1,189 +1,183 @@
 # chaos-tproxy
 
-Transparent HTTP proxy for [Abort|Delay|Append|Replace] packet.
-Based on linux iptables-extension : TPROXY.
+chaos-tproxy is a transparent HTTP fault injection proxy for Linux. It uses TPROXY to intercept IPv4 TCP traffic without application proxy settings. Rules can abort or delay HTTP requests and responses, replace fields, and merge JSON bodies.
+
+## Requirements
+
+Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own ebtables NAT jump and chain and restores routes displaced by setup. Routes added or changed during interception take precedence over saved routes. Existing backup routes do not prevent restoration. Do not run it in the host network namespace.
+
+The following commands must be available on `PATH`.
+
+```sh
+command -v ip sysctl arp iptables ebtables ebtables-legacy
+```
+
+Install `iproute2` for `ip` and `net-tools` for `arp`. The controller uses both `ebtables` and `ebtables-legacy`. The BROUTING rule requires the legacy implementation.
+
+The kernel must support bridges, network namespaces, policy routing, and TPROXY. Relevant modules include `ebtables`, `ebtable_broute`, `iptable_mangle`, `xt_TPROXY`, and `xt_socket`. These features can also be built into the kernel.
+
+Use a DNS resolver reachable after network setup. Loopback-only resolvers can become unreachable when the controller changes networking.
 
 ## Installation
-### Kernel Modules
 
-Check the installed kernel modules by `lsmod`, modules `ebtables`, `ebtable_broute` and `iptable_mangle` are required to make chaos-tproxy work.
+Download the archive for your Linux architecture from [GitHub releases](https://github.com/chaos-mesh/chaos-tproxy/releases). The archives `tproxy-x86_64.tar.gz` and `tproxy-aarch64.tar.gz` contain a binary named `tproxy`.
 
-### Install ebtables-legacy
-Rs-tproxy relies on the legacy version of ebtables since the ebtables-nft have some problem on brouting transfer.
-So on different linux distribution we need to install ebtables-legacy or create a symbolic link.
-#### On centos 7.0 - 7.9 or other version using legacy version of ebtables:
-```
-ln -s /usr/sbin/ebtables /usr/sbin/ebtables-legacy
-```
-#### On centos 8+ :
-```
-wget http://mirror.coastal.edu/centos/8-stream/hyperscale/x86_64/packages-main/Packages/e/ebtables-legacy-2.0.11-9.hs.el8.x86_64.rpm
-rpm -i ebtables-legacy-2.0.11-9.hs.el8.x86_64.rpm
-rm ebtables-legacy-2.0.11-9.hs.el8.x86_64.rpm
-yum reinstall iptables-ebtables
-```
-#### On Debian or Ubuntu :
-```
-apt install -y ebtables
+To build from source, run the following command on Linux from the repository root.
+
+```sh
+cargo build --locked --release --workspace
 ```
 
-- additions for container:
+The executable is `target/release/chaos-tproxy`. The repository selects Rust 1.99.1 through `rust-toolchain`.
 
-```
-update-alternatives --set iptables /usr/sbin/iptables-legacy
-```
+To build with Docker and copy the executable to `./tproxy`, run the following command.
 
-### Install chaos-tproxy
-
-Download chaos-tproxy in release.
-
-### Tips for ubuntu user:
-The DNS will be broken if you are using the dnsmasq server on 127.0.0.1:53.
-Please change the default dns server to 8.8.8.8 or other global dns server by editting `/etc/resolv.conf` before using `chaos-tproxy`.
-
-## Quick start
-
-```bash
-cat > example.yaml<<EOF
-proxy_ports: [80]
-rules:
-  - target: Request
-    selector:
-      method: GET
-    actions:
-      delay: 5s
-EOF
-chaos-tproxy ./example.yaml -v
-```
-## Usage example: 
-
-```
->chaos-tproxy -h
-
-proxy 0.1.1
-The option of proxy.
-
-USAGE:
-    chaos-tproxy [FLAGS] [OPTIONS] [FILE]
-
-FLAGS:
-    -h, --help           Prints help information
-    -i, --interactive    Allows applying json config by stdin/stdout
-        --proxy          Only run the sub proxy
-    -V, --version        Prints version information
-    -v, --verbose        Verbose mode (-v, -vv, -vvv, etc.)
-
-OPTIONS:
-        --ipc-path <ipc-path>    ipc path for sub proxy
-
-ARGS:
-    <FILE>    path of config file, required if interactive and daemon mode is disabled
-```
-Support json and yaml config. 
-Example of config could be found in `./config-examples`
-## Yaml config file example
-```yaml
-proxy_ports: [80] # option u16 vec ; Do nothing if not provided 
-interface: eth33 # option string
-rules: # option rule vec
-  - target: Request # Request or Response. 
-    # Stand for target packet to select & take actions.
-    # If target is Response & selecting request info such as method or path , 
-    # proxy will select request and take actions on Response.
-    selector:
-      path: /p* # option Match path of `Uri` with wildcard matches. Using [wildcard matches](https://www.wikiwand.com/en/Matching_wildcards).
-#    abc://username:password@example.com:123/path/data?key=value&key2=value2#fragid1
-#                                           |--------|
-#                                               |
-#                                             path
-      method: GET # option string
-      # code: 200
-      # request_headers: # option map<string ,string>
-      #   A:B
-      # response_headers: # option map<string ,string>
-      #   a:b
-    actions:
-      abort: true # bool ; None is false
-      delay: 1s # option Duration
-      replace: # option RawReplaceAction
-        body: # also support replace path , method ...
-          update_content_length: false # true by default
-          contents:
-            type: TEXT
-            value: '{"name": "Chaos Mesh", "message": "Hello!"}'
-      patch: # option RawPatchAction
-        queries:
-          - [foo, bar]
-          - [foo, other]
-        body:
-          update_content_length: false # true by default
-          contents:
-            type: JSON
-            value: '{"message": "Hi!"}'
+```sh
+make release
 ```
 
+The Dockerfile uses Rust 1.99.1 and runs the nonignored proxy and controller library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
 
-
-## Build:
-```
-make build
-```
+The examples below use `./tproxy`. For a native source build, use `./target/release/chaos-tproxy` instead.
 
 ## Usage
 
-```bash
-make run config=<path>
+Save the following configuration as `example.yaml`. It delays GET requests matching `/example*` on destination port 8080 by five seconds.
+
+```yaml
+proxy_ports: [8080]
+rules:
+  - target: Request
+    selector:
+      path: /example*
+      method: GET
+    actions:
+      delay: 5s
 ```
-or 
+
+Start the controller in the prepared Linux environment.
+
+```sh
+sudo ./tproxy -v example.yaml
 ```
-chaos-tproxy -v <configfilename>
+
+Send a matching request through the intercepted interface to an HTTP server on port 8080. Loopback requests do not exercise this network path. Press Ctrl-C or send SIGTERM to stop the controller and trigger network cleanup.
+
+Use `./tproxy --help` to list CLI options. The flags `-v`, `-vv`, and `-vvv` enable info, debug, and trace logs. `--proxy` and `--ipc-path` are internal options for the subprocess that the controller starts.
+
+## Configuration
+
+File mode accepts `.json` and `.yaml` files. The `.yml` extension is not supported. See [configuration examples](config-examples/) for additional configurations.
+
+The controller accepts the following fields.
+
+| Field | Behavior |
+| --- | --- |
+| `proxy_ports` | Destination TCP ports to intercept. An omitted or `null` value stops interception. An empty array attempts network setup and does not stop interception. |
+| `rules` | HTTP fault rules. Defaults to an empty list. |
+| `role` | `Client` matches the connection source against the default interface's IPv4 addresses. `Server` matches the destination. An omitted value applies rules in both directions. |
+| `safe_mode` | Defaults to `false`. When enabled, bypasses TCP traffic for the default interface's IPv4 subnet when the source or destination port is between 1 and 1025. Selected `proxy_ports` can be bypassed. |
+| `tls` | Interception certificate, private key, and optional upstream CA bundle. See [TLS](#tls). |
+
+The fields `interface`, `listen_port`, `proxy_mark`, `ignore_mark`, and `route_table` are accepted for compatibility but have no effect. The controller uses the default IPv4 interface and selects a listener port outside `proxy_ports`. It does not check whether that listener port is already in use.
+
+TCP connections with source or destination port 22 bypass interception, including when `proxy_ports` contains port 22.
+
+### Selectors
+
+Each rule requires `target`, `selector`, and `actions`. The target is `Request` or `Response`.
+
+Request selectors support destination `port`, case-sensitive wildcard `path`, exact `method`, and `request_headers`. Response selectors also support `code` and `response_headers`. All applicable conditions must match. An empty selector matches every HTTP exchange for its target.
+
+The path `/example` matches that exact path. The path `/example*` matches a prefix. Header selectors match the specified values.
+
+The proxy selects all matching rules before applying actions in configuration order. Response selectors inspect the request after request actions and the response before response actions.
+
+### Actions
+
+Actions within a rule execute in the following order.
+
+1. `abort: true` terminates the HTTP exchange without a configured HTTP status.
+2. `delay` waits for the specified duration, such as `500ms` or `5s`.
+3. `replace` changes the specified fields.
+4. `patch` appends request query parameters or headers, or merges a JSON body.
+
+Request replacement supports `path`, `method`, `queries`, `headers`, and `body`. Response replacement supports `code`, `headers`, and `body`. Query replacement updates named parameters. Header replacement overwrites named headers.
+
+Body replacement accepts `TEXT` or `BASE64` contents. Body patches accept `JSON` contents and use JSON Merge Patch semantics. For a merge patch, the existing body must be valid JSON. Both operations remove `Content-Length` so the HTTP transport can frame the new body. The `update_content_length` option is not supported.
+
+The following rule replaces a request body, adds a query parameter, and appends a header.
+
+```yaml
+proxy_ports: [8080]
+rules:
+  - target: Request
+    selector:
+      path: /example*
+      method: POST
+    actions:
+      replace:
+        body:
+          contents:
+            type: TEXT
+            value: '{"message":"Hello"}'
+      patch:
+        queries:
+          - [source, chaos-tproxy]
+        headers:
+          - [x-chaos-test, enabled]
 ```
 
+Without TLS configuration, an HTTP parse error causes the proxy to forward the connection as raw TCP. HTTP fault rules do not apply to raw TCP traffic.
 
-### interactive mode
+### TLS
 
-You can apply config by HTTP over stdio if interactive mode is enabled.
+TLS interception requires a certificate and a PEM RSA PKCS#1 private key. Clients must trust the certificate, and the certificate must cover the requested server name.
 
-- apply
+```yaml
+proxy_ports: [443]
+tls:
+  cert_file:
+    type: Path
+    value: /path/to/server.crt
+  key_file:
+    type: Path
+    value: /path/to/server-rsa.key
+```
 
-```bash
-> chaos-tproxy -i
+The optional `tls.ca_file` field uses the same file format and supplies trusted upstream CA certificates. A supplied bundle replaces the bundled public roots. Without `ca_file`, the proxy uses the bundled public roots. File values also accept `type: Contents` with a numeric byte array. PKCS#8 and EC private keys are not supported.
+
+TLS configuration applies to every intercepted port. Configure only TLS ports for that instance. Plain HTTP and raw TCP fallback are unavailable when TLS is configured.
+
+## Interactive configuration
+
+Start interactive mode without a configuration file.
+
+```sh
+sudo ./tproxy -i -v
+```
+
+The controller reads HTTP `PUT` requests from standard input and writes HTTP responses to standard output. Request bodies must be JSON. Each accepted PUT applies a complete replacement configuration. Logs go to standard error. A positional configuration file takes precedence over `-i`.
+
+The following request applies a five-second delay to GET requests on port 8080. Send it with CRLF line endings. The body is 106 bytes without a trailing newline.
+
+```http
 PUT / HTTP/1.1
-Content-Length: 129
+Host: localhost
+Content-Type: application/json
+Content-Length: 106
 
-{"proxy_ports": [30086], "rules": [{"target": "Request", "selector": {"path": "*", "method": "GET"},"actions": {"abort": true}}]}
+{"proxy_ports":[8080],"rules":[{"target":"Request","selector":{"method":"GET"},"actions":{"delay":"5s"}}]}
 ```
 
-- get the response:
+A successful reload returns `200 OK` after the proxy subprocess validates its configuration, including TLS files, and binds its listener. Body read, configuration parsing, or conversion errors return `400 Bad Request`. Startup or cleanup failures return `500 Internal Server Error` with an error body. Startup waits at most ten seconds for readiness, then stops the child and rolls back networking on failure. Other methods return `405 Method Not Allowed`.
 
-```bash
-HTTP/1.1 200 OK
-content-length: 0
-date: Mon, 03 May 2021 11:21:31 GMT
-```
+To stop interception without exiting interactive mode, send a PUT with body `{}` and `Content-Length: 2`. Close standard input, press Ctrl-C, or send SIGTERM to exit and trigger cleanup.
 
-- recover
+## Development
 
-> Update config with empty proxy ports.
+The Rust workspace contains the controller, proxy library, and integration tests. `podnetmock/` is a separate Go package for UDP probes and packet capture.
 
-```
-PUT / HTTP/1.1
-Content-Length: 129
+CI uses Rust 1.99.1 to build, test, lint, and format. Run `cargo fmt --all -- --check` to check formatting.
 
-{"proxy_ports": [30086], "rules": [{"target": "Request", "selector": {"path": "*", "method": "GET"},"actions": {"abort": true}}]}
-HTTP/1.1 200 OK
-content-length: 0
-date: Mon, 03 May 2021 11:21:31 GMT
-
-PUT / HTTP/1.1
-Content-Length: 124
-
-{"proxy_ports": [], "rules": [{"target": "Request", "selector": {"path": "*", "method": "GET"},"actions": {"abort": true}}]}
-HTTP/1.1 200 OK
-content-length: 0
-date: Mon, 03 May 2021 11:22:13 GMT
-```
-
-- exit
-
-Ctrl-C
+See [AGENTS.md](AGENTS.md) for AI agent instructions, the repository map, and verification commands. Rust checks require Linux. Library tests and Docker builds do not verify network interception or restoration.

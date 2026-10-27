@@ -30,25 +30,28 @@ use crate::proxy::http::connector::HttpConnector;
 use crate::proxy::tcp::listener::TcpListener;
 use crate::proxy::tcp::transparent_socket::TransparentSocket;
 
+/// HttpServer is the proxy service behind the iptables tproxy. It would accept the forwarded
+/// connection from the iptables tproxy, and then let [HttpService] to handle the connection.
 pub struct HttpServer {
     config: Config,
+    listener: TcpListener,
 }
 
 impl HttpServer {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn bind(config: Config) -> Result<Self> {
+        let addr = SocketAddr::from(([0, 0, 0, 0], config.http_config.listen_port));
+        let listener = TcpListener::bind(addr)?;
+        Ok(Self { config, listener })
     }
 
     pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.proxy_port));
-        let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
         let rx_mut = &mut rx;
 
         loop {
             let stream = select! {
-                stream = listener.accept() => {
+                stream = self.listener.accept() => {
                     stream
                 },
                 _ = &mut *rx_mut => {
@@ -91,6 +94,7 @@ impl HttpServer {
     }
 }
 
+/// serve_https would make the HttpService resolving the resolve TLS stream.
 pub async fn serve_https(
     stream: TcpStream,
     service: &HttpService,
@@ -118,6 +122,7 @@ pub async fn serve_https(
                 }
             },
             Err(e) => {
+                // TODO(@STRRL): require similar error resolving in `serve_http_with_error_return`
                 return Err(anyhow!("{}: stream block with error: {}", log_key, e));
             }
         };
@@ -125,6 +130,9 @@ pub async fn serve_https(
     }
 }
 
+///  serve_http_with_error_return would make the HttpService resolve the incoming TCP stream.
+///
+/// TODO(@STRRL): rename it to `serve_http` to keep naming consistent with `serve_https`
 pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
@@ -180,6 +188,9 @@ pub async fn serve_http_with_error_return(
     }
 }
 
+/// HttpService could handle the forwarded connection from [HttpServer], it would parse the packet
+/// content, forwarding the request to the target server, and then return the response to the client.
+/// Also, it would inject the chaos at the same time.
 #[derive(Derivative)]
 #[derivative(Debug)]
 #[derive(Clone)]
@@ -207,6 +218,8 @@ impl HttpService {
         }
     }
 
+    /// role_ok would check the role of the chaos-tproxy, eg. working on client-side or server-side.
+    /// If `role` in config is `None`, it would effect both client-side and server-side.
     fn role_ok(&self) -> bool {
         let role = match &self.config.role {
             None => return true,
@@ -216,6 +229,7 @@ impl HttpService {
         select_role(&self.remote.ip(), &self.target.ip(), &role)
     }
 
+    /// handle would execute the core inject and forward logic.
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
         let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
         let span = span!(Level::TRACE, "handle HTTP Request", "{}", &log_key);
@@ -234,6 +248,7 @@ impl HttpService {
             })
             .collect();
 
+        // inject chaos into request
         for rule in request_rules {
             debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
@@ -245,15 +260,13 @@ impl HttpService {
         trace!("URI: {}", request.uri());
         let mut parts = request.uri().clone().into_parts();
 
+        // because the original request URL is not carried in the HTTP request, we should rebuild it.
         parts.authority = match request
             .headers()
             .iter()
             .find(|(header_name, _)| **header_name == HOST)
         {
-            None => match self.target.to_string().parse() {
-                Ok(o) => Some(o),
-                Err(_) => None,
-            },
+            None => self.target.to_string().parse().ok(),
             Some((_, value)) => Some(value.as_bytes().try_into()?),
         };
         trace!("authority: {:?}", parts.authority);
@@ -268,6 +281,7 @@ impl HttpService {
 
         *request.uri_mut() = Uri::from_parts(parts)?;
 
+        // forward HTTP/HTTPS request
         let rsp_fut = if let Some(tls_client_config) = &self.tls_client_config {
             let https = hyper_rustls::HttpsConnectorBuilder::new()
                 .with_tls_config((**tls_client_config).clone())
@@ -311,6 +325,7 @@ impl HttpService {
             })
             .collect();
 
+        // inject chaos into response
         for rule in response_rules {
             debug!("response matched");
             response = apply_response_action(response, &rule.actions).await?;

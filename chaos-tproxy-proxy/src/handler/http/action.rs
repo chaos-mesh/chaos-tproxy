@@ -61,34 +61,43 @@ async fn read_value(body: &mut Body) -> anyhow::Result<Value> {
     Ok(serde_json::from_slice(&data)?)
 }
 
+/// apply_request_action would inject chaos actions into the given request.
+/// TODO(@STRRL): refactor this function, it is NOT extensible with more actions.
 #[instrument]
 pub async fn apply_request_action(
     mut request: Request<Body>,
     actions: &Actions,
 ) -> anyhow::Result<Request<Body>> {
+    // abort the request
     if actions.abort {
         return Err(anyhow!("Abort applied"));
     }
 
+    // delay the request
     if let Some(delay) = actions.delay {
         sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
+        // replace the request URL
         replace_path(request.uri_mut(), replace.path.as_ref())?;
 
         if let Some(md) = &replace.method {
+            // replace the request method
             *request.method_mut() = md.clone();
         }
 
         if let Some(body) = &replace.body {
+            // replace the request body
             *request.body_mut() = body.contents.clone().into();
             request.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
+        // replace request query parameters
         replace_queries(request.uri_mut(), replace.queries.as_ref())?;
 
         if let Some(hdrs) = &replace.headers {
+            // replace the request headers
             for (key, value) in hdrs {
                 request.headers_mut().insert(key, value.clone());
             }
@@ -96,7 +105,10 @@ pub async fn apply_request_action(
     }
 
     if let Some(patch) = &actions.patch {
+        // append request query parameters
         append_queries(request.uri_mut(), patch.queries.as_ref())?;
+
+        // patch request body with JSON Patch
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(request.body_mut()).await?;
@@ -106,6 +118,7 @@ pub async fn apply_request_action(
             request.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
+        // patch headers
         if let Some(hdrs) = &patch.headers {
             for (key, value) in hdrs {
                 request.headers_mut().append(key, value.clone());
@@ -159,20 +172,24 @@ fn replace_path<S: AsRef<str>>(uri: &mut Uri, raw_path: Option<S>) -> anyhow::Re
 
 fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> anyhow::Result<()> {
     if let Some(qs) = queries {
+        if qs.is_empty() {
+            return Ok(());
+        }
         let mut parts = uri.clone().into_parts();
         let old_query = parts
             .path_and_query
             .as_ref()
             .and_then(|paq| paq.query())
             .unwrap_or("");
-        let mut query_map: HashMap<String, String> = serde_urlencoded::from_str(old_query)?;
-        query_map.extend(qs.clone());
+        let mut query_pairs: Vec<(String, String)> = serde_urlencoded::from_str(old_query)?;
+        query_pairs.retain(|(key, _)| !qs.contains_key(key));
+        query_pairs.extend(qs.iter().map(|(key, value)| (key.clone(), value.clone())));
         let path = parts
             .path_and_query
             .as_ref()
             .map(|paq| paq.path())
             .unwrap_or("/");
-        let paq = match serde_urlencoded::to_string(&query_map)?.as_str() {
+        let paq = match serde_urlencoded::to_string(&query_pairs)?.as_str() {
             "" => path.parse()?,
             q => format!("{}?{}", path, q).parse()?,
         };
@@ -183,29 +200,36 @@ fn replace_queries(uri: &mut Uri, queries: Option<&HashMap<String, String>>) -> 
     Ok(())
 }
 
+/// apply_response_action would inject chaos actions into the given response.
+/// TODO(@STRRL): refactor this function, it is NOT extensible with more actions.
 #[instrument]
 pub async fn apply_response_action(
     mut response: Response<Body>,
     actions: &Actions,
 ) -> anyhow::Result<Response<Body>> {
+    // abort the response
     if actions.abort {
         return Err(anyhow!("Abort applied"));
     }
 
+    // delay the response
     if let Some(delay) = actions.delay {
         sleep(delay).await
     }
 
     if let Some(replace) = &actions.replace {
+        // replace the response code
         if let Some(co) = replace.code {
             *response.status_mut() = co;
         }
 
+        // replace the response body
         if let Some(body) = &replace.body {
             *response.body_mut() = body.contents.clone().into();
             response.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
 
+        // replace the response header
         if let Some(hdrs) = &replace.headers {
             for (key, value) in hdrs {
                 response.headers_mut().insert(key, value.clone());
@@ -214,6 +238,7 @@ pub async fn apply_response_action(
     }
 
     if let Some(patch) = &actions.patch {
+        // patch response body with JSON Patch
         if let Some(patch_body) = &patch.body {
             let PatchBodyActionContents::JSON(ref value) = patch_body.contents;
             let mut data = read_value(response.body_mut()).await?;
@@ -222,6 +247,7 @@ pub async fn apply_response_action(
             *response.body_mut() = merged.into();
             response.headers_mut().remove(http::header::CONTENT_LENGTH);
         }
+        // patch headers
         if let Some(hdrs) = &patch.headers {
             for (key, value) in hdrs {
                 response.headers_mut().append(key, value.clone());
@@ -235,7 +261,18 @@ pub async fn apply_response_action(
 
 #[cfg(test)]
 mod tests {
-    use crate::handler::http::action::{append_queries, replace_path};
+    use std::collections::HashMap;
+    use std::convert::TryInto;
+
+    use http::{Request, Response, Uri};
+    use hyper::Body;
+    use serde_json::json;
+
+    use super::{
+        append_queries, apply_request_action, apply_response_action, replace_path, replace_queries,
+        Actions,
+    };
+    use crate::raw_config::RawActions;
 
     #[test]
     fn test_append_queries() {
@@ -276,8 +313,140 @@ mod tests {
         assert_eq!(&uri.to_string(), "https://hyper.rs/hhh?a=b");
     }
 
+    #[tokio::test]
+    async fn request_patch_appends_configured_duplicate_headers() {
+        let raw: RawActions = serde_json::from_value(json!({
+            "patch": {
+                "headers": [["X-Tag", "first"], ["x-tag", "second"]]
+            }
+        }))
+        .unwrap();
+        let actions: Actions = raw.try_into().unwrap();
+        let request = Request::builder()
+            .header("x-tag", "original")
+            .body(Body::empty())
+            .unwrap();
+
+        let request = apply_request_action(request, &actions).await.unwrap();
+
+        assert_eq!(
+            request
+                .headers()
+                .get_all("x-tag")
+                .iter()
+                .collect::<Vec<_>>(),
+            ["original", "first", "second"]
+        );
+    }
+
+    #[tokio::test]
+    async fn response_patch_appends_configured_duplicate_headers() {
+        let raw: RawActions = serde_json::from_value(json!({
+            "patch": {
+                "headers": [["Set-Cookie", "first=1"], ["set-cookie", "second=2"]]
+            }
+        }))
+        .unwrap();
+        let actions: Actions = raw.try_into().unwrap();
+        let response = Response::builder()
+            .header("set-cookie", "original=0")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = apply_response_action(response, &actions).await.unwrap();
+
+        assert_eq!(
+            response
+                .headers()
+                .get_all("set-cookie")
+                .iter()
+                .collect::<Vec<_>>(),
+            ["original=0", "first=1", "second=2"]
+        );
+    }
+
     #[test]
-    fn test_replace_queries() {
-        //todo
+    fn replace_queries_preserves_unrelated_pairs_and_replaces_all_target_values() {
+        let mut uri: Uri = "https://example.com:8443/items?tag=a&page=1&tag=b&page=3&empty=&q=hello+world&encoded=a%26b&encoded=a%3Db&%70age=4"
+            .parse()
+            .unwrap();
+        let replacements = HashMap::from([
+            ("page".into(), "2".into()),
+            ("new key".into(), "a+b &=/".into()),
+        ]);
+
+        replace_queries(&mut uri, Some(&replacements)).unwrap();
+
+        assert_eq!(uri.scheme_str(), Some("https"));
+        assert_eq!(uri.authority().unwrap().as_str(), "example.com:8443");
+        assert_eq!(uri.path(), "/items");
+        let pairs: Vec<(String, String)> =
+            serde_urlencoded::from_str(uri.query().unwrap()).unwrap();
+        assert_eq!(
+            &pairs[..6],
+            &[
+                ("tag".into(), "a".into()),
+                ("tag".into(), "b".into()),
+                ("empty".into(), "".into()),
+                ("q".into(), "hello world".into()),
+                ("encoded".into(), "a&b".into()),
+                ("encoded".into(), "a=b".into()),
+            ]
+        );
+        let mut replaced = pairs[6..].to_vec();
+        replaced.sort();
+        assert_eq!(
+            replaced,
+            [
+                ("new key".into(), "a+b &=/".into()),
+                ("page".into(), "2".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn replace_queries_adds_pairs_without_an_existing_query() {
+        let mut uri: Uri = "/items".parse().unwrap();
+        let replacements = HashMap::from([("page".into(), "2".into())]);
+
+        replace_queries(&mut uri, Some(&replacements)).unwrap();
+
+        assert_eq!(uri, "/items?page=2");
+    }
+
+    #[test]
+    fn replace_queries_with_no_replacements_leaves_uri_unchanged() {
+        let empty = HashMap::new();
+        for replacements in [None, Some(&empty)] {
+            for original in [
+                "/items?tag=a&tag=b&q=hello%20world&empty=",
+                "/items?",
+                "/items",
+            ] {
+                let mut uri: Uri = original.parse().unwrap();
+
+                replace_queries(&mut uri, replacements).unwrap();
+
+                assert_eq!(uri.to_string(), original);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn request_replaces_queries_before_appending_patch_pairs() {
+        let raw: RawActions = serde_json::from_value(json!({
+            "replace": {"queries": {"page": "2"}},
+            "patch": {"queries": [["tag", "c"], ["page", "4"]]}
+        }))
+        .unwrap();
+        let actions: Actions = raw.try_into().unwrap();
+        let request = Request::builder()
+            .uri("/items?tag=a&page=1&tag=b&page=3")
+            .body(Body::empty())
+            .unwrap();
+
+        let request = apply_request_action(request, &actions).await.unwrap();
+
+        assert_eq!(request.uri(), "/items?tag=a&tag=b&page=2&tag=c&page=4");
     }
 }

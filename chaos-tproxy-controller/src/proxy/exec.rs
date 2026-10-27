@@ -1,167 +1,253 @@
 use std::env;
-use std::path::PathBuf;
 use std::process::Stdio;
+use std::time::Duration;
 
-use anyhow::Error;
+use anyhow::{bail, Context, Result};
+use chaos_tproxy_proxy::bootstrap::BootstrapServer;
 use chaos_tproxy_proxy::raw_config::RawConfig as ProxyRawConfig;
 use rtnetlink::{new_connection, Handle};
-use tokio::process::Command;
-use tokio::select;
-use tokio::sync::oneshot::{channel, Receiver, Sender};
-use tokio::task::JoinHandle;
+use tokio::process::{Child, Command};
 use uuid::Uuid;
 
 use crate::proxy::net::bridge::NetEnv;
+use crate::proxy::net::ping::GatewayPing;
 use crate::proxy::net::set_net::set_net;
-use crate::proxy::uds_server::UdsDataServer;
 
-#[derive(Debug, Clone)]
-pub struct ProxyOpt {
-    pub ipc_path: PathBuf,
-    pub verbose: u8,
-}
-
-impl ProxyOpt {
-    pub fn new(ipc_path: PathBuf, verbose: u8) -> Self {
-        Self { ipc_path, verbose }
-    }
-}
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
+const STOP_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
 pub struct Proxy {
-    pub opt: ProxyOpt,
-    pub net_env: NetEnv,
-    pub rtnl_handle: Handle,
-    pub sender: Option<Sender<()>>,
-    pub rx: Option<Receiver<()>>,
-    pub task: Option<JoinHandle<Result<(), Error>>>,
+    verbose: u8,
+    rtnl_handle: Handle,
+    run: Option<Run>,
+}
+
+#[derive(Debug)]
+struct Run {
+    net: NetEnv,
+    child: Option<Child>,
+    bootstrap: Option<BootstrapServer>,
+    ping: Option<GatewayPing>,
 }
 
 impl Proxy {
     pub async fn new(verbose: u8) -> Self {
-        let uds_path = env::temp_dir()
-            .join(Uuid::new_v4().to_string())
-            .with_extension("sock");
-
-        let opt = ProxyOpt::new(uds_path, verbose);
-        let (sender, rx) = channel();
-
         let (conn, handle, _) = new_connection().unwrap();
         tokio::spawn(conn);
         Self {
-            opt,
-            net_env: NetEnv::new(&handle).await,
+            verbose,
             rtnl_handle: handle,
-            sender: Some(sender),
-            rx: Some(rx),
-            task: None,
+            run: None,
         }
     }
 
-    pub async fn exec(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
-        tracing::info!("transferring proxy raw config {:?}", &config);
-        let uds_server = UdsDataServer::new(config.clone(), self.opt.ipc_path.clone());
-        let listener = uds_server.bind()?;
-
-        let server = uds_server;
-        tokio::spawn(async move {
-            let _ = server
-                .listen(listener)
-                .await
-                .map_err(|e| tracing::error!("{:?}", e));
-        });
-
-        let opt = self.opt.clone();
-        let exe_path = match std::env::current_exe() {
-            Err(e) => {
-                return Err(anyhow::anyhow!(
-                    "failed to get current exe path,error : {:?}",
-                    e
-                ));
-            }
-            Ok(path) => path,
-        };
-
-        tracing::info!("Network device name {}", self.net_env.device.clone());
-        set_net(
-            &mut self.rtnl_handle,
-            &self.net_env,
-            config.proxy_ports,
-            config.listen_port,
-            config.safe_mode,
-        )
-        .await?;
-
-        let mut proxy = Command::new("ip");
-        proxy
-            .arg("netns")
-            .arg("exec")
-            .arg(&self.net_env.netns)
-            .arg(exe_path)
-            .arg(format!(
-                "-{}",
-                String::from_utf8(vec![b'v'; self.opt.verbose as usize]).unwrap()
-            ))
-            .arg("--proxy")
-            .arg(format!("--ipc-path={}", opt.ipc_path.to_str().unwrap()));
-
-        let rx = self.rx.take().unwrap();
-        self.task = Some(tokio::spawn(async move {
-            tracing::info!("Proxy executor Starting proxy.");
-            let mut process = match proxy.stdin(Stdio::piped()).spawn() {
-                Ok(process) => {
-                    tracing::info!("Proxy executor Proxy is running.");
-                    process
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!("failed to exec sub proxy : {:?}", e));
-                }
-            };
-            select! {
-                _ = process.wait() => {}
-                _ = rx => {
-                    tracing::info!("Proxy executor killing sub process");
-                    let id = process.id().unwrap() as i32;
-                    unsafe {
-                        libc::kill(id, libc::SIGINT);
-                    }
-                }
-            };
-            Ok(())
-        }));
-        Ok(())
-    }
-
-    pub async fn stop(&mut self) -> anyhow::Result<()> {
-        if let Some(task) = self.task.take() {
-            if let Some(sender) = self.sender.take() {
-                let _ = sender.send(());
-            };
-            let _ = self.net_env.clear_bridge(&mut self.rtnl_handle).await;
-            let _ = task.await?;
+    pub async fn stop(&mut self) -> Result<()> {
+        if let Some(run) = self.run.as_mut() {
+            run.stop(&mut self.rtnl_handle).await?;
+            self.run = None;
         }
         Ok(())
     }
 
-    pub async fn reload(&mut self, config: ProxyRawConfig) -> anyhow::Result<()> {
+    pub async fn reload(&mut self, config: ProxyRawConfig) -> Result<()> {
         self.stop().await?;
         if config.proxy_ports.is_none() {
             return Ok(());
         }
-        if self.task.is_none() {
-            let mut new = Self::new(self.opt.verbose).await;
-            self.net_env = new.net_env;
-            self.opt = new.opt;
-            self.sender = new.sender.take();
-            self.rx = new.rx.take();
+        self.run = Some(Run {
+            net: NetEnv::new()?,
+            child: None,
+            bootstrap: None,
+            ping: None,
+        });
+        let result = self
+            .run
+            .as_mut()
+            .unwrap()
+            .start(&mut self.rtnl_handle, config, self.verbose)
+            .await;
+        if let Err(error) = result {
+            return match self.stop().await {
+                Ok(()) => Err(error),
+                Err(cleanup) => Err(error.context(format!("startup rollback failed: {cleanup:#}"))),
+            };
         }
+        Ok(())
+    }
+}
 
-        match self.exec(config).await {
-            Err(e) => {
-                self.net_env.clear_bridge(&mut self.rtnl_handle).await?;
-                Err(e)
-            }
-            Ok(_) => Ok(()),
+impl Run {
+    async fn start(
+        &mut self,
+        handle: &mut Handle,
+        config: ProxyRawConfig,
+        verbose: u8,
+    ) -> Result<()> {
+        let exe_path = env::current_exe().context("locate proxy executable")?;
+        let ipc_path = env::temp_dir()
+            .join(Uuid::new_v4().to_string())
+            .with_extension("sock");
+        self.bootstrap = Some(BootstrapServer::bind(ipc_path.clone(), &config)?);
+        self.ping = Some(
+            set_net(
+                handle,
+                &mut self.net,
+                config.proxy_ports,
+                config.listen_port,
+                config.safe_mode,
+            )
+            .await?,
+        );
+
+        let mut command = Command::new("ip");
+        command
+            .args(["netns", "exec"])
+            .arg(&self.net.netns)
+            .arg(exe_path);
+        if verbose > 0 {
+            command.arg(format!("-{}", "v".repeat(verbose as usize)));
         }
+        command.arg("--proxy").arg("--ipc-path").arg(ipc_path);
+        self.child = Some(
+            command
+                .stdin(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()
+                .context("spawn proxy child")?,
+        );
+        wait_for_startup(
+            self.child.as_mut().unwrap(),
+            self.bootstrap.as_ref().unwrap(),
+            STARTUP_TIMEOUT,
+        )
+        .await?;
+        self.bootstrap.as_ref().unwrap().clear()?;
+        self.bootstrap = None;
+        Ok(())
+    }
+
+    async fn stop(&mut self, handle: &mut Handle) -> Result<()> {
+        let mut errors = Vec::new();
+        if let Some(ping) = self.ping.as_mut() {
+            if let Err(error) = ping.stop().await {
+                errors.push(format!("stop gateway ping: {error:#}"));
+            }
+            self.ping = None;
+        }
+        if let Some(child) = self.child.as_mut() {
+            match stop_child(child).await {
+                Ok(()) => self.child = None,
+                Err(error) => errors.push(format!("stop proxy child: {error:#}")),
+            }
+        }
+        if let Some(bootstrap) = self.bootstrap.as_ref() {
+            match bootstrap.clear() {
+                Ok(()) => self.bootstrap = None,
+                Err(error) => errors.push(format!("{error:#}")),
+            }
+        }
+        // A living child can keep its network namespace and veth peers alive.
+        if self.child.is_none() {
+            if let Err(error) = self.net.clear_bridge(handle).await {
+                errors.push(format!("restore network: {error:#}"));
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            bail!("{}", errors.join("; "))
+        }
+    }
+}
+
+async fn wait_for_startup(
+    child: &mut Child,
+    bootstrap: &BootstrapServer,
+    timeout: Duration,
+) -> Result<()> {
+    tokio::select! {
+        biased;
+        result = bootstrap.wait_ready(timeout) => {
+            result?;
+            if let Some(status) = child.try_wait()? {
+                bail!("proxy exited during startup: {}", status);
+            }
+            Ok(())
+        }
+        status = child.wait() => {
+            bail!("proxy exited before readiness: {}", status?);
+        }
+    }
+}
+
+async fn stop_child(child: &mut Child) -> Result<()> {
+    if child.try_wait()?.is_some() {
+        return Ok(());
+    }
+    let pid = child.id().context("proxy child has no process id")?;
+    if unsafe { libc::kill(pid as i32, libc::SIGINT) } != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::ESRCH) {
+            return Err(error).context("signal proxy child");
+        }
+    }
+    match tokio::time::timeout(STOP_TIMEOUT, child.wait()).await {
+        Ok(result) => {
+            result?;
+        }
+        Err(_) => {
+            child
+                .start_kill()
+                .context("kill unresponsive proxy child")?;
+            tokio::time::timeout(STOP_TIMEOUT, child.wait())
+                .await
+                .context("timed out reaping proxy child")??;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn early_child_exit_rejects_startup() {
+        let path = env::temp_dir().join(format!("{}.sock", Uuid::new_v4()));
+        let bootstrap = BootstrapServer::bind(path, &ProxyRawConfig::default()).unwrap();
+        let mut child = Command::new("sh").args(["-c", "exit 17"]).spawn().unwrap();
+        let error = wait_for_startup(&mut child, &bootstrap, Duration::from_secs(1))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "proxy exited before readiness: exit status: 17"
+        );
+        assert_eq!(child.try_wait().unwrap().unwrap().code(), Some(17));
+        bootstrap.clear().unwrap();
+    }
+
+    #[tokio::test]
+    async fn unready_child_is_terminated_and_reaped() {
+        let path = env::temp_dir().join(format!("{}.sock", Uuid::new_v4()));
+        let bootstrap = BootstrapServer::bind(path, &ProxyRawConfig::default()).unwrap();
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let error = wait_for_startup(&mut child, &bootstrap, Duration::from_millis(10))
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "timed out waiting for proxy readiness");
+        stop_child(&mut child).await.unwrap();
+        bootstrap.clear().unwrap();
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(
+            child.try_wait().unwrap().unwrap().signal(),
+            Some(libc::SIGINT)
+        );
+        stop_child(&mut child).await.unwrap();
     }
 }

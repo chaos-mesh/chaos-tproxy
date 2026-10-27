@@ -1,0 +1,13 @@
+ARG TPROXY_IMAGE=chaos-mesh/tproxy
+FROM ${TPROXY_IMAGE} AS binary
+
+FROM debian:buster-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN sed -i 's|deb.debian.org|archive.debian.org|g; /buster-updates/d' /etc/apt/sources.list && \
+    apt-get update && apt-get install -y python3 iproute2 net-tools iptables ebtables procps netbase && \
+    update-alternatives --set iptables /usr/sbin/iptables-legacy && \
+    update-alternatives --set ebtables /usr/sbin/ebtables-legacy && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=binary /tproxy /tproxy
+COPY tests/integrations/test_lifecycle.py tests/integrations/lifecycle_backend.py /tests/
+ENTRYPOINT ["python3"]

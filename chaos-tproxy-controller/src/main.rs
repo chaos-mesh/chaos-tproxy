@@ -19,7 +19,10 @@ pub mod raw_config;
 async fn main() -> anyhow::Result<()> {
     let opt = match Opt::from_args_checked() {
         Err(e) => {
-            println!("{}", e);
+            if let Some(error) = e.downcast_ref::<clap::Error>() {
+                error.exit();
+            }
+            eprintln!("{}", e);
             exit(1)
         }
         Ok(o) => o,
@@ -37,8 +40,8 @@ async fn main() -> anyhow::Result<()> {
     if opt.input.is_some() {
         let cfg = get_config_from_opt(&opt).await?;
         let mut proxy = Proxy::new(opt.verbose).await;
-        proxy.reload(cfg.proxy_config).await?;
         let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
+        proxy.reload(cfg.proxy_config).await?;
         signals.wait().await?;
         proxy.stop().await?;
         return Ok(());
@@ -46,13 +49,17 @@ async fn main() -> anyhow::Result<()> {
 
     if opt.interactive {
         let mut config_server = ConfigServer::new(Proxy::new(opt.verbose).await);
+        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
         config_server.serve_interactive();
 
-        let mut signals = Signals::from_kinds(&[SignalKind::interrupt(), SignalKind::terminate()])?;
-        signals.wait().await?;
+        let wait_result = tokio::select! {
+            result = signals.wait() => result,
+            result = config_server.wait() => result,
+        };
         config_server.stop().await?;
+        wait_result?;
 
-        // Currently we cannot graceful shutdown the config server.
+        // Tokio cannot cancel a pending blocking stdin read during runtime shutdown.
         exit(0);
     }
     Ok(())

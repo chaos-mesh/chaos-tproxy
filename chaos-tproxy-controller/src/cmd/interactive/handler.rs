@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::Error;
+use futures::future::poll_fn;
 use futures::TryStreamExt;
 use http::{Method, Request, Response, StatusCode};
 use hyper::server::conn::{Connection, Http};
@@ -46,22 +47,41 @@ impl ConfigServer {
         let mut service = ConfigService(self.proxy.clone());
         self.task = Some(tokio::spawn(async move {
             let rx_mut = &mut rx;
+            let mut stream = StdStream::new();
             loop {
-                let stream = StdStream::default();
-                let mut conn = Http::new().serve_connection(stream, &mut service);
-                let conn_mut = &mut conn;
-                select! {
+                let mut conn = Http::new()
+                    .http1_half_close(true)
+                    .serve_connection(&mut stream, &mut service);
+                let result = select! {
                     _ = &mut *rx_mut => {
                         tracing::trace!("catch signal in config server.");
-                        Connection::graceful_shutdown(Pin::new(conn_mut));
+                        Connection::graceful_shutdown(Pin::new(&mut conn));
                         return Ok(());
                     },
-                    ret = &mut *conn_mut => if let Err(e) = ret {
-                        tracing::error!("{}",e);
-                    }
+                    ret = poll_fn(|cx| conn.poll_without_shutdown(cx)) => ret,
                 };
+                if let Some(parts) = conn.try_into_parts() {
+                    if result.is_ok() {
+                        parts.io.prepend(parts.read_buf);
+                    }
+                }
+                if let Err(error) = result {
+                    tracing::error!("{}", error);
+                }
+                if stream.is_exhausted() {
+                    return Ok(());
+                }
             }
         }));
+    }
+
+    pub async fn wait(&mut self) -> anyhow::Result<()> {
+        let result = match self.task.as_mut() {
+            Some(task) => task.await,
+            None => return Ok(()),
+        };
+        self.task.take();
+        result?
     }
 
     pub async fn stop(mut self) -> anyhow::Result<()> {
@@ -110,7 +130,12 @@ impl ConfigService {
             Ok(c) => c,
         };
 
-        proxy.reload(config.proxy_config).await?;
+        if let Err(error) = proxy.reload(config.proxy_config).await {
+            tracing::error!("proxy reload failed: {error:#}");
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(format!("{error:#}").into())?);
+        }
 
         Ok(Response::builder()
             .status(StatusCode::OK)

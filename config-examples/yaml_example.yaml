@@ -1,18 +1,14 @@
-listen_port: 58080 # optional
-proxy_ports: [80, 443, 8080] # proxy will do nothing if empty
-proxy_mark: 1 # optional
-ignore_mark: 255 # optional
+proxy_ports: [80, 443, 8080] # Omitted or null stops interception; an empty array attempts setup.
 rules:
   - target: Request
     selector:
       port: 8080
-      path: /example # match all path starts with "/example"
+      path: /example # Match this exact path.
       method: GET
     actions:
       delay: 10s
       replace:
         body:
-          update_content_length: false # true by default
           contents:
             type: TEXT
             value: '{"name": "Chaos Mesh", "message": "Hello!"}'
@@ -24,7 +20,6 @@ rules:
         - [foo, bar]
         - [foo, other]
         body:
-          update_content_length: false # true by default
           contents:
             type: JSON
             value: '{"message": "Hi!"}'

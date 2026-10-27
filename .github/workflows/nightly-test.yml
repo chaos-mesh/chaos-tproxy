@@ -1,38 +1,72 @@
-name: Nightly Test
+name: Rust Test
 
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  schedule:
-    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v7
         with:
-          toolchain: nightly
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
           components: rustfmt, clippy
-
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v7
         with:
-          python-version: '3.7'
-          architecture: 'x64'
+          python-version: '3.14'
+      - name: Format
+        run: cargo fmt --all -- --check
       - name: Lint
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Build
-        run: cargo build --all --verbose
+        run: cargo build --locked --workspace --verbose
       - name: Test
-        run: cargo test --all
-      - name: Integration test
+        run: cargo test --locked --workspace
+      - name: HTTP integration test
+        run: bash tests/http/run_http_test.sh
+
+  lifecycle:
+    name: Lifecycle integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Load lifecycle kernel modules
         run: |
-          cd ./tests/
-          cargo test
-          python exec.py
+          for module in ebtable_nat ebtable_broute ebt_ip ebt_dnat ebt_redirect \
+            iptable_mangle xt_socket xt_TPROXY xt_multiport xt_tcpudp xt_mark; do
+            sudo modprobe "$module"
+          done
+      - name: Build lifecycle images
+        run: |
+          make image
+          docker build -f tests/integrations/Dockerfile.lifecycle \
+            --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
+      - name: Run lifecycle tests
+        run: bash tests/integrations/run_lifecycle.sh chaos-tproxy-lifecycle-test "${{ runner.temp }}/lifecycle-results"
+      - name: Upload lifecycle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifecycle-results
+          path: ${{ runner.temp }}/lifecycle-results
+          retention-days: 7
