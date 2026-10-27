@@ -4,6 +4,8 @@ chaos-tproxy is a transparent HTTP fault injection proxy for Linux. It uses TPRO
 
 ## Requirements
 
+Docker-built binaries require glibc 2.34 or newer.
+
 Run chaos-tproxy as root in a disposable Linux VM or container with an IPv4 default interface. The controller modifies interface addresses, bridges, routes, firewall rules, and resolver files. Cleanup removes its own ebtables NAT jump and chain and restores routes displaced by setup. Routes added or changed during interception take precedence over saved routes. Existing backup routes do not prevent restoration. Do not run it in the host network namespace.
 
 The following commands must be available on `PATH`.
@@ -36,7 +38,7 @@ To build with Docker and copy the executable to `./tproxy`, run the following co
 make release
 ```
 
-The Dockerfile uses Rust 1.99.1 and runs the nonignored proxy and controller library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
+The Dockerfile uses Rust 1.99.1 on Debian Bookworm and runs the nonignored proxy and controller library tests before building. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
 
 The examples below use `./tproxy`. For a native source build, use `./target/release/chaos-tproxy` instead.
 

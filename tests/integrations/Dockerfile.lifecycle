@@ -1,13 +1,18 @@
+# syntax=docker/dockerfile:1
+
 ARG TPROXY_IMAGE=chaos-mesh/tproxy
 FROM ${TPROXY_IMAGE} AS binary
 
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
-RUN sed -i 's|deb.debian.org|archive.debian.org|g; /buster-updates/d' /etc/apt/sources.list && \
+ARG TARGETARCH
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,id=tproxy-apt-cache-bookworm-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=tproxy-apt-lists-bookworm-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y python3 iproute2 net-tools iptables ebtables procps netbase && \
     update-alternatives --set iptables /usr/sbin/iptables-legacy && \
-    update-alternatives --set ebtables /usr/sbin/ebtables-legacy && \
-    rm -rf /var/lib/apt/lists/*
+    update-alternatives --set ebtables /usr/sbin/ebtables-legacy
 COPY --from=binary /tproxy /tproxy
 COPY tests/integrations/test_lifecycle.py tests/integrations/lifecycle_backend.py /tests/
 ENTRYPOINT ["python3"]
