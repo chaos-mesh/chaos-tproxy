@@ -93,6 +93,13 @@ impl NetEnv {
             mac_addr: gateway_mac,
             ip_addr: gateway_ip,
         } = try_get_default_gateway()?;
+        if gateway_mac.octets().iter().all(|&octet| octet == 0) {
+            return Err(anyhow!(
+                "default gateway {} has an unresolved MAC address ({})",
+                gateway_ip,
+                gateway_mac
+            ));
+        }
 
         let gateway_ip_s = gateway_ip.to_string();
         let gateway_mac_s = gateway_mac.to_string();
