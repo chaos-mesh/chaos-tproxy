@@ -247,6 +247,50 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotEqual(status, 200, "unreadable TLS configuration was acknowledged")
         self.assert_restored()
 
+    def test_zero_gateway_mac_rejects_without_network_changes(self):
+        route = json.loads(run("ip", "-j", "-4", "route", "show", "default"))[0]
+        gateway, device = route["gateway"], route["dev"]
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.sendto(b"gateway-neighbor", (gateway, 9))
+        deadline = time.monotonic() + 5
+        while True:
+            original = json.loads(run("ip", "-j", "neigh", "show", "to", gateway, "dev", device))
+            if original and original[0].get("lladdr") not in (None, "00:00:00:00:00:00"):
+                break
+            self.assertLess(time.monotonic(), deadline, "gateway neighbor did not resolve")
+            time.sleep(0.05)
+        run("ip", "neigh", "replace", gateway, "dev", device,
+            "lladdr", "00:00:00:00:00:00", "nud", "permanent")
+        neighbor = run("ip", "neigh", "show", "to", gateway, "dev", device)
+        routes = run("ip", "-4", "route", "show", "table", "all")
+        try:
+            self.start()
+            status, body = self.put(proxy_config("proxy-zero-gateway"))
+            self.assertEqual(status, 500, "zero gateway MAC was accepted")
+            self.assertIn(gateway, body)
+            self.assertEqual(self.addresses(), self.baseline_addresses)
+            self.assertEqual(run("ip", "-4", "route", "show", "table", "all"), routes)
+            self.assertEqual(run("ip", "neigh", "show", "to", gateway, "dev", device), neighbor)
+            self.assertEqual(self.links(), self.baseline_links)
+            self.assertEqual(run("ip", "netns", "list"), self.baseline_namespaces)
+            self.assertEqual(Path("/etc/resolv.conf").read_bytes(), self.baseline_dns)
+            self.assertEqual(run("ebtables", "-t", "nat", "-L"), self.baseline_nat)
+        finally:
+            if self.process is not None and self.process.poll() is None:
+                self.put({})
+            run("ip", "neigh", "del", gateway, "dev", device)
+            for entry in original:
+                args = ["ip", "neigh", "add", gateway, "dev", device,
+                        "nud", entry["state"][0].lower()]
+                if "lladdr" in entry:
+                    args.extend(["lladdr", entry["lladdr"]])
+                run(*args)
+        self.assert_restored()
+        self.assertEqual(self.put(proxy_config("proxy-after-zero-gateway"))[0], 200)
+        self.assert_connectivity("proxy-after-zero-gateway")
+        self.assertEqual(self.put({})[0], 200)
+        self.assert_restored()
+
     def test_child_exec_failure_rolls_back(self):
         wrapper = Path(self.directory.name) / "ip"
         wrapper.write_text("#!/usr/bin/env bash\nif [ \"$1\" = netns ] && [ \"$2\" = exec ] && [ \"$4\" = "
