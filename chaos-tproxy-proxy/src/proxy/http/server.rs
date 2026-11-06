@@ -20,7 +20,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::oneshot::Receiver;
 use tokio_rustls::TlsAcceptor;
-use tracing::{debug, error, span, trace, Level};
+use tracing::{debug, error, trace};
 
 use crate::handler::http::action::{apply_request_action, apply_response_action};
 use crate::handler::http::rule::Target;
@@ -34,23 +34,24 @@ use crate::proxy::tcp::transparent_socket::TransparentSocket;
 /// connection from the iptables tproxy, and then let [HttpService] to handle the connection.
 pub struct HttpServer {
     config: Config,
+    listener: TcpListener,
 }
 
 impl HttpServer {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn bind(config: Config) -> Result<Self> {
+        let addr = SocketAddr::from(([0, 0, 0, 0], config.http_config.listen_port));
+        let listener = TcpListener::bind(addr)?;
+        Ok(Self { config, listener })
     }
 
     pub async fn serve(&mut self, mut rx: Receiver<()>) -> Result<()> {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.config.http_config.listen_port));
-        let listener = TcpListener::bind(addr)?;
         tracing::info!("Proxy Listening");
         let http_config = Arc::new(self.config.http_config.clone());
         let rx_mut = &mut rx;
 
         loop {
             let stream = select! {
-                stream = listener.accept() => {
+                stream = self.listener.accept() => {
                     stream
                 },
                 _ = &mut *rx_mut => {
@@ -94,6 +95,12 @@ impl HttpServer {
 }
 
 /// serve_https would make the HttpService resolving the resolve TLS stream.
+#[tracing::instrument(
+    name = "TLS Stream",
+    level = "error",
+    skip_all,
+    fields(peer = %service.remote, local = %service.target)
+)]
 pub async fn serve_https(
     stream: TcpStream,
     service: &HttpService,
@@ -104,6 +111,7 @@ pub async fn serve_https(
         stream.peer_addr()?,
         stream.local_addr()?
     );
+
     let mut tls_stream = acceptor.accept(stream).await?;
     loop {
         let (r, parts) = Http::new()
@@ -128,17 +136,16 @@ pub async fn serve_https(
 ///  serve_http_with_error_return would make the HttpService resolve the incoming TCP stream.
 ///
 /// TODO(@STRRL): rename it to `serve_http` to keep naming consistent with `serve_https`
+#[tracing::instrument(
+    name = "Stream",
+    level = "error",
+    skip_all,
+    fields(peer = %service.remote, local = %service.target)
+)]
 pub async fn serve_http_with_error_return(
     mut stream: TcpStream,
     service: &HttpService,
 ) -> Result<()> {
-    let log_key = format!(
-        "{{ peer={},local={} }}",
-        stream.peer_addr()?,
-        stream.local_addr()?
-    );
-    let span = span!(Level::TRACE, "Stream", "{}", &log_key);
-    let _guard = span.enter();
     loop {
         let (r, parts) = Http::new()
             .error_return(true)
@@ -225,9 +232,14 @@ impl HttpService {
     }
 
     /// handle would execute the core inject and forward logic.
+    #[tracing::instrument(
+        name = "handle HTTP Request",
+        level = "error",
+        skip_all,
+        fields(remote = %self.remote, target = %self.target)
+    )]
     async fn handle(self, mut request: Request<Body>) -> Result<Response<Body>> {
-        let log_key = format!("{{remote = {}, target = {} }}", self.remote, self.target);
-        debug!("{} : Proxy is handling http request", log_key);
+        debug!("Proxy is handling http request");
 
         let role_ok = self.role_ok();
         let request_rules: Vec<_> = self
@@ -243,7 +255,7 @@ impl HttpService {
 
         // inject chaos into request
         for rule in request_rules {
-            debug!("{} : request matched, rule({:?})", log_key, rule);
+            debug!("request matched, rule({:?})", rule);
             request = apply_request_action(request, &rule.actions).await?;
         }
 
@@ -259,10 +271,7 @@ impl HttpService {
             .iter()
             .find(|(header_name, _)| **header_name == HOST)
         {
-            None => match self.target.to_string().parse() {
-                Ok(o) => Some(o),
-                Err(_) => None,
-            },
+            None => self.target.to_string().parse().ok(),
             Some((_, value)) => Some(value.as_bytes().try_into()?),
         };
         trace!("authority: {:?}", parts.authority);
@@ -296,7 +305,7 @@ impl HttpService {
         let mut response = match rsp_fut.await {
             Ok(resp) => resp,
             Err(err) => {
-                error!("{} : fail to forward request: {}", log_key, err);
+                error!("fail to forward request: {}", err);
                 Response::builder()
                     .status(StatusCode::BAD_GATEWAY)
                     .body(Body::empty())?
@@ -323,7 +332,7 @@ impl HttpService {
 
         // inject chaos into response
         for rule in response_rules {
-            debug!("{} : response matched", log_key);
+            debug!("response matched");
             response = apply_response_action(response, &rule.actions).await?;
         }
         Ok(response)

@@ -1,15 +1,14 @@
-proxy_ports: [80, 443, 8080] # proxy will do nothing if empty
+proxy_ports: [80, 443, 8080] # Omitted or null stops interception; an empty array attempts setup.
 rules:
   - target: Request
     selector:
       port: 8080
-      path: /example # match all path starts with "/example"
+      path: /example # Match this exact path.
       method: GET
     actions:
       delay: 10s
       replace:
         body:
-          update_content_length: false # true by default
           contents:
             type: TEXT
             value: '{"name": "Chaos Mesh", "message": "Hello!"}'

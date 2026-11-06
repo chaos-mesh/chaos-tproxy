@@ -1,32 +1,24 @@
+# syntax=docker/dockerfile:1
 
-# syntax=docker/dockerfile:experimental
+FROM rust:1.99.1-slim-bookworm
 
-FROM debian:buster-slim
+ENV DEBIAN_FRONTEND=noninteractive
 
-ENV DEBIAN_FRONTEND noninteractive
-
-ARG HTTPS_PROXY
-ARG HTTP_PROXY
 ARG CC=gcc
+ARG TARGETARCH
 
-ENV http_proxy $HTTP_PROXY
-ENV https_proxy $HTTPS_PROXY
-
-RUN apt-get update && apt-get install build-essential $CC curl git pkg-config -y && rm -rf /var/lib/apt/lists/*
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s --  --default-toolchain nightly-2021-12-23 -y
-ENV PATH "/root/.cargo/bin:${PATH}"
-
-RUN if [ -n "$HTTP_PROXY" ]; then echo "[http]\n\
-proxy = \"${HTTP_PROXY}\"\n\
-"\
->> /root/.cargo/config ; fi
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,id=tproxy-apt-cache-bookworm-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=tproxy-apt-lists-bookworm-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y build-essential $CC ca-certificates git pkg-config
 
 COPY . /tproxy-build
 WORKDIR /tproxy-build
-RUN --mount=type=cache,target=/tproxy-build/target \
-    --mount=type=cache,target=/root/.cargo/registry \
-    cargo build --release --all
-
-RUN --mount=type=cache,target=/tproxy-build/target \
+RUN --mount=type=cache,id=tproxy-target-bookworm-${TARGETARCH},target=/tproxy-build/target,sharing=locked \
+    --mount=type=cache,id=/root/.cargo/registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=/root/.cargo/git,target=/usr/local/cargo/git \
+    cargo test --locked -p chaos-tproxy-proxy --lib && \
+    cargo test --locked -p chaos-tproxy-controller --lib && \
+    cargo build --locked --release --all && \
     cp /tproxy-build/target/release/chaos-tproxy /tproxy
