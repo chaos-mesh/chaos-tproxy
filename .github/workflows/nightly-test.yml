@@ -58,7 +58,8 @@ jobs:
           done
       - name: Build lifecycle images
         run: |
-          make image
+          DOCKER_BUILDKIT=1 docker build --target binary \
+            --build-arg HTTP_PROXY --build-arg HTTPS_PROXY . -t chaos-mesh/tproxy
           docker build -f tests/integrations/Dockerfile.lifecycle \
             --build-arg TPROXY_IMAGE=chaos-mesh/tproxy -t chaos-tproxy-lifecycle-test .
       - name: Run lifecycle tests
