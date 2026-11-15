@@ -40,7 +40,7 @@ make release
 
 The Dockerfile uses Rust 1.99.1 on Debian Bookworm. The image provides a build environment. It does not include all runtime networking tools. `make release` does not publish a GitHub release.
 
-If the build needs an HTTP proxy, configure it in the [Docker client settings](https://docs.docker.com/engine/cli/proxy/).
+If the build needs a proxy, configure the [Docker client](https://docs.docker.com/engine/cli/proxy/) or export `HTTP_PROXY` and `HTTPS_PROXY` before running `make release`.
 
 The examples below use `./tproxy`. For a native source build, use `./target/release/chaos-tproxy` instead.
 
