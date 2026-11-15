@@ -32,7 +32,8 @@ pub(crate) async fn set_net(
             .get_ip()
             .context("proxy veth has no IPv4 address")?,
         arp_interface.get_mac(),
-    );
+    )
+    .unwrap_or_else(|e| tracing::error!("gratuitous arp send fail : {}", e));
 
     execute_all(set_iptables(&net_env.netns, proxy_ports.as_deref(), &port))?;
     if safe {
