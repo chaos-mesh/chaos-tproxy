@@ -9,9 +9,6 @@ test:
 lint:
 	cargo clippy --all-targets -- -D warnings
 image:
-	DOCKER_BUILDKIT=1 docker build \
-		$(if $(HTTP_PROXY),--build-arg HTTP_PROXY) \
-		$(if $(HTTPS_PROXY),--build-arg HTTPS_PROXY) \
-		-t chaos-mesh/tproxy .
+	DOCKER_BUILDKIT=1 docker build --build-arg HTTP_PROXY --build-arg HTTPS_PROXY . -t chaos-mesh/tproxy
 release: image
 	docker run -v "$(CURDIR):/opt/mount:z" --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
