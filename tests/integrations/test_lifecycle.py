@@ -358,6 +358,76 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.put({})[0], 200)
         self.assert_restored()
 
+    def test_first_inbound_request_after_stop(self):
+        peer = "inbound-client"
+        interface = "inbound-target"
+        peer_interface = "inbound-peer"
+        target_ip = "198.18.0.2"
+        gateway_ip = "198.18.0.1"
+        client = ("ip", "netns", "exec", peer)
+
+        run("ip", "netns", "add", peer)
+        self.addCleanup(run, "ip", "netns", "delete", peer)
+        run("ip", "link", "add", interface, "type", "veth",
+            "peer", "name", peer_interface, "netns", peer)
+        run("ip", "address", "add", target_ip + "/24", "dev", interface)
+        run("ip", "link", "set", interface, "up")
+        run(*client, "ip", "address", "add", gateway_ip + "/24", "dev", peer_interface)
+        run(*client, "ip", "link", "set", peer_interface, "up")
+        run(*client, "sysctl", "-w",
+            f"net.ipv4.neigh.{peer_interface}.base_reachable_time_ms=120000")
+        run("ip", "route", "replace", "default", "via", gateway_ip, "dev", interface)
+
+        server = subprocess.Popen([sys.executable, "/tests/lifecycle_backend.py"],
+                                  stdout=self.logs, stderr=self.logs)
+        self.addCleanup(server.wait, timeout=5)
+        self.addCleanup(server.kill)
+        self.addCleanup(self.cleanup)
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                with socket.create_connection(("127.0.0.1", 18080), timeout=0.1):
+                    break
+            except OSError:
+                self.assertIsNone(server.poll(), "inbound HTTP fixture exited")
+                self.assertLess(time.monotonic(), deadline, "inbound HTTP fixture did not start")
+                time.sleep(0.05)
+
+        def inbound_request():
+            return run(*client, sys.executable, "-c", """
+import sys
+import urllib.request
+
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+with opener.open(sys.argv[1], timeout=1) as response:
+    print(response.status, response.read().decode().strip(), response.headers["X-Tproxy-Test"])
+""", f"http://{target_ip}:18080/")
+
+        def learned_mac():
+            neighbors = json.loads(run(*client, "ip", "-j", "neigh", "show",
+                                       "to", target_ip, "dev", peer_interface))
+            self.assertEqual(len(neighbors), 1, neighbors)
+            self.assertNotIn("PERMANENT", neighbors[0]["state"])
+            return neighbors[0]["lladdr"]
+
+        self.assertEqual(inbound_request(), "200 network-ok direct")
+        original_mac = learned_mac()
+        self.start()
+        self.assertEqual(self.put(proxy_config("proxy-inbound"))[0], 200)
+
+        run(*client, "ip", "neigh", "del", target_ip, "dev", peer_interface)
+        self.assertEqual(inbound_request(), "200 network-ok proxy-inbound")
+        temporary = next(link for link in json.loads(run("ip", "-j", "-4", "address", "show"))
+                         if any(address["local"] == target_ip for address in link["addr_info"]))
+        temporary_link = json.loads(run("ip", "-j", "link", "show", "dev", temporary["ifname"]))[0]
+        self.assertNotEqual(temporary_link["address"], original_mac)
+        self.assertEqual(learned_mac(), temporary_link["address"])
+
+        status, error = self.put({})
+        self.assertEqual(status, 200, error)
+        self.assertEqual(inbound_request(), "200 network-ok direct")
+        self.assertEqual(learned_mac(), original_mac)
+
     def test_safe_mode_stop_preserves_nat(self):
         self.start()
         self.assertEqual(self.put(proxy_config("proxy-safe", safe_mode=True))[0], 200)
