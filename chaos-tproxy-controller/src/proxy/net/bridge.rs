@@ -1,8 +1,10 @@
+use std::net::{IpAddr, Ipv4Addr};
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use default_net::{self, Gateway};
 use iproute2_rs::ip::iproute::del_routes;
+use libarp::interfaces::Interface;
 use pnet::datalink::NetworkInterface;
 use pnet::ipnetwork::{IpNetwork, Ipv4Network};
 use rtnetlink::packet::route::Nla;
@@ -10,6 +12,7 @@ use rtnetlink::packet::RouteMessage;
 use rtnetlink::Handle;
 use uuid::Uuid;
 
+use crate::proxy::net::arp::gratuitous_arp;
 use crate::proxy::net::iptables::OuterNatChain;
 use crate::proxy::net::routes::{
     generated_address_route, get_routes_noblock, remove_generated_address_route, restore_routes,
@@ -44,6 +47,7 @@ struct RestoreState {
     gateway: Option<(String, String)>,
     dns_saved: bool,
     address_removed: bool,
+    address_to_announce: Option<Ipv4Addr>,
     namespace_created: bool,
     bridge_created: bool,
     veth1_created: bool,
@@ -163,6 +167,7 @@ impl NetEnv {
             .collect();
         execute(ip_address("del", &self.ip, &self.device))?;
         self.restore.address_removed = true;
+        self.restore.address_to_announce = Some(net.ip());
         self.restore.gateway = Some((gateway_ip_s.clone(), gateway_mac_s.clone()));
         let current = get_routes_noblock(handle).await?;
         retain_displaced_routes(&mut self.restore.displaced_routes, &current);
@@ -379,10 +384,32 @@ impl NetEnv {
             }
         }
         if errors.is_empty() {
+            self.announce_restored_address()?;
             Ok(())
         } else {
             Err(anyhow!(errors.join("; ")))
         }
+    }
+
+    fn announce_restored_address(&mut self) -> Result<()> {
+        let Some(address) = self.restore.address_to_announce else {
+            return Ok(());
+        };
+        let interface = Interface::new_by_name(&self.device)
+            .context("original interface not found for recovery ARP")?;
+        let raw = interface.get_raw_interface();
+        ensure!(
+            raw.index == self.device_index
+                && raw.ips.iter().any(|ip| ip.ip() == IpAddr::V4(address)),
+            "original interface {} does not have restored IPv4 address {}",
+            self.device,
+            address
+        );
+        let mac = raw.mac.context("original interface has no MAC address")?;
+        gratuitous_arp(interface, address, mac.into())
+            .context("announce restored interface address")?;
+        self.restore.address_to_announce = None;
+        Ok(())
     }
 }
 
