@@ -56,12 +56,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - name: Test
+        run: cargo test --locked -p chaos-tproxy-proxy -p chaos-tproxy-controller --lib
       - name: Build
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          DOCKER_BUILDKIT=1 docker build --build-arg "HTTP_PROXY=${HTTP_PROXY:-}" --build-arg "HTTPS_PROXY=${HTTPS_PROXY:-}" . -t chaos-mesh/tproxy
-          docker run -v "$PWD:/opt/mount:z" --rm --entrypoint cp chaos-mesh/tproxy /tproxy /opt/mount/tproxy
+          make release
           test "$(./tproxy --version | awk '{print $NF}')" = "${GITHUB_REF_NAME#v}"
           tar -czvf "./tproxy-$ARCH.tar.gz" ./tproxy
       - name: Check draft release
