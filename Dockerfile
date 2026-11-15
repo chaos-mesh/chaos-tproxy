@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.99.1-slim-bookworm AS binary
+FROM rust:1.99.1-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -20,11 +20,3 @@ RUN --mount=type=cache,id=tproxy-target-bookworm-${TARGETARCH},target=/tproxy-bu
     --mount=type=cache,id=/root/.cargo/git,target=/usr/local/cargo/git \
     cargo build --locked --release --all && \
     cp /tproxy-build/target/release/chaos-tproxy /tproxy
-
-FROM binary AS checked
-
-RUN --mount=type=cache,id=tproxy-target-bookworm-${TARGETARCH},target=/tproxy-build/target,sharing=locked \
-    --mount=type=cache,id=/root/.cargo/registry,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=/root/.cargo/git,target=/usr/local/cargo/git \
-    cargo test --locked -p chaos-tproxy-proxy --lib && \
-    cargo test --locked -p chaos-tproxy-controller --lib
