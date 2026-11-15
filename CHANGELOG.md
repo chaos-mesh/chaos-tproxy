@@ -5,6 +5,18 @@ Notable changes to chaos-tproxy are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-15
+
+### Changed
+
+- Build release binaries on Debian Bookworm. Prebuilt Linux binaries now require glibc 2.34 or newer. [Build change](https://github.com/chaos-mesh/chaos-tproxy/commit/779477a0d1addc00f20e6a0f75b026e1bc846c5a)
+
+### Fixed
+
+- Restore external HTTP connectivity after stopping HTTPChaos by announcing the original interface's MAC address. [#83](https://github.com/chaos-mesh/chaos-tproxy/pull/83)
+- Reject startup before changing the target network if the gateway MAC address cannot be resolved. [#74](https://github.com/chaos-mesh/chaos-tproxy/pull/74)
+- Keep log entries associated with the correct HTTP request during asynchronous processing. [#60](https://github.com/chaos-mesh/chaos-tproxy/pull/60)
+
 ## [0.5.7] - 2026-10-27
 
 ### Changed
@@ -28,5 +40,6 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Allow HTTPChaos pause and recovery after the controller moves the original interface's IPv4 address. [#76](https://github.com/chaos-mesh/chaos-tproxy/pull/76)
 - Preserve Client and Server role filtering on rule reloads when a secondary IPv4 interface is present. [#76](https://github.com/chaos-mesh/chaos-tproxy/pull/76)
 
-[0.5.7]: https://github.com/chaos-mesh/chaos-tproxy/compare/v0.5.6...HEAD
+[0.6.0]: https://github.com/chaos-mesh/chaos-tproxy/compare/v0.5.7...v0.6.0
+[0.5.7]: https://github.com/chaos-mesh/chaos-tproxy/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/chaos-mesh/chaos-tproxy/compare/v0.5.5...v0.5.6
