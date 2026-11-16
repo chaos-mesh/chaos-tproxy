@@ -8,6 +8,14 @@ Every commit must include a `Signed-off-by` trailer that matches the author's na
 
 Preserve existing sign-offs when rebasing. Before pushing a PR, verify that every commit in the PR has the required sign-off so the DCO check can pass.
 
+## Release notes
+
+End each GitHub release description with a standalone `**Full Changelog**:` line followed by the full comparison URL from the previous release tag to the current tag. Use the URL directly.
+
+```markdown
+**Full Changelog**: https://github.com/chaos-mesh/chaos-tproxy/compare/v0.5.7...v0.6.0
+```
+
 ## Repository map
 
 - `chaos-tproxy-controller/` parses user configuration, manages Linux networking, starts the proxy subprocess, and handles configuration over standard input and output.
