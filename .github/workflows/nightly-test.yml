@@ -28,6 +28,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-24.04
+          cache-bin: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
@@ -56,6 +60,16 @@ jobs:
             iptable_mangle xt_socket xt_TPROXY xt_multiport xt_tcpudp xt_mark; do
             sudo modprobe "$module"
           done
+      - name: Restore Docker Cargo cache
+        id: cargo-cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/tproxy-docker-cargo
+          key: tproxy-docker-cargo-${{ runner.arch }}-${{ hashFiles('Dockerfile') }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: tproxy-docker-cargo-${{ runner.arch }}-${{ hashFiles('Dockerfile') }}-
+      - uses: ./.github/actions/cache-docker-cargo
+        with:
+          skip-extraction: ${{ steps.cargo-cache.outputs.cache-hit == 'true' }}
       - name: Build lifecycle images
         run: |
           make image
