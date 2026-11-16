@@ -1,0 +1,31 @@
+name: Restore Docker Cargo cache mounts
+description: Import and export the Cargo cache mounts used by the build Dockerfile.
+inputs:
+  skip-extraction:
+    description: Skip exporting the mounts when the cache key was an exact match.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Restore BuildKit cache mounts
+      uses: reproducible-containers/buildkit-cache-dance@v3
+      with:
+        builder: default
+        scratch-dir: ${{ runner.temp }}/tproxy-cache-dance
+        skip-extraction: ${{ inputs.skip-extraction }}
+        cache-map: |
+          {
+            "${{ runner.temp }}/tproxy-docker-cargo/target": {
+              "target": "/tproxy-build/target",
+              "id": "tproxy-target-bookworm-${{ fromJSON('{"X64":"amd64","ARM64":"arm64"}')[runner.arch] }}",
+              "sharing": "locked"
+            },
+            "${{ runner.temp }}/tproxy-docker-cargo/registry": {
+              "target": "/usr/local/cargo/registry",
+              "id": "/root/.cargo/registry"
+            },
+            "${{ runner.temp }}/tproxy-docker-cargo/git": {
+              "target": "/usr/local/cargo/git",
+              "id": "/root/.cargo/git"
+            }
+          }
